@@ -1,0 +1,80 @@
+
+@if (loading()) {
+  <section class="dashboard-state">
+    <div class="loader"></div>
+    <p>Loading your workspace...</p>
+  </section>
+} @else if (errorMessage()) {
+  <section class="dashboard-state">
+    <h2>Unable to load dashboard</h2>
+    <p>{{ errorMessage() }}</p>
+  </section>
+} @else {
+  <main class="dashboard-page">
+    <section class="dashboard-heading">
+      <div>
+        <span class="eyebrow">OVERVIEW</span>
+        <h1>{{ roleTitle }}</h1>
+        <p>{{ roleDescription }}</p>
+      </div>
+
+      <div class="profile-summary">
+        <div class="avatar">
+          {{ user()?.full_name?.charAt(0)?.toUpperCase() || 'U' }}
+        </div>
+        <div>
+          <h3>{{ user()?.full_name }}</h3>
+          <p>{{ user()?.role }}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="welcome-panel">
+      <div>
+        <span class="eyebrow">YOUR WORKSPACE</span>
+        <h2>Welcome back, {{ user()?.full_name }}</h2>
+        <p>Choose an area below to continue your work.</p>
+      </div>
+
+      <span class="role-badge">{{ roleTitle }}</span>
+    </section>
+
+    <section class="workspace-section">
+      <div class="section-heading">
+        <div>
+          <h2>Workspace shortcuts</h2>
+          <p>Tools and activities available for your role.</p>
+        </div>
+        <span class="item-count">{{ cards().length }} items</span>
+      </div>
+
+      <div class="workspace-grid">
+        @for (card of cards(); track card.title) {
+          <article class="workspace-card">
+            <div class="card-top">
+              <div class="card-icon">{{ card.icon }}</div>
+              <span
+                class="status"
+                [class.status-ready]="card.status === 'Available'">
+                {{ card.status }}
+              </span>
+            </div>
+
+            <h3>{{ card.title }}</h3>
+            <p>{{ card.description }}</p>
+
+            @if (card.route) {
+              <a class="card-link" [routerLink]="card.route">
+                Open workspace <span>→</span>
+              </a>
+            } @else {
+              <span class="card-link disabled-link">
+                Feature in development
+              </span>
+            }
+          </article>
+        }
+      </div>
+    </section>
+  </main>
+}

@@ -1,0 +1,238 @@
+
+<section class="users-page">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">ADMINISTRATION</p>
+      <h1>User Management</h1>
+      <p class="subtitle">
+        Create accounts, find users, and control account access.
+      </p>
+    </div>
+
+    <button class="primary-button" type="button" (click)="openCreateForm()">
+      <span>＋</span> Create User
+    </button>
+  </header>
+
+  @if (successMessage()) {
+    <div class="notice success" role="status">
+      {{ successMessage() }}
+    </div>
+  }
+
+  @if (errorMessage()) {
+    <div class="notice error" role="alert">
+      {{ errorMessage() }}
+    </div>
+  }
+
+  @if (showForm()) {
+    <section class="form-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">NEW ACCOUNT</p>
+          <h2>Create a user</h2>
+        </div>
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="Close create user form"
+          (click)="closeCreateForm()">
+          ✕
+        </button>
+      </div>
+
+      <form (ngSubmit)="createUser()">
+        <div class="form-grid">
+          <label>
+            Full name
+            <input
+              type="text"
+              name="fullName"
+              [(ngModel)]="fullName"
+              minlength="2"
+              maxlength="150"
+              autocomplete="name"
+              placeholder="Enter full name"
+              required />
+          </label>
+
+          <label>
+            Email address
+            <input
+              type="email"
+              name="email"
+              [(ngModel)]="email"
+              maxlength="255"
+              autocomplete="email"
+              placeholder="user@company.com"
+              required />
+          </label>
+
+          <label>
+            Temporary password
+            <input
+              type="password"
+              name="password"
+              [(ngModel)]="password"
+              minlength="10"
+              maxlength="128"
+              autocomplete="new-password"
+              placeholder="At least 10 characters"
+              required />
+            <span class="field-hint">
+              Share credentials securely. Never send passwords in plain text over email.
+            </span>
+          </label>
+
+          <label>
+            Account role
+            <select name="role" [(ngModel)]="role">
+              <option value="learner">User / New Joinee</option>
+              <option value="teacher">Teacher</option>
+              @if (canCreateAdmin) {
+                <option value="admin">Admin / Manager</option>
+              }
+            </select>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button
+            class="secondary-button"
+            type="button"
+            (click)="closeCreateForm()">
+            Cancel
+          </button>
+
+          <button
+            class="primary-button"
+            type="submit"
+            [disabled]="saving()">
+            {{ saving() ? 'Creating...' : 'Create Account' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  }
+
+  <section class="users-panel">
+    <div class="list-heading">
+      <div>
+        <h2>Platform users</h2>
+        <p>View account details and current access status.</p>
+      </div>
+      <span class="user-count">{{ users().length }} users</span>
+    </div>
+
+    <form class="search-bar" (ngSubmit)="loadUsers()">
+      <label class="search-input">
+        <span aria-hidden="true">⌕</span>
+        <input
+          type="search"
+          name="search"
+          [(ngModel)]="search"
+          placeholder="Search by name, email, or role..." />
+      </label>
+
+      <button
+        class="secondary-button"
+        type="submit"
+        [disabled]="loading()">
+        Search
+      </button>
+    </form>
+
+    @if (loading()) {
+      <div class="empty-state">Loading users...</div>
+    } @else if (users().length === 0) {
+      <div class="empty-state">
+        <span class="empty-icon">♙</span>
+        <h3>No users found</h3>
+        <p>Try a different search or create a new account.</p>
+      </div>
+    } @else {
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (user of users(); track user.id) {
+              <tr>
+                <td>
+                  <div class="user-cell">
+                    <div class="user-avatar">
+                      {{ user.full_name.charAt(0).toUpperCase() }}
+                    </div>
+                    <div class="user-details">
+                      <strong>{{ user.full_name }}</strong>
+                      <span>{{ user.email }}</span>
+                    </div>
+                  </div>
+                </td>
+
+                <td>
+                  <span class="role-pill" [class]="'role-pill role-' + user.role">
+                    {{ user.role === 'superadmin'
+                      ? 'Superadmin'
+                      : user.role === 'admin'
+                        ? 'Admin / Manager'
+                        : user.role === 'teacher'
+                          ? 'Teacher'
+                          : 'New Joinee' }}
+                  </span>
+                </td>
+
+                <td>
+                  <span
+                    class="status-pill"
+                    [class.active]="user.is_active"
+                    [class.inactive]="!user.is_active">
+                    {{ user.is_active ? 'Active' : 'Inactive' }}
+                  </span>
+                </td>
+
+                <td>
+                  {{ user.created_at ? (user.created_at | date:'mediumDate') : '—' }}
+                </td>
+
+                <td>
+                  @if (
+                    user.id !== currentUser()?.id &&
+                    (isSuperadmin ||
+                      (user.role === 'teacher' || user.role === 'learner'))
+                  ) {
+                    <button
+                      type="button"
+                      class="status-button"
+                      [class.activate-button]="!user.is_active"
+                      [class.deactivate-button]="user.is_active"
+                      (click)="toggleStatus(user)">
+                      {{ user.is_active ? 'Deactivate' : 'Activate' }}
+                    </button>
+                  } @else {
+                    <span class="muted-text">Restricted</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <p class="security-note">
+    <span>ⓘ</span>
+    Account permissions are enforced by the Identity API. Deactivated accounts
+    cannot sign in.
+  </p>
+</section>

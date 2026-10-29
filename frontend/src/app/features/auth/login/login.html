@@ -1,0 +1,135 @@
+
+<main class="login-page">
+  <section class="brand-panel">
+    <div class="brand-mark">L&K</div>
+
+    <p class="eyebrow">YOUR GROWTH STARTS HERE</p>
+
+    <h1>
+      Build skills.<br />
+      Unlock <span>potential.</span>
+    </h1>
+
+    <p class="description">
+      Your learning journey, training resources and professional
+      development — all in one place.
+    </p>
+
+    <div class="feature-list">
+      <div class="feature-item">
+        <span class="feature-number">01</span>
+        <div>
+          <h3>Structured learning</h3>
+          <p>Follow your training journey with clarity.</p>
+        </div>
+      </div>
+
+      <div class="feature-item">
+        <span class="feature-number">02</span>
+        <div>
+          <h3>One connected workspace</h3>
+          <p>Access the tools relevant to your role.</p>
+        </div>
+      </div>
+
+      <div class="feature-item">
+        <span class="feature-number">03</span>
+        <div>
+          <h3>Professional development</h3>
+          <p>Build skills and track your progress.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="form-panel">
+    <div class="form-content">
+      <p class="eyebrow">
+        <span class="status-dot"></span>
+        WELCOME BACK
+      </p>
+
+      <h2>Sign in to your account</h2>
+
+      <p class="subtitle">
+        Enter your credentials to access your workspace.
+      </p>
+
+      <form (ngSubmit)="submitLogin()" #loginForm="ngForm">
+        <label for="email">Email address</label>
+
+        <div class="input-field">
+          <span class="field-icon" aria-hidden="true">✉</span>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            [(ngModel)]="email"
+            autocomplete="username"
+            placeholder="you@company.com"
+            required
+            email
+            maxlength="255"
+          />
+        </div>
+
+        <label for="password">Password</label>
+
+        <div class="input-field password-field">
+          <span class="field-icon" aria-hidden="true">♙</span>
+
+          <input
+            id="password"
+            name="password"
+            [type]="showPassword() ? 'text' : 'password'"
+            [(ngModel)]="password"
+            autocomplete="current-password"
+            placeholder="Enter your password"
+            required
+            maxlength="128"
+          />
+
+          <button
+            type="button"
+            class="toggle-button"
+            (click)="showPassword.set(!showPassword())"
+            [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+          >
+            {{ showPassword() ? 'Hide' : 'Show' }}
+          </button>
+        </div>
+
+        @if (errorMessage()) {
+          <div class="error-message" role="alert">
+            <span aria-hidden="true">!</span>
+            {{ errorMessage() }}
+          </div>
+        }
+
+        <button
+          class="submit-button"
+          type="submit"
+          [disabled]="loading() || loginForm.invalid"
+        >
+          <span>
+            {{ loading() ? 'Signing you in...' : 'Sign in securely' }}
+          </span>
+          @if (loading()) {
+            <span class="spinner" aria-hidden="true"></span>
+          } @else {
+            <span class="button-arrow" aria-hidden="true">→</span>
+          }
+        </button>
+      </form>
+
+      <div class="security-note">
+        <span aria-hidden="true">♧</span>
+        <span>Secure authentication · Authorized users only</span>
+      </div>
+
+      <p class="footer-text">
+        L&amp;K Learning &amp; Development Platform
+      </p>
+    </div>
+  </section>
+</main>

@@ -1,0 +1,310 @@
+
+:host {
+  display: block;
+}
+
+.dashboard-page {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 48px 5.5%;
+  color: #182943;
+}
+
+.dashboard-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 54px;
+}
+
+.eyebrow {
+  display: inline-block;
+  color: #008f88;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 3px;
+}
+
+.dashboard-heading h1 {
+  margin: 20px 0 14px;
+  font-size: clamp(30px, 3.3vw, 48px);
+  line-height: 1.15;
+  letter-spacing: -1.5px;
+}
+
+.dashboard-heading > div:first-child > p,
+.welcome-panel p,
+.section-heading p {
+  color: #73839e;
+  line-height: 1.7;
+}
+
+.dashboard-heading > div:first-child > p {
+  margin: 0;
+  font-size: 18px;
+}
+
+.profile-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.avatar,
+.card-icon {
+  display: grid;
+  place-items: center;
+  background: #dff5ef;
+  color: #008e87;
+  font-weight: 800;
+}
+
+.avatar {
+  width: 70px;
+  height: 70px;
+  border-radius: 22px;
+  font-size: 24px;
+}
+
+.profile-summary h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.profile-summary p {
+  margin: 0;
+  color: #73839e;
+  text-transform: capitalize;
+}
+
+.welcome-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 36px;
+  margin-bottom: 38px;
+  border: 1px solid #dce8f2;
+  border-radius: 25px;
+  background: linear-gradient(115deg, #ffffff, #effaf7);
+}
+
+.welcome-panel h2 {
+  margin: 18px 0 12px;
+  font-size: clamp(22px, 2.2vw, 30px);
+  letter-spacing: -0.6px;
+}
+
+.welcome-panel p {
+  margin: 0;
+  font-size: 17px;
+}
+
+.role-badge {
+  flex-shrink: 0;
+  padding: 15px 22px;
+  border-radius: 30px;
+  background: #dcf5ee;
+  color: #00867f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 22px;
+}
+
+.section-heading h2 {
+  margin: 0 0 7px;
+  font-size: 23px;
+}
+
+.section-heading p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.item-count {
+  color: #71819b;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.workspace-card {
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid #dfe8f2;
+  border-radius: 23px;
+  background: #ffffff;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.workspace-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgb(27 49 77 / 7%);
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  font-size: 28px;
+}
+
+.status {
+  padding: 7px 11px;
+  border-radius: 20px;
+  background: #f1f3f7;
+  color: #69788e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-ready {
+  background: #e3f7ed;
+  color: #16764d;
+}
+
+.workspace-card h3 {
+  margin: 24px 0 10px;
+  font-size: 20px;
+}
+
+.workspace-card > p {
+  min-height: 45px;
+  margin: 0 0 22px;
+  color: #73839e;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #008f88;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.card-link span {
+  font-size: 20px;
+  transition: transform 180ms ease;
+}
+
+a.card-link:hover span {
+  transform: translateX(4px);
+}
+
+.disabled-link {
+  color: #8490a2;
+  cursor: default;
+  font-size: 12px;
+}
+
+.dashboard-state {
+  display: grid;
+  min-height: 350px;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  color: #73839e;
+}
+
+.loader {
+  width: 34px;
+  height: 34px;
+  border: 3px solid #dce8f2;
+  border-top-color: #008f88;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-page {
+    padding: 32px 24px;
+  }
+
+  .dashboard-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-bottom: 34px;
+  }
+
+  .welcome-panel {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 28px;
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-page {
+    padding: 25px 16px;
+  }
+
+  .dashboard-heading h1 {
+    font-size: 31px;
+  }
+
+  .dashboard-heading > div:first-child > p {
+    font-size: 15px;
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .welcome-panel {
+    padding: 23px;
+    border-radius: 19px;
+  }
+
+  .welcome-panel h2 {
+    font-size: 23px;
+    line-height: 1.4;
+  }
+
+  .welcome-panel p {
+    font-size: 15px;
+  }
+
+  .role-badge {
+    padding: 12px 16px;
+  }
+
+  .workspace-card {
+    padding: 23px;
+  }
+
+  .section-heading h2 {
+    font-size: 20px;
+  }
+}

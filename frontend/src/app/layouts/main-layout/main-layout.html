@@ -1,0 +1,82 @@
+
+<div class="app-layout">
+  <aside class="sidebar" [class.sidebar-open]="sidebarOpen">
+    <a class="brand" routerLink="/dashboard">
+      <span class="brand-mark">L<span>&</span>K</span>
+      <span class="brand-copy">
+        <strong>L&K Platform</strong>
+        <small>Learning & Development</small>
+      </span>
+    </a>
+
+    <div class="nav-label">WORKSPACE</div>
+
+    <nav class="navigation">
+      <a routerLink="/dashboard" routerLinkActive="active" (click)="sidebarOpen = false">
+        <span>▦</span> Dashboard
+      </a>
+      <a routerLink="/users" routerLinkActive="active" (click)="sidebarOpen = false">
+        <span>♙</span> User Management
+      </a>
+      <a routerLink="/departments" routerLinkActive="active" (click)="sidebarOpen = false">
+        <span>▤</span> Departments
+      </a>
+      <a routerLink="/courses" routerLinkActive="active" (click)="sidebarOpen = false">
+        <span>▣</span> Courses
+      </a>
+      <a routerLink="/cohorts" routerLinkActive="active" (click)="sidebarOpen = false">
+        <span>◷</span> Cohorts
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-note">
+        <strong>Learning & Development</strong>
+        <span>One workspace for your growth.</span>
+      </div>
+      <button class="logout-button" type="button" (click)="logout()">
+        Sign out <span>↗</span>
+      </button>
+    </div>
+  </aside>
+
+  @if (sidebarOpen) {
+    <button
+      class="sidebar-backdrop"
+      type="button"
+      aria-label="Close navigation"
+      (click)="sidebarOpen = false">
+    </button>
+  }
+
+  <section class="main-section">
+    <header class="topbar">
+      <button
+        class="menu-button"
+        type="button"
+        aria-label="Toggle navigation"
+        (click)="sidebarOpen = !sidebarOpen">
+        ☰
+      </button>
+
+      <div class="topbar-heading">
+        <strong>L&K Workspace</strong>
+        <span>Onboarding & Training Platform</span>
+      </div>
+
+      <div class="topbar-profile">
+        <span class="profile-avatar">L</span>
+        <span>My Workspace</span>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <router-outlet />
+    </main>
+
+    <footer class="main-footer">
+      <span>© 2026 L&K Onboarding Platform</span>
+      <span>Learning · Development · Progress</span>
+    </footer>
+  </section>
+</div>
