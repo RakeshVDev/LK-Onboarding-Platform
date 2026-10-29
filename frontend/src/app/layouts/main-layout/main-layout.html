@@ -1,41 +1,75 @@
 
 <div class="app-layout">
   <aside class="sidebar" [class.sidebar-open]="sidebarOpen">
-    <a class="brand" routerLink="/dashboard">
-      <span class="brand-mark">L<span>&</span>K</span>
+    <a class="brand" routerLink="/dashboard" (click)="sidebarOpen = false">
+      <span class="brand-mark">
+        <span class="brand-letter">L</span>
+        <span class="brand-amp">&amp;</span>
+        <span class="brand-letter">K</span>
+      </span>
+
       <span class="brand-copy">
-        <strong>L&K Platform</strong>
-        <small>Learning & Development</small>
+        <strong>L&amp;K Platform</strong>
+        <small>Learning &amp; Development</small>
       </span>
     </a>
 
     <div class="nav-label">WORKSPACE</div>
 
-    <nav class="navigation">
-      <a routerLink="/dashboard" routerLinkActive="active" (click)="sidebarOpen = false">
-        <span>▦</span> Dashboard
+    <nav class="navigation" aria-label="Main navigation">
+      <a
+        routerLink="/dashboard"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        (click)="sidebarOpen = false">
+        <span class="nav-icon">▦</span>
+        <span>Dashboard</span>
       </a>
-      <a routerLink="/users" routerLinkActive="active" (click)="sidebarOpen = false">
-        <span>♙</span> User Management
+
+      @if (authService.hasRole('superadmin', 'admin')) {
+        <a
+          routerLink="/users"
+          routerLinkActive="active"
+          (click)="sidebarOpen = false">
+          <span class="nav-icon">♙</span>
+          <span>User Management</span>
+        </a>
+
+        <a
+          routerLink="/departments"
+          routerLinkActive="active"
+          (click)="sidebarOpen = false">
+          <span class="nav-icon">▤</span>
+          <span>Departments</span>
+        </a>
+      }
+
+      <a
+        routerLink="/courses"
+        routerLinkActive="active"
+        (click)="sidebarOpen = false">
+        <span class="nav-icon">▣</span>
+        <span>Courses</span>
       </a>
-      <a routerLink="/departments" routerLinkActive="active" (click)="sidebarOpen = false">
-        <span>▤</span> Departments
-      </a>
-      <a routerLink="/courses" routerLinkActive="active" (click)="sidebarOpen = false">
-        <span>▣</span> Courses
-      </a>
-      <a routerLink="/cohorts" routerLinkActive="active" (click)="sidebarOpen = false">
-        <span>◷</span> Cohorts
+
+      <a
+        routerLink="/cohorts"
+        routerLinkActive="active"
+        (click)="sidebarOpen = false">
+        <span class="nav-icon">◷</span>
+        <span>Cohorts</span>
       </a>
     </nav>
 
     <div class="sidebar-bottom">
       <div class="sidebar-note">
-        <strong>Learning & Development</strong>
+        <strong>Learning &amp; Development</strong>
         <span>One workspace for your growth.</span>
       </div>
+
       <button class="logout-button" type="button" (click)="logout()">
-        Sign out <span>↗</span>
+        <span>Sign out</span>
+        <span aria-hidden="true">↗</span>
       </button>
     </div>
   </aside>
@@ -55,18 +89,19 @@
         class="menu-button"
         type="button"
         aria-label="Toggle navigation"
+        [attr.aria-expanded]="sidebarOpen"
         (click)="sidebarOpen = !sidebarOpen">
-        ☰
+        <span>{{ sidebarOpen ? '✕' : '☰' }}</span>
       </button>
 
       <div class="topbar-heading">
-        <strong>L&K Workspace</strong>
-        <span>Onboarding & Training Platform</span>
+        <strong>L&amp;K Workspace</strong>
+        <span>Onboarding &amp; Training Platform</span>
       </div>
 
       <div class="topbar-profile">
         <span class="profile-avatar">L</span>
-        <span>My Workspace</span>
+        <span class="profile-label">My Workspace</span>
       </div>
     </header>
 
@@ -75,7 +110,7 @@
     </main>
 
     <footer class="main-footer">
-      <span>© 2026 L&K Onboarding Platform</span>
+      <span>© 2026 L&amp;K Onboarding Platform</span>
       <span>Learning · Development · Progress</span>
     </footer>
   </section>

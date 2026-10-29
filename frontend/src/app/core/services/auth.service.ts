@@ -1,6 +1,10 @@
 
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
+import {
+  HttpClient,
+  HttpErrorResponse,
+  HttpHeaders
+} from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 export type UserRole = 'superadmin' | 'admin' | 'teacher' | 'learner';
@@ -23,6 +27,8 @@ export class AuthService {
   private readonly tokenKey = 'lk_access_token';
   private readonly apiUrl = '/api/v1/auth';
 
+  private currentUser: CurrentUser | null = null;
+
   constructor(private readonly http: HttpClient) {}
 
   async login(email: string, password: string): Promise<CurrentUser> {
@@ -36,7 +42,9 @@ export class AuthService {
     sessionStorage.setItem(this.tokenKey, response.access_token);
 
     try {
-      return await this.getCurrentUser();
+      const user = await this.getCurrentUser();
+      this.currentUser = user;
+      return user;
     } catch (error) {
       this.logout();
       throw error;
@@ -47,20 +55,43 @@ export class AuthService {
     const token = sessionStorage.getItem(this.tokenKey);
 
     if (!token) {
+      this.currentUser = null;
       throw new Error('Please log in to continue.');
     }
 
-    return firstValueFrom(
-      this.http.get<CurrentUser>(`${this.apiUrl}/me`, {
-        headers: new HttpHeaders({
-          Authorization: `Bearer ${token}`
+    try {
+      const user = await firstValueFrom(
+        this.http.get<CurrentUser>(`${this.apiUrl}/me`, {
+          headers: new HttpHeaders({
+            Authorization: `Bearer ${token}`
+          })
         })
-      })
-    );
+      );
+
+      this.currentUser = user;
+      return user;
+    } catch (error) {
+      if (error instanceof HttpErrorResponse && error.status === 401) {
+        this.logout();
+      }
+
+      throw error;
+    }
+  }
+
+  hasRole(...roles: UserRole[]): boolean {
+    return this.currentUser !== null &&
+      this.currentUser.is_active &&
+      roles.includes(this.currentUser.role);
+  }
+
+  getCurrentUserSnapshot(): CurrentUser | null {
+    return this.currentUser;
   }
 
   logout(): void {
     sessionStorage.removeItem(this.tokenKey);
+    this.currentUser = null;
   }
 
   getToken(): string | null {
