@@ -1,5 +1,204 @@
-<section class="feature-page">
-  <p class="eyebrow">WORKSPACE</p>
-  <h1>Course Management</h1>
-  <p>This module is ready for API integration.</p>
+
+<section class="courses-page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">LEARNING MANAGEMENT</p>
+      <h1>Course Management</h1>
+      <p class="subtitle">
+        Browse courses and manage their learning syllabus.
+      </p>
+    </div>
+
+    <button class="refresh-button"
+      type="button"
+      (click)="loadCourses()"
+      [disabled]="loading()">
+      ↻ Refresh
+    </button>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="alert error-alert" role="alert">
+      {{ errorMessage() }}
+    </div>
+  }
+
+  @if (successMessage()) {
+    <div class="alert success-alert" role="status">
+      {{ successMessage() }}
+    </div>
+  }
+
+  @if (!selectedCourse()) {
+    <div class="section-heading">
+      <div>
+        <h2>Available Courses</h2>
+        <p>{{ courses().length }} course(s) found</p>
+      </div>
+    </div>
+
+    @if (loading()) {
+      <div class="empty-state">Loading courses...</div>
+    } @else if (courses().length === 0) {
+      <div class="empty-state">
+        <span class="empty-icon">📚</span>
+        <h3>No courses found</h3>
+        <p>Create or publish a course through your existing course-management API.</p>
+      </div>
+    } @else {
+      <div class="course-grid">
+        @for (course of courses(); track course.id) {
+          <article class="course-card">
+            <div class="course-card-top">
+              <span class="course-icon">📘</span>
+
+              <span class="status"
+                [class.published]="course.is_published">
+                {{ course.is_published ? 'Published' : 'Draft' }}
+              </span>
+            </div>
+
+            <h3>{{ course.title }}</h3>
+
+            <p class="course-description">
+              {{ course.description || 'No course description provided.' }}
+            </p>
+
+            <div class="course-meta">
+              <span>Course ID: {{ course.id }}</span>
+              <span>Department: {{ course.department_id }}</span>
+            </div>
+
+            <button class="primary-button full-width"
+              type="button"
+              (click)="openSyllabus(course)">
+              View syllabus
+              <span>→</span>
+            </button>
+          </article>
+        }
+      </div>
+    }
+  } @else {
+    <div class="detail-header">
+      <button class="back-button"
+        type="button"
+        (click)="closeSyllabus()">
+        ← All courses
+      </button>
+
+      <div>
+        <p class="eyebrow">COURSE SYLLABUS</p>
+        <h2>{{ selectedCourse()?.title }}</h2>
+        <p class="subtitle">
+          {{ selectedCourse()?.description || 'Learning modules and topics' }}
+        </p>
+      </div>
+    </div>
+
+    @if (canManage() && selectedCourse()?.is_published === false) {
+      <div class="alert">
+        This course is a draft. Only administrators can view its syllabus
+        until it is published.
+      </div>
+    }
+
+    @if (canManage()) {
+      <section class="panel">
+        <h3>Add syllabus item</h3>
+        <p class="panel-description">
+          Add topics in the order learners should complete them.
+        </p>
+
+        <form (ngSubmit)="addSyllabusItem()" class="syllabus-form">
+          <div class="form-field">
+            <label for="syllabus-title">Topic title</label>
+            <input
+              id="syllabus-title"
+              name="title"
+              type="text"
+              [(ngModel)]="title"
+              placeholder="e.g. Python Fundamentals"
+              minlength="2"
+              maxlength="200"
+              required />
+          </div>
+
+          <div class="form-field">
+            <label for="syllabus-description">Description</label>
+            <textarea
+              id="syllabus-description"
+              name="description"
+              [(ngModel)]="description"
+              rows="3"
+              placeholder="Describe what learners will study"></textarea>
+          </div>
+
+          <div class="form-field order-field">
+            <label for="sequence-order">Sequence number</label>
+            <input
+              id="sequence-order"
+              name="sequenceOrder"
+              type="number"
+              [(ngModel)]="sequenceOrder"
+              min="1"
+              step="1"
+              required />
+          </div>
+
+          <button class="primary-button"
+            type="submit"
+            [disabled]="saving()">
+            {{ saving() ? 'Saving...' : '+ Add topic' }}
+          </button>
+        </form>
+      </section>
+    }
+
+    <section class="panel syllabus-panel">
+      <div class="section-heading">
+        <div>
+          <h3>Learning topics</h3>
+          <p>{{ syllabus().length }} topic(s)</p>
+        </div>
+      </div>
+
+      @if (syllabusLoading()) {
+        <div class="empty-state">Loading syllabus...</div>
+      } @else if (syllabus().length === 0) {
+        <div class="empty-state">
+          <span class="empty-icon">📝</span>
+          <h3>No syllabus items yet</h3>
+          <p>Topics will appear here when they are added to this course.</p>
+        </div>
+      } @else {
+        <div class="syllabus-list">
+          @for (item of syllabus(); track item.id) {
+            <article class="syllabus-item">
+              <span class="sequence-number">
+                {{ item.sequence_order }}
+              </span>
+
+              <div class="syllabus-content">
+                <h4>{{ item.title }}</h4>
+                @if (item.description) {
+                  <p>{{ item.description }}</p>
+                }
+              </div>
+
+              @if (canManage()) {
+                <button class="delete-button"
+                  type="button"
+                  (click)="deleteSyllabusItem(item)"
+                  [attr.aria-label]="'Delete ' + item.title"
+                  title="Delete topic">
+                  Delete
+                </button>
+              }
+            </article>
+          }
+        </div>
+      }
+    </section>
+  }
 </section>

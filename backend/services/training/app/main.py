@@ -5,6 +5,8 @@ from services.training.app.routers import (
     departments,
     courses,
     cohorts,
+    enrolments,
+    syllabus,
 )
 
 app = FastAPI(
@@ -20,6 +22,8 @@ app = FastAPI(
 app.include_router(departments.router, prefix="/api/v1")
 app.include_router(courses.router, prefix="/api/v1")
 app.include_router(cohorts.router, prefix="/api/v1")
+app.include_router(enrolments.router, prefix="/api/v1")
+app.include_router(syllabus.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Health"])
