@@ -7,13 +7,14 @@ from services.training.app.routers import (
     cohorts,
     enrolments,
     syllabus,
+    assessments,
 )
 
 app = FastAPI(
     title="L&K Training Service",
     description=(
         "Training, courses, cohorts, learning materials, "
-        "and attendance APIs"
+        "attendance, and psychometric assessment APIs"
     ),
     version="1.0.0",
 )
@@ -24,6 +25,7 @@ app.include_router(courses.router, prefix="/api/v1")
 app.include_router(cohorts.router, prefix="/api/v1")
 app.include_router(enrolments.router, prefix="/api/v1")
 app.include_router(syllabus.router, prefix="/api/v1")
+app.include_router(assessments.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Health"])

@@ -1,0 +1,209 @@
+
+<div class="take-page">
+
+  @if (loading) {
+
+    <div class="state-card">
+      Loading assessment...
+    </div>
+
+  } @else if (questions.length > 0) {
+
+    <header class="take-header">
+
+      <div>
+        <span class="eyebrow">PSYCHOMETRIC ASSESSMENT</span>
+
+        <h1>Assessment in Progress</h1>
+
+        <p>Read each question carefully and select one answer.</p>
+      </div>
+
+      <div class="header-stats">
+
+  <div class="timer-card" [class.timer-warning]="remainingSeconds <= 120">
+    <span class="timer-label">TIME REMAINING</span>
+
+    <strong>
+      {{ formattedTime }}
+    </strong>
+
+    <small>
+      {{ remainingSeconds <= 120 ? 'Hurry up! Time is running out.' : '15-minute assessment' }}
+    </small>
+  </div>
+
+  <div class="answered-count">
+    <strong>{{ answeredCount }}/{{ questions.length }}</strong>
+    <small>Answered</small>
+  </div>
+
+</div>
+
+    </header>
+
+    <div class="progress-track">
+      <div
+        class="progress-fill"
+        [style.width.%]="progress">
+      </div>
+    </div>
+
+    <div class="assessment-layout">
+
+      <main class="question-panel">
+
+        <div class="question-meta">
+
+          <span>
+            QUESTION {{ currentIndex + 1 }}
+            OF {{ questions.length }}
+          </span>
+
+          <span>
+            {{ categoryLabel(currentQuestion?.category || '') }}
+          </span>
+
+        </div>
+
+        <h2>
+          {{ currentQuestion?.question_text }}
+        </h2>
+
+        <p class="instruction">
+          Select your answer below.
+        </p>
+
+        <div class="options">
+
+          @for (
+            option of currentQuestion?.options ?? [];
+            track option.id
+          ) {
+
+            <button
+              type="button"
+              class="option"
+              [class.selected]="
+                answers[currentQuestion!.id] === option.id
+              "
+              (click)="chooseAnswer(
+                currentQuestion!.id,
+                option.id
+              )">
+
+              <span class="option-key">
+                {{ option.id }}
+              </span>
+
+              <span class="option-text">
+                {{ option.text }}
+              </span>
+
+              <span class="radio"></span>
+
+            </button>
+
+          }
+
+        </div>
+
+        <div class="question-actions">
+
+          <button
+            type="button"
+            class="btn-outline"
+            [disabled]="currentIndex === 0"
+            (click)="previous()">
+            ← Previous
+          </button>
+
+          <span>
+            {{ currentIndex + 1 }} / {{ questions.length }}
+          </span>
+
+          @if (currentIndex < questions.length - 1) {
+
+            <button
+              type="button"
+              class="btn-primary"
+              (click)="next()">
+              Next Question →
+            </button>
+
+          } @else {
+
+            <button
+  type="button"
+  (click)="submit()"
+  [disabled]="submitting || answeredCount !== questions.length">
+
+  {{ submitting ? 'Submitting...' : 'Submit Assessment' }}
+
+</button>
+
+          }
+
+        </div>
+
+      </main>
+
+      <aside class="question-navigation">
+
+        <h3>Question Navigator</h3>
+
+        <p>Track your answered questions.</p>
+
+        <div class="number-grid">
+
+          @for (
+            question of questions;
+            track question.id;
+            let i = $index
+          ) {
+
+            <button
+              type="button"
+              [class.answered]="answers[question.id]"
+              [class.current]="currentIndex === i"
+              (click)="goTo(i)">
+
+              {{ i + 1 }}
+
+            </button>
+
+          }
+
+        </div>
+
+        <div class="completion">
+
+          <strong>
+            {{ answeredCount }} / {{ questions.length }}
+          </strong>
+
+          <small>Questions answered</small>
+
+        </div>
+
+      </aside>
+
+    </div>
+
+  } @else {
+
+    <div class="state-card error-message">
+      {{ errorMessage }}
+    </div>
+
+  }
+
+  @if (errorMessage && questions.length > 0) {
+
+    <div class="error-message">
+      {{ errorMessage }}
+    </div>
+
+  }
+
+</div>

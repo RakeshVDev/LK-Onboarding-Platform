@@ -1,0 +1,95 @@
+
+<div class="learner-page">
+
+  <header class="page-header">
+
+    <span class="eyebrow">LEARNING AND DEVELOPMENT</span>
+
+    <h1>My Assessments</h1>
+
+    <p>
+      Complete your assigned psychometric assessments
+      and review your development profile.
+    </p>
+
+  </header>
+
+  @if (errorMessage) {
+    <div class="error-message">
+      {{ errorMessage }}
+    </div>
+  }
+
+  @if (loading) {
+
+    <div class="state-card">
+      Loading available assessments...
+    </div>
+
+  }
+
+  @if (
+    !loading &&
+    templates.length === 0 &&
+    !errorMessage
+  ) {
+
+    <div class="state-card">
+      <h3>No assessments available</h3>
+      <p>There are currently no active assessments.</p>
+    </div>
+
+  }
+
+  <div class="assessment-grid">
+
+    @for (template of templates; track template.id) {
+
+      <article class="assessment-card">
+
+        <div class="card-icon">✦</div>
+
+        <span class="available-badge">
+          Available
+        </span>
+
+        <h2>{{ template.name }}</h2>
+
+        <p class="description">
+          {{
+            template.description ||
+            'Complete this assessment to understand your development profile.'
+          }}
+        </p>
+
+        <div class="assessment-details">
+
+          <span>☷ {{ template.question_count }} Questions</span>
+
+          <span>◷ Approximately 15–20 minutes</span>
+
+          <span>◎ 5 Assessment Categories</span>
+
+        </div>
+
+        <button
+          type="button"
+          class="start-button"
+          [disabled]="startingId === template.id"
+          (click)="startAssessment(template)">
+
+          {{
+            startingId === template.id
+              ? 'Starting...'
+              : 'Start Assessment →'
+          }}
+
+        </button>
+
+      </article>
+
+    }
+
+  </div>
+
+</div>

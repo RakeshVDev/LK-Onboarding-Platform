@@ -1,0 +1,134 @@
+
+<div class="results-page">
+
+  <header class="page-header">
+
+    <span class="eyebrow">ASSESSMENT COMPLETED</span>
+
+    <h1>Your Assessment Results</h1>
+
+    <p>
+      Review your performance across all five assessment categories.
+    </p>
+
+  </header>
+
+  @if (errorMessage) {
+
+    <div class="error-message">
+      {{ errorMessage }}
+    </div>
+
+  }
+
+  @if (loading) {
+
+    <div class="panel">
+      Loading saved results...
+    </div>
+
+  }
+
+  @if (!loading && results) {
+
+    <div class="score-grid">
+
+      @for (
+        item of results.categories;
+        track item.category
+      ) {
+
+        <article class="score-card">
+
+          <div class="score-heading">
+
+            <h2>
+              {{ categoryLabel(item.category) }}
+            </h2>
+
+            <strong>
+              {{ item.percentage | number:'1.0-1' }}%
+            </strong>
+
+          </div>
+
+          <div class="progress-track">
+
+            <div
+              class="progress-fill"
+              [style.width.%]="item.percentage">
+            </div>
+
+          </div>
+
+          <small>
+            {{ item.score }} / {{ item.max_score }} points
+          </small>
+
+        </article>
+
+      }
+
+    </div>
+
+    <section class="report-section">
+
+      <div>
+
+        <span class="eyebrow">NEXT STEP</span>
+
+        <h2>Generate Your Development Report</h2>
+
+        <p>
+          Get your strengths, development areas,
+          category interpretations and recommendations.
+        </p>
+
+      </div>
+
+      <button
+        class="btn-primary"
+        type="button"
+        [disabled]="reportLoading"
+        (click)="generateReport()">
+
+        {{
+          reportLoading
+            ? 'Generating Report...'
+            : 'Generate Report →'
+        }}
+
+      </button>
+
+    </section>
+
+    @if (report) {
+
+      <section class="report-ready">
+
+        <div>
+
+          <strong>Report generated successfully</strong>
+
+          <small>
+            Generated {{ report.generated_at | date:'medium' }}
+          </small>
+
+        </div>
+
+        <button
+          class="btn-primary"
+          type="button"
+          (click)="viewReport()">
+
+          View Full Report
+
+        </button>
+
+      </section>
+
+    }
+
+  }
+
+</div>

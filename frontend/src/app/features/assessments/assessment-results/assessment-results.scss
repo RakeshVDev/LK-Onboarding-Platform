@@ -1,0 +1,156 @@
+
+:host {
+  display: block;
+}
+
+.results-page {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.eyebrow {
+  color: #168f87;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.page-header h1 {
+  font-size: 27px;
+  margin: 8px 0;
+}
+
+.page-header p {
+  color: #78869a;
+  font-size: 13px;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 24px 0;
+}
+
+.score-card {
+  background: white;
+  border: 1px solid #e5ebf1;
+  border-radius: 13px;
+  padding: 20px;
+}
+
+.score-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.score-heading h2 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.score-heading strong {
+  font-size: 20px;
+  color: #16877f;
+}
+
+.progress-track {
+  height: 8px;
+  background: #edf1f4;
+  border-radius: 10px;
+  margin: 16px 0 9px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #168f87;
+  border-radius: 10px;
+}
+
+.score-card small {
+  color: #8290a2;
+  font-size: 11px;
+}
+
+.report-section,
+.report-ready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: white;
+  border: 1px solid #e5ebf1;
+  border-radius: 13px;
+  padding: 22px;
+  margin-top: 20px;
+}
+
+.report-section h2 {
+  font-size: 18px;
+  margin: 7px 0;
+}
+
+.report-section p {
+  color: #78869a;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.btn-primary {
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #168f87;
+  color: white;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn-primary:disabled {
+  opacity: .6;
+}
+
+.report-ready {
+  margin-top: 15px;
+}
+
+.report-ready strong,
+.report-ready small {
+  display: block;
+}
+
+.report-ready small {
+  color: #8290a2;
+  margin-top: 5px;
+  font-size: 11px;
+}
+
+.error-message {
+  padding: 12px;
+  background: #fff0f0;
+  color: #b93636;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+@media (max-width: 650px) {
+
+  .score-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-section,
+  .report-ready {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-header h1 {
+    font-size: 23px;
+  }
+
+}

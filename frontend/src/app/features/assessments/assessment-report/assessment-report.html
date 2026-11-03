@@ -1,0 +1,223 @@
+
+<div class="report-page">
+
+  <!-- Loading State -->
+  @if (loading) {
+    <div class="panel loading-state">
+      <div class="loading-spinner"></div>
+      <h3>Preparing Your Assessment Report</h3>
+      <p>Please wait while we retrieve your saved results...</p>
+    </div>
+  }
+
+  <!-- Error State -->
+  @if (!loading && errorMessage) {
+    <div class="panel error-message" role="alert">
+      <h3>Unable to Load Assessment Report</h3>
+      <p>{{ errorMessage }}</p>
+
+      <button
+        class="print-button"
+        type="button"
+        (click)="ngOnInit()">
+        Retry Loading Report
+      </button>
+    </div>
+  }
+
+  <!-- Report Content -->
+  @if (!loading && report) {
+
+    <!-- Report Header -->
+    <header class="report-header">
+      <div>
+        <span class="eyebrow">LEARNER DEVELOPMENT</span>
+
+        <h1>Psychometric Assessment Report</h1>
+
+        <p>
+          Generated:
+          {{ report.generated_at | date:'medium' }}
+        </p>
+
+        <p>
+          Assessment Session #{{ report.session_id }}
+        </p>
+      </div>
+
+      <button
+        class="print-button"
+        type="button"
+        (click)="printReport()">
+        <span>↓</span>
+        Print / Save PDF
+      </button>
+    </header>
+
+    <!-- Assessment Summary -->
+    <section class="panel summary-panel">
+
+      <span class="eyebrow">ASSESSMENT SUMMARY</span>
+
+      <h2>{{ report.report_data.summary }}</h2>
+
+      @if (
+        report.report_data.overall_percentage !== undefined
+      ) {
+        <div class="overall-score">
+          <strong>
+            {{
+              report.report_data.overall_percentage
+                | number:'1.0-1'
+            }}%
+          </strong>
+
+          <span>Overall Assessment Score</span>
+        </div>
+      }
+
+      @if (
+        report.report_data.total_score !== undefined &&
+        report.report_data.max_score !== undefined
+      ) {
+        <p class="score-detail">
+          Total Score:
+          {{ report.report_data.total_score }}
+          /
+          {{ report.report_data.max_score }}
+        </p>
+      }
+
+    </section>
+
+    <!-- Category Interpretations -->
+    <section class="panel">
+
+      <span class="eyebrow">PERFORMANCE ANALYSIS</span>
+
+      <h2>Category Interpretations</h2>
+
+      @if (categoryEntries.length > 0) {
+
+        <div class="interpretation-grid">
+
+          @for (item of categoryEntries; track item[0]) {
+
+            <article class="interpretation-card">
+
+              <h3>{{ categoryLabel(item[0]) }}</h3>
+
+              <p>{{ item[1] }}</p>
+
+            </article>
+
+          }
+
+        </div>
+
+      } @else {
+
+        <p>No category interpretations are available.</p>
+
+      }
+
+    </section>
+
+    <!-- Strengths and Development Areas -->
+    <div class="insight-grid">
+
+      <section class="panel">
+
+        <span class="eyebrow">POSITIVE ATTRIBUTES</span>
+
+        <h2>Strengths</h2>
+
+        @if (report.report_data.strengths.length > 0) {
+
+          <ul>
+            @for (
+              item of report.report_data.strengths;
+              track item
+            ) {
+              <li>{{ item }}</li>
+            }
+          </ul>
+
+        } @else {
+          <p>No strengths recorded.</p>
+        }
+
+      </section>
+
+      <section class="panel">
+
+        <span class="eyebrow">GROWTH OPPORTUNITIES</span>
+
+        <h2>Development Areas</h2>
+
+        @if (report.report_data.development_areas.length > 0) {
+
+          <ul>
+            @for (
+              item of report.report_data.development_areas;
+              track item
+            ) {
+              <li>{{ item }}</li>
+            }
+          </ul>
+
+        } @else {
+          <p>No development areas recorded.</p>
+        }
+
+      </section>
+
+    </div>
+
+    <!-- Recommendations -->
+    <section class="panel">
+
+      <span class="eyebrow">YOUR NEXT STEPS</span>
+
+      <h2>Recommendations</h2>
+
+      @if (report.report_data.recommendations.length > 0) {
+
+        <ul class="recommendation-list">
+
+          @for (
+            item of report.report_data.recommendations;
+            track item
+          ) {
+            <li>{{ item }}</li>
+          }
+
+        </ul>
+
+      } @else {
+
+        <p>No recommendations are currently available.</p>
+
+      }
+
+    </section>
+
+    <!-- Report Footer -->
+    <footer class="report-footer">
+
+      <strong>L&amp;K Onboarding Platform</strong>
+
+      <p>
+        Developmental feedback only. This report is not
+        a clinical diagnosis or an employment-suitability decision.
+      </p>
+
+      <span>
+        © 2026 Learning &amp; Development
+      </span>
+
+    </footer>
+
+  }
+
+</div>

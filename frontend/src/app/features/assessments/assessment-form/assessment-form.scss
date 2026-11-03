@@ -1,0 +1,166 @@
+
+:host {
+  display: block;
+}
+
+.form-page {
+  max-width: 850px;
+  margin: 0 auto;
+}
+
+.back-link {
+  border: 0;
+  background: none;
+  color: #168f87;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 22px;
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #168f87;
+}
+
+.page-heading h1 {
+  font-size: 27px;
+  margin: 8px 0;
+}
+
+.page-heading p {
+  color: #78869a;
+  font-size: 13px;
+}
+
+.form-card,
+.panel {
+  background: white;
+  border: 1px solid #e5ebf1;
+  border-radius: 13px;
+  padding: 24px;
+  margin-top: 22px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.form-group label span {
+  color: #d14b4b;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #dce4ec;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  border-color: #168f87;
+}
+
+.field-error {
+  display: block;
+  color: #bd3c3c;
+  margin-top: 6px;
+}
+
+.configuration-card {
+  background: #f8fafb;
+  border: 1px solid #e8edf2;
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.configuration-card h2 {
+  font-size: 16px;
+  margin: 0 0 6px;
+}
+
+.configuration-card p {
+  color: #78869a;
+  font-size: 12px;
+  margin-bottom: 15px;
+}
+
+.category-row,
+.total-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #e8edf2;
+  font-size: 12px;
+}
+
+.total-row {
+  font-weight: 800;
+  color: #168f87;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.btn-primary,
+.btn-outline {
+  padding: 11px 17px;
+  border-radius: 8px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: #168f87;
+  color: white;
+  border: 0;
+}
+
+.btn-outline {
+  background: white;
+  border: 1px solid #dce4ec;
+  color: #40516a;
+}
+
+.btn-primary:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+.error-message {
+  margin-top: 15px;
+  padding: 12px;
+  background: #fff0f0;
+  color: #b93636;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .form-card {
+    padding: 16px;
+  }
+
+  .category-row {
+    font-size: 11px;
+  }
+}
