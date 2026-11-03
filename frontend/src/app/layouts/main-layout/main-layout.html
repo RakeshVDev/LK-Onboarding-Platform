@@ -61,6 +61,16 @@
       </a>
     </nav>
 
+    @if (authService.hasRole('admin', 'teacher')) {
+  <a
+    routerLink="/assessments"
+    routerLinkActive="active"
+    (click)="sidebarOpen = false">
+    <span class="nav-icon">▧</span>
+    <span>Assessment Management</span>
+  </a>
+}
+
     <div class="sidebar-bottom">
       <div class="sidebar-note">
         <strong>Learning &amp; Development</strong>
