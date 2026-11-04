@@ -36,7 +36,7 @@ export class Users implements OnInit {
   constructor(
     private readonly userService: UserManagementService,
     private readonly authService: AuthService
-  ) {}
+  ) { }
 
   get isSuperadmin(): boolean {
     return this.currentUser()?.role === 'superadmin';
@@ -183,7 +183,7 @@ export class Users implements OnInit {
       }
 
       if (error.status === 0) {
-        return 'Identity API is unavailable. Check that port 8000 is running.';
+        return 'Identity API is unavailable. Check that port 8001 is running.';
       }
 
       return error.error?.detail || 'The request could not be completed.';

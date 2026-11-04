@@ -27,3 +27,6 @@ Thumbs.db
 *.sql
 *.dump
 *.bak
+
+# Visual Studio
+.vs/

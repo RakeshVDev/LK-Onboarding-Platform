@@ -38,7 +38,7 @@ export class LearningService {
   constructor(
     private readonly http: HttpClient,
     private readonly authService: AuthService
-  ) {}
+  ) { }
 
   private getHeaders(): HttpHeaders {
     const token = this.authService.getToken();
@@ -137,7 +137,7 @@ export class LearningService {
   getErrorMessage(error: unknown): string {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 0) {
-        return 'Cannot connect to the Training API. Check that it is running on port 8001.';
+        return 'Cannot connect to the Training API. Check that it is running on port 8002.';
       }
 
       if (error.status === 401) {
