@@ -1,5 +1,287 @@
-<section class="feature-page">
-  <p class="eyebrow">WORKSPACE</p>
-  <h1>Cohort Management</h1>
-  <p>This module is ready for API integration.</p>
-</section>
+<div class="cohorts-page">
+
+  <!-- Header -->
+  <header class="page-header">
+    <div class="header-left">
+      <span class="eyebrow">TRAINING OPERATIONS &amp; BATCHES</span>
+      <h1>Training Cohorts</h1>
+      <p>Organize employee batches, schedule cohort timelines, coordinate training departments, and manage student rosters.</p>
+    </div>
+
+    @if (canManage()) {
+    <div class="header-actions">
+      <button type="button" class="btn-create-cohort" (click)="openCreateModal()">
+        <span>+ Create New Cohort</span>
+      </button>
+    </div>
+    }
+  </header>
+
+  <!-- Alerts -->
+  @if (errorMessage()) {
+  <div class="alert-banner alert-error">
+    <span>⚠</span> {{ errorMessage() }}
+  </div>
+  }
+  @if (successMessage()) {
+  <div class="alert-banner alert-success">
+    <span>✓</span> {{ successMessage() }}
+  </div>
+  }
+
+  <!-- Loading State -->
+  @if (loading()) {
+  <div class="loading-state">
+    <div class="spinner"></div>
+    <p>Loading training cohorts...</p>
+  </div>
+  }
+
+  <!-- Cohorts Grid -->
+  @if (!loading() && cohorts().length > 0) {
+  <div class="cohorts-grid">
+    @for (cohort of cohorts(); track cohort.id) {
+    <article class="cohort-card">
+      <div class="card-top-bar" [attr.data-status]="cohort.status"></div>
+
+      <div class="card-header">
+        <span class="dept-badge">{{ getDepartmentName(cohort.department_id) }}</span>
+        <span class="status-pill" [attr.data-status]="cohort.status">
+          ● {{ cohort.status | uppercase }}
+        </span>
+      </div>
+
+      <h2 class="cohort-title">{{ cohort.name }}</h2>
+
+      <!-- Schedule Meta Details -->
+      <div class="schedule-details">
+        <div class="schedule-row">
+          <span class="sched-icon">📅</span>
+          <span>Start: <strong>{{ cohort.start_date ? (cohort.start_date | date:'mediumDate') : 'Scheduled' }}</strong></span>
+        </div>
+        <div class="schedule-row">
+          <span class="sched-icon">🏁</span>
+          <span>End: <strong>{{ cohort.end_date ? (cohort.end_date | date:'mediumDate') : 'Open Ended' }}</strong></span>
+        </div>
+      </div>
+
+      <div class="cohort-actions">
+        <!-- Roster & Members Action -->
+        <button type="button" class="btn-action btn-roster" (click)="openMembersModal(cohort)">
+          <span class="btn-icon">👥</span>
+          <span>Learners Roster</span>
+        </button>
+
+        @if (canManage()) {
+        <!-- Edit Action -->
+        <button type="button" class="btn-action btn-edit" (click)="openEditModal(cohort)" title="Edit Cohort">
+          <span>✎</span>
+        </button>
+
+        <!-- Delete Action -->
+        <button type="button" class="btn-action btn-delete" (click)="deleteCohort(cohort)" title="Delete Cohort">
+          <span>🗑</span>
+        </button>
+        }
+      </div>
+    </article>
+    }
+  </div>
+  } @else if (!loading() && cohorts().length === 0) {
+  <div class="empty-state">
+    <div class="empty-icon">◷</div>
+    <h3>No cohorts configured</h3>
+    <p>There are currently no training batches or cohorts organized.</p>
+    @if (canManage()) {
+    <button type="button" class="btn-create-cohort" (click)="openCreateModal()">
+      <span>Create First Cohort</span>
+    </button>
+    }
+  </div>
+  }
+
+  <!-- ========================================================= -->
+  <!-- MODAL: CREATE / EDIT COHORT                               -->
+  <!-- ========================================================= -->
+  @if (activeModal() === 'create' || activeModal() === 'edit') {
+  <div class="modal-backdrop" (click)="closeModal()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="modal-tag">{{ activeModal() === 'edit' ? 'MODIFY COHORT' : 'BATCH SETUP' }}</span>
+          <h2>{{ activeModal() === 'edit' ? 'Edit Cohort' : 'Create New Cohort' }}</h2>
+        </div>
+        <button type="button" class="btn-close" (click)="closeModal()">×</button>
+      </div>
+
+      <form (ngSubmit)="saveCohort()" class="modal-form">
+        <div class="form-group">
+          <label for="cohortName">Cohort Batch Name *</label>
+          <input
+            id="cohortName"
+            type="text"
+            [(ngModel)]="cohortName"
+            name="cohortName"
+            placeholder="e.g. ASE 2026 Batch Alpha"
+            required />
+        </div>
+
+        <div class="form-group">
+          <label for="cohortDept">Department *</label>
+          <select id="cohortDept" [(ngModel)]="cohortDeptId" name="cohortDeptId">
+            @for (dept of departments(); track dept.id) {
+            <option [value]="dept.id">{{ dept.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="startDate">Start Date</label>
+            <input
+              id="startDate"
+              type="date"
+              [(ngModel)]="cohortStartDate"
+              name="cohortStartDate" />
+          </div>
+
+          <div class="form-group">
+            <label for="endDate">End Date</label>
+            <input
+              id="endDate"
+              type="date"
+              [(ngModel)]="cohortEndDate"
+              name="cohortEndDate" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="cohortStatus">Cohort Lifecycle Status</label>
+          <select id="cohortStatus" [(ngModel)]="cohortStatus" name="cohortStatus">
+            <option value="planned">Planned (Upcoming)</option>
+            <option value="active">Active (In Training)</option>
+            <option value="completed">Completed (Graduated)</option>
+          </select>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeModal()">Cancel</button>
+          <button type="submit" class="btn-primary" [disabled]="saving()">
+            <span>{{ saving() ? 'Saving...' : (activeModal() === 'edit' ? 'Update Cohort' : 'Create Cohort') }}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  }
+
+  <!-- ========================================================= -->
+  <!-- MODAL: COHORT ROSTER & ENROLLED LEARNERS                  -->
+  <!-- ========================================================= -->
+  @if (activeModal() === 'members') {
+  <div class="modal-backdrop" (click)="closeModal()">
+    <div class="modal-card modal-large" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="modal-tag">ENROLLED STUDENTS</span>
+          <h2>{{ selectedCohort()?.name }} · Learner Roster</h2>
+        </div>
+        <button type="button" class="btn-close" (click)="closeModal()">×</button>
+      </div>
+
+      <!-- Add Learner Form (Teachers & Admins) -->
+      @if (canManage()) {
+      <div class="roster-add-box">
+        <h3>+ Enrol Learner to Batch</h3>
+        <div class="add-member-grid">
+          <select [(ngModel)]="addMemberUserId" name="addMemberUserId">
+            <option [ngValue]="null">-- Select a Learner to Enrol --</option>
+            @for (learner of learners(); track learner.id) {
+            <option [value]="learner.id">{{ learner.full_name }} ({{ learner.email }})</option>
+            }
+          </select>
+
+          <select [(ngModel)]="addMemberStatus" name="addMemberStatus" class="status-select">
+            <option value="active">Active</option>
+            <option value="probationary">Probationary</option>
+          </select>
+
+          <button
+            type="button"
+            class="btn-add-member"
+            (click)="addMember()"
+            [disabled]="!addMemberUserId || saving()">
+            <span>Enrol Learner</span>
+          </button>
+        </div>
+      </div>
+      }
+
+      <!-- Members List -->
+      <div class="roster-list-container">
+        <h3>Enrolled Learners ({{ members().length }})</h3>
+
+        @if (membersLoading()) {
+        <div class="loading-state mini-loading">
+          <div class="spinner"></div>
+          <p>Loading enrolled learner roster...</p>
+        </div>
+        } @else if (members().length > 0) {
+        <div class="roster-table-wrap">
+          <table class="roster-table">
+            <thead>
+              <tr>
+                <th>Learner</th>
+                <th>Enrolled Date</th>
+                <th>Status</th>
+                @if (canManage()) {
+                <th class="text-right">Actions</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (member of members(); track member.id) {
+              <tr>
+                <td>
+                  <div class="member-user-cell">
+                    <span class="member-avatar">👤</span>
+                    <strong>{{ getUserName(member.user_id) }}</strong>
+                  </div>
+                </td>
+                <td>{{ member.joined_at | date:'mediumDate' }}</td>
+                <td>
+                  <span class="status-badge" [attr.data-status]="member.status">
+                    ● {{ member.status | titlecase }}
+                  </span>
+                </td>
+                @if (canManage()) {
+                <td class="text-right">
+                  <button
+                    type="button"
+                    class="btn-remove-member"
+                    (click)="removeMember(member.user_id)"
+                    title="Remove from cohort">
+                    Remove
+                  </button>
+                </td>
+                }
+              </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        } @else {
+        <div class="empty-substate">
+          <p>No learners have been enrolled in this cohort batch yet.</p>
+        </div>
+        }
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" (click)="closeModal()">Done</button>
+      </div>
+    </div>
+  </div>
+  }
+
+</div>

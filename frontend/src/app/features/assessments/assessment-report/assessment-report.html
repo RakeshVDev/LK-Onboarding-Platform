@@ -1,223 +1,144 @@
-
 <div class="report-page">
-
-  <!-- Loading State -->
   @if (loading) {
-    <div class="panel loading-state">
-      <div class="loading-spinner"></div>
-      <h3>Preparing Your Assessment Report</h3>
-      <p>Please wait while we retrieve your saved results...</p>
-    </div>
+    <section class="panel loading-state" aria-live="polite">
+      <span class="loading-spinner"></span>
+      <h3>Preparing your assessment report</h3>
+      <p>Retrieving your saved report from the server...</p>
+    </section>
   }
 
-  <!-- Error State -->
   @if (!loading && errorMessage) {
-    <div class="panel error-message" role="alert">
-      <h3>Unable to Load Assessment Report</h3>
+    <section class="panel error-message" role="alert">
+      <span class="eyebrow">REPORT UNAVAILABLE</span>
+      <h2>Unable to load assessment report</h2>
       <p>{{ errorMessage }}</p>
-
-      <button
-        class="print-button"
-        type="button"
-        (click)="ngOnInit()">
-        Retry Loading Report
-      </button>
-    </div>
+      <button class="print-button" type="button" (click)="loadReport()">Retry</button>
+    </section>
   }
 
-  <!-- Report Content -->
   @if (!loading && report) {
-
-    <!-- Report Header -->
     <header class="report-header">
       <div>
-        <span class="eyebrow">LEARNER DEVELOPMENT</span>
-
+        <span class="eyebrow">L&amp;K · LEARNER DEVELOPMENT</span>
         <h1>Psychometric Assessment Report</h1>
-
-        <p>
-          Generated:
-          {{ report.generated_at | date:'medium' }}
-        </p>
-
-        <p>
-          Assessment Session #{{ report.session_id }}
-        </p>
+        <p>Assessment session #{{ report.session_id }}</p>
+        <p>Generated {{ report.generated_at | date:'medium' }}</p>
       </div>
-
-      <button
-        class="print-button"
-        type="button"
-        (click)="printReport()">
-        <span>↓</span>
+      <button class="print-button" type="button" (click)="printReport()">
         Print / Save PDF
       </button>
     </header>
 
-    <!-- Assessment Summary -->
     <section class="panel summary-panel">
-
       <span class="eyebrow">ASSESSMENT SUMMARY</span>
-
       <h2>{{ report.report_data.summary }}</h2>
-
-      @if (
-        report.report_data.overall_percentage !== undefined
-      ) {
-        <div class="overall-score">
-          <strong>
-            {{
-              report.report_data.overall_percentage
-                | number:'1.0-1'
-            }}%
-          </strong>
-
-          <span>Overall Assessment Score</span>
-        </div>
-      }
-
-      @if (
-        report.report_data.total_score !== undefined &&
-        report.report_data.max_score !== undefined
-      ) {
-        <p class="score-detail">
-          Total Score:
-          {{ report.report_data.total_score }}
-          /
-          {{ report.report_data.max_score }}
-        </p>
-      }
-
+      <div class="summary-metrics">
+        @if (report.report_data.overall_percentage !== undefined) {
+          <div class="overall-score">
+            <strong>{{ report.report_data.overall_percentage | number:'1.0-1' }}%</strong>
+            <span>Overall performance</span>
+          </div>
+        }
+        @if (report.report_data.total_score !== undefined && report.report_data.max_score !== undefined) {
+          <div class="score-detail">
+            <strong>{{ report.report_data.total_score | number:'1.0-2' }} / {{ report.report_data.max_score | number:'1.0-2' }}</strong>
+            <span>Total score</span>
+          </div>
+        }
+      </div>
     </section>
 
-    <!-- Category Interpretations -->
-    <section class="panel">
-
-      <span class="eyebrow">PERFORMANCE ANALYSIS</span>
-
-      <h2>Category Interpretations</h2>
-
-      @if (categoryEntries.length > 0) {
-
-        <div class="interpretation-grid">
-
-          @for (item of categoryEntries; track item[0]) {
-
-            <article class="interpretation-card">
-
-              <h3>{{ categoryLabel(item[0]) }}</h3>
-
-              <p>{{ item[1] }}</p>
-
+    @if (categoryScores.length) {
+      <section class="panel">
+        <span class="eyebrow">PERFORMANCE ANALYSIS</span>
+        <h2>Category-wise scores</h2>
+        <div class="category-grid">
+          @for (item of categoryScores; track item.category) {
+            <article class="category-card">
+              <div class="category-heading">
+                <h3>{{ categoryLabel(item.category) }}</h3>
+                <strong>{{ item.percentage | number:'1.0-1' }}%</strong>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" [style.width.%]="item.percentage"></div>
+              </div>
+              <small>{{ item.score }} / {{ item.max_score }} points</small>
             </article>
-
           }
-
         </div>
+      </section>
+    }
 
+    <section class="panel">
+      <span class="eyebrow">CATEGORY INTERPRETATIONS</span>
+      <h2>What your scores indicate</h2>
+      @if (categoryEntries.length) {
+        <div class="interpretation-grid">
+          @for (item of categoryEntries; track item[0]) {
+            <article class="interpretation-card">
+              <h3>{{ categoryLabel(item[0]) }}</h3>
+              <p>{{ item[1] }}</p>
+            </article>
+          }
+        </div>
       } @else {
-
-        <p>No category interpretations are available.</p>
-
+        <p>No category interpretations are available in this report.</p>
       }
-
     </section>
 
-    <!-- Strengths and Development Areas -->
     <div class="insight-grid">
-
       <section class="panel">
-
         <span class="eyebrow">POSITIVE ATTRIBUTES</span>
-
         <h2>Strengths</h2>
-
-        @if (report.report_data.strengths.length > 0) {
-
+        @if (strengths.length) {
           <ul>
-            @for (
-              item of report.report_data.strengths;
-              track item
-            ) {
-              <li>{{ item }}</li>
-            }
+            @for (item of strengths; track item) { <li>{{ item }}</li> }
           </ul>
-
         } @else {
-          <p>No strengths recorded.</p>
+          <p>No strengths were recorded.</p>
         }
-
       </section>
 
       <section class="panel">
-
         <span class="eyebrow">GROWTH OPPORTUNITIES</span>
-
-        <h2>Development Areas</h2>
-
-        @if (report.report_data.development_areas.length > 0) {
-
+        <h2>Development areas</h2>
+        @if (developmentAreas.length) {
           <ul>
-            @for (
-              item of report.report_data.development_areas;
-              track item
-            ) {
-              <li>{{ item }}</li>
-            }
+            @for (item of developmentAreas; track item) { <li>{{ item }}</li> }
           </ul>
-
         } @else {
-          <p>No development areas recorded.</p>
+          <p>No development areas were recorded.</p>
         }
-
       </section>
-
     </div>
 
-    <!-- Recommendations -->
     <section class="panel">
-
       <span class="eyebrow">YOUR NEXT STEPS</span>
-
       <h2>Recommendations</h2>
-
-      @if (report.report_data.recommendations.length > 0) {
-
+      @if (recommendations.length) {
         <ul class="recommendation-list">
-
-          @for (
-            item of report.report_data.recommendations;
-            track item
-          ) {
-            <li>{{ item }}</li>
-          }
-
+          @for (item of recommendations; track item) { <li>{{ item }}</li> }
         </ul>
-
       } @else {
-
         <p>No recommendations are currently available.</p>
-
       }
-
     </section>
 
-    <!-- Report Footer -->
+    @if (report.report_text) {
+      <section class="panel full-report">
+        <span class="eyebrow">COMPLETE REPORT</span>
+        <h2>Detailed assessment report</h2>
+        <pre>{{ report.report_text }}</pre>
+      </section>
+    }
+
     <footer class="report-footer">
-
       <strong>L&amp;K Onboarding Platform</strong>
-
       <p>
-        Developmental feedback only. This report is not
-        a clinical diagnosis or an employment-suitability decision.
+        Developmental feedback only. This report is not a clinical diagnosis
+        or a standalone employment-suitability decision.
       </p>
-
-      <span>
-        © 2026 Learning &amp; Development
-      </span>
-
+      <small>Report engine: {{ report.ai_model }}</small>
     </footer>
-
   }
-
 </div>

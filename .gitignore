@@ -27,3 +27,17 @@ Thumbs.db
 *.sql
 *.dump
 *.bak
+
+# Environment secrets
+**/.env
+**/.env.*
+!.env.example
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Angular cache
+frontend/.angular/
+
+*.backup

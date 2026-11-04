@@ -43,6 +43,18 @@ const CATEGORY_CONFIG: Record<string, AssessmentCategory> = {
 
 };
 
+const LOGICAL_REASONING_CONFIG: Record<string, AssessmentCategory> = {
+  number_series: { label: 'Number Series', question_count: 4 },
+  alphabet_series: { label: 'Alphabet Series', question_count: 3 },
+  coding_decoding: { label: 'Coding-Decoding', question_count: 3 },
+  blood_relations: { label: 'Blood Relations', question_count: 3 },
+  direction_distance: { label: 'Direction and Distance', question_count: 3 },
+  pattern_recognition: { label: 'Pattern Recognition', question_count: 3 },
+  logical_statements: { label: 'Logical Statements', question_count: 2 },
+  odd_one_out: { label: 'Odd One Out', question_count: 2 },
+  analogy: { label: 'Analogy', question_count: 2 },
+};
+
 @Component({
   selector: 'app-assessment-form',
   standalone: true,

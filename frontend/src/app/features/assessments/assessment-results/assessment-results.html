@@ -1,134 +1,125 @@
-
 <div class="results-page">
-
   <header class="page-header">
-
-    <span class="eyebrow">ASSESSMENT COMPLETED</span>
-
-    <h1>Your Assessment Results</h1>
-
-    <p>
-      Review your performance across all five assessment categories.
-    </p>
-
+    <div>
+      <button class="back-button" type="button" (click)="goBack()">
+        ← {{ authService.hasRole('admin', 'teacher', 'superadmin') ? 'Back to Learner Results' : 'Back to My Results' }}
+      </button>
+      <span class="eyebrow">ASSESSMENT COMPLETED</span>
+      <h1>{{ results?.template_name ? (results?.template_name + ' Results') : 'Your Assessment Results' }}</h1>
+      @if (results?.learner_name) {
+        <p class="learner-tag">
+          <strong>Candidate:</strong> {{ results?.learner_name }}
+          @if (results?.learner_email) {
+            <span>({{ results?.learner_email }})</span>
+          }
+        </p>
+      }
+      <p>Review performance across all assessment categories.</p>
+    </div>
+    <span class="session-chip">Session #{{ sessionId }}</span>
   </header>
 
   @if (errorMessage) {
-
-    <div class="error-message">
-      {{ errorMessage }}
-    </div>
-
+    <div class="error-message" role="alert">{{ errorMessage }}</div>
   }
 
   @if (loading) {
-
-    <div class="panel">
-      Loading saved results...
-    </div>
-
+    <section class="state-panel" aria-live="polite">
+      <span class="spinner"></span>
+      <strong>Loading saved results...</strong>
+      <p>Your scores are being retrieved from the server.</p>
+    </section>
   }
 
   @if (!loading && results) {
+    <section class="overview-grid">
+      <article class="overview-card overall-card">
+        <span class="metric-label">OVERALL PERFORMANCE</span>
+        <strong class="overall-value">{{ overallPercentage | number:'1.0-1' }}%</strong>
+        <div class="progress-track">
+          <div class="progress-fill" [style.width.%]="overallPercentage"></div>
+        </div>
+        <small>{{ totalScore | number:'1.0-2' }} / {{ maxScore | number:'1.0-2' }} points</small>
+      </article>
 
-    <div class="score-grid">
+      <article class="overview-card">
+        <span class="metric-label">QUESTIONS</span>
+        <strong>{{ results.total_questions }}</strong>
+        <small>Total questions</small>
+      </article>
 
-      @for (
-        item of results.categories;
-        track item.category
-      ) {
+      <article class="overview-card">
+        <span class="metric-label">ANSWERED</span>
+        <strong>{{ results.answered_count }}</strong>
+        <small>Responses submitted</small>
+      </article>
 
-        <article class="score-card">
-
-          <div class="score-heading">
-
-            <h2>
-              {{ categoryLabel(item.category) }}
-            </h2>
-
-            <strong>
-              {{ item.percentage | number:'1.0-1' }}%
-            </strong>
-
-          </div>
-
-          <div class="progress-track">
-
-            <div
-              class="progress-fill"
-              [style.width.%]="item.percentage">
-            </div>
-
-          </div>
-
-          <small>
-            {{ item.score }} / {{ item.max_score }} points
-          </small>
-
-        </article>
-
-      }
-
-    </div>
-
-    <section class="report-section">
-
-      <div>
-
-        <span class="eyebrow">NEXT STEP</span>
-
-        <h2>Generate Your Development Report</h2>
-
-        <p>
-          Get your strengths, development areas,
-          category interpretations and recommendations.
-        </p>
-
-      </div>
-
-      <button
-        class="btn-primary"
-        type="button"
-        [disabled]="reportLoading"
-        (click)="generateReport()">
-
-        {{
-          reportLoading
-            ? 'Generating Report...'
-            : 'Generate Report →'
-        }}
-
-      </button>
-
+      <article class="overview-card">
+        <span class="metric-label">UNANSWERED</span>
+        <strong>{{ results.unanswered_count }}</strong>
+        <small>Received zero points</small>
+      </article>
     </section>
 
-    @if (report) {
+    <section class="section-heading">
+      <div>
+        <span class="eyebrow">PERFORMANCE BREAKDOWN</span>
+        <h2>Category-wise scores</h2>
+        <p>Scores are calculated from your saved responses.</p>
+      </div>
+      <span class="category-count">{{ results.categories.length }} categories</span>
+    </section>
 
-      <section class="report-ready">
+    <section class="score-grid">
+      @for (item of results.categories; track item.category) {
+        <article class="score-card">
+          <div class="score-heading">
+            <h3>{{ categoryLabel(item.category) }}</h3>
+            <strong>{{ item.percentage | number:'1.0-1' }}%</strong>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" [style.width.%]="item.percentage"></div>
+          </div>
+          <div class="score-foot">
+            <span>{{ item.score | number:'1.0-2' }} / {{ item.max_score | number:'1.0-2' }} points</span>
+            <span>{{ item.percentage >= 70 ? 'Relative strength' : item.percentage >= 50 ? 'Developing' : 'Practice area' }}</span>
+          </div>
+        </article>
+      }
+    </section>
 
-        <div>
+    <section class="report-section">
+      <div class="report-copy">
+        <span class="eyebrow">PERSONAL DEVELOPMENT</span>
+        <h2>{{ report ? 'Your report is ready' : 'Your development report' }}</h2>
+        <p>
+          Review the category interpretations, relative strengths,
+          development areas and practical recommendations generated
+          from your saved assessment scores.
+        </p>
+        @if (report) {
+          <small>Generated {{ report.generated_at | date:'medium' }}</small>
+        }
+      </div>
 
-          <strong>Report generated successfully</strong>
-
-          <small>
-            Generated {{ report.generated_at | date:'medium' }}
-          </small>
-
-        </div>
-
+      @if (report) {
+        <button class="btn-primary" type="button" (click)="viewReport()">
+          View full report →
+        </button>
+      } @else {
         <button
           class="btn-primary"
           type="button"
-          (click)="viewReport()">
-
-          View Full Report
-
+          [disabled]="reportLoading"
+          (click)="generateReport()">
+          {{ reportLoading ? 'Generating report...' : 'Generate report →' }}
         </button>
+      }
+    </section>
 
-      </section>
-
-    }
-
+    <p class="disclaimer">
+      This assessment provides developmental feedback. It is not a clinical
+      diagnosis or a standalone employment-suitability decision.
+    </p>
   }
-
 </div>

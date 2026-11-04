@@ -1,0 +1,29 @@
+L&K Onboarding Platform — Assessment Update
+
+Updated files:
+- backend/services/training/app/schemas/assessment.py
+- backend/services/training/app/routers/assessments.py
+- frontend/src/app/features/assessments/services/assessment.ts
+- frontend/src/app/features/assessments/assessment-taking/assessment-taking.ts
+- frontend/src/app/features/assessments/assessment-taking/assessment-taking.html
+- frontend/src/app/features/assessments/assessment-results/assessment-results.ts
+- frontend/src/app/features/assessments/assessment-results/assessment-results.html
+- frontend/src/app/features/assessments/assessment-results/assessment-results.scss
+- frontend/src/app/features/assessments/assessment-report/assessment-report.ts
+- frontend/src/app/features/assessments/assessment-report/assessment-report.html
+- frontend/src/app/features/assessments/assessment-report/assessment-report.scss
+
+Key changes:
+- Added the missing learner-owned resume API endpoint.
+- Expanded saved result response with aggregate totals and answered/unanswered counts.
+- Added zoneless-compatible explicit change detection to results/report pages.
+- Improved results dashboard and full report presentation.
+- Displays category scores and the complete saved report text.
+- Preserves selected answers in browser sessionStorage across page refreshes.
+- Allows retrying submission after a network failure; server remains authoritative for deadline and scoring.
+
+Important existing limitations identified:
+- Assessment start currently calls generate_mock_questions(); assessment_ai.py is present but is not wired into the start endpoint.
+- Current report generation is deterministic/rule-based (rule-based-v1), not an AI-generated or clinically validated psychometric interpretation.
+- Backend report/results endpoints are learner-owned only. Admin/Teacher reporting dashboard and teacher-to-cohort assignment APIs are not implemented in this source archive.
+- No migration is required for these changes; existing assessment tables are reused.

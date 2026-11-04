@@ -103,8 +103,8 @@ def generate_assessment_questions() -> list[dict]:
 
     client = OpenAI(
         api_key=settings.OPENAI_API_KEY,
-        timeout=90.0,
-        max_retries=2,
+        timeout=15.0,
+        max_retries=1,
     )
 
     instructions = """

@@ -1,6 +1,5 @@
-
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 export interface AssessmentCategory {
@@ -11,6 +10,7 @@ export interface AssessmentCategory {
 export interface AssessmentTemplate {
   id: number;
   name: string;
+  assessment_type: "psychometric" | "technical" | "english_grammar" | "logical_reasoning";
   description: string | null;
   question_count: number;
   category_config: Record<string, AssessmentCategory>;
@@ -21,6 +21,7 @@ export interface AssessmentTemplate {
 
 export interface CreateAssessmentTemplate {
   name: string;
+  assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning";
   description: string | null;
   question_count: number;
   category_config: Record<string, AssessmentCategory>;
@@ -28,6 +29,7 @@ export interface CreateAssessmentTemplate {
 
 export interface UpdateAssessmentTemplate {
   name?: string;
+  assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning";
   description?: string | null;
   question_count?: number;
   category_config?: Record<string, AssessmentCategory>;
@@ -42,6 +44,7 @@ export interface AssessmentOption {
 export interface AssessmentQuestion {
   id: number;
   category: string;
+  difficulty?: 'Easy' | 'Medium' | 'Hard' | string;
   question_type: string;
   question_text: string;
   options: AssessmentOption[];
@@ -52,19 +55,29 @@ export interface AssessmentStartResponse {
   session_id: number;
   status: string;
   question_count: number;
+  duration_minutes?: number;
+  remaining_seconds?: number;
   started_at: string;
+  expires_at?: string;
+  template_name?: string;
+  assessment_type?: string;
   questions: AssessmentQuestion[];
 }
-
 
 export interface AssessmentResumeResponse {
   session_id: number;
   status: string;
   question_count: number;
+  duration_minutes?: number;
+  remaining_seconds?: number;
   started_at: string;
+  expires_at?: string;
+  template_name?: string;
+  assessment_type?: string;
+  saved_answers?: Record<number, string>;
+  marked_for_review?: number[];
   questions: AssessmentQuestion[];
 }
-
 
 export interface AssessmentAnswer {
   question_id: number;
@@ -87,7 +100,21 @@ export interface CategoryScore {
 
 export interface AssessmentScoresResponse {
   session_id: number;
+  template_id?: number;
+  template_name?: string;
+  assessment_type?: string;
+  learner_user_id?: number;
+  learner_name?: string;
+  learner_email?: string;
+  status?: string;
+  completed_at?: string;
   categories: CategoryScore[];
+  total_questions: number;
+  answered_count: number;
+  unanswered_count: number;
+  total_score: number;
+  max_score: number;
+  overall_percentage: number;
 }
 
 export interface AssessmentReportData {
@@ -105,10 +132,43 @@ export interface AssessmentReportData {
 export interface AssessmentReport {
   id: number;
   session_id: number;
+  template_id?: number;
+  template_name?: string;
+  assessment_type?: string;
+  learner_user_id?: number;
+  learner_name?: string;
+  learner_email?: string;
   report_data: AssessmentReportData;
   report_text: string;
   ai_model: string;
   generated_at: string;
+}
+
+export interface UserAssessmentResultItem {
+  session_id: number;
+  template_id: number;
+  template_name: string;
+  assessment_type: string;
+  learner_user_id: number;
+  learner_name?: string;
+  learner_email?: string;
+  status: string;
+  question_count: number;
+  total_score: number;
+  max_score: number;
+  overall_percentage: number;
+  started_at: string;
+  completed_at?: string;
+  has_report: boolean;
+  categories: CategoryScore[];
+}
+
+export interface AdminAssessmentResultsResponse {
+  results: UserAssessmentResultItem[];
+  total_assessments: number;
+  completed_count: number;
+  average_score: number;
+  unique_learners: number;
 }
 
 @Injectable({
@@ -131,14 +191,13 @@ export class AssessmentService {
     );
   }
 
-
   resumeAssessment(
-  sessionId: number
-): Observable<AssessmentResumeResponse> {
-  return this.http.get<AssessmentResumeResponse>(
-    `${this.apiUrl}/sessions/${sessionId}/resume`
-  );
-}
+    sessionId: number
+  ): Observable<AssessmentResumeResponse> {
+    return this.http.get<AssessmentResumeResponse>(
+      `${this.apiUrl}/sessions/${sessionId}/resume`
+    );
+  }
 
   createTemplate(
     data: CreateAssessmentTemplate
@@ -191,6 +250,34 @@ export class AssessmentService {
   }
 
   // ----------------------------------
+  // Save answer progressively
+  // ----------------------------------
+
+  saveAnswer(
+    sessionId: number,
+    payload: {
+      question_id: number;
+      answer?: string | null;
+      is_marked_for_review?: boolean;
+    }
+  ): Observable<{
+    status: string;
+    question_id: number;
+    answer: string | null;
+    is_marked_for_review: boolean;
+  }> {
+    return this.http.post<{
+      status: string;
+      question_id: number;
+      answer: string | null;
+      is_marked_for_review: boolean;
+    }>(
+      `${this.apiUrl}/sessions/${sessionId}/save-answer`,
+      payload
+    );
+  }
+
+  // ----------------------------------
   // Get saved results
   // ----------------------------------
 
@@ -224,6 +311,41 @@ export class AssessmentService {
   ): Observable<AssessmentReport> {
     return this.http.get<AssessmentReport>(
       `${this.apiUrl}/sessions/${sessionId}/report`
+    );
+  }
+
+  // ----------------------------------
+  // Learner: Get my results & report cards
+  // ----------------------------------
+
+  getMyResults(): Observable<UserAssessmentResultItem[]> {
+    return this.http.get<UserAssessmentResultItem[]>(
+      `${this.apiUrl}/my/results`
+    );
+  }
+
+  // ----------------------------------
+  // Admin & Teacher: Get all users' assessment results
+  // ----------------------------------
+
+  getAdminResults(params?: {
+    template_id?: number;
+    status?: string;
+    search?: string;
+  }): Observable<AdminAssessmentResultsResponse> {
+    let httpParams = new HttpParams();
+    if (params?.template_id) {
+      httpParams = httpParams.set('template_id', params.template_id.toString());
+    }
+    if (params?.status) {
+      httpParams = httpParams.set('status', params.status);
+    }
+    if (params?.search) {
+      httpParams = httpParams.set('search', params.search);
+    }
+    return this.http.get<AdminAssessmentResultsResponse>(
+      `${this.apiUrl}/admin/results`,
+      { params: httpParams }
     );
   }
 }
