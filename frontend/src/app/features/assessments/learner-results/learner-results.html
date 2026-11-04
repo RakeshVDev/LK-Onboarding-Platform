@@ -1,0 +1,193 @@
+<div class="learner-results-page">
+
+  <!-- Header -->
+  <header class="page-header">
+    <div class="header-content">
+      <span class="eyebrow">PERFORMANCE &amp; PROGRESS</span>
+      <h1>My Assessment Results</h1>
+      <p>
+        Review your developmental report cards, overall scores, and category breakdowns
+        across all completed ASE assessments.
+      </p>
+    </div>
+
+    <button class="btn-primary" type="button" (click)="goToAssessments()">
+      <span>✎</span> Take an Assessment
+    </button>
+  </header>
+
+  @if (errorMessage) {
+    <div class="error-banner" role="alert">
+      {{ errorMessage }}
+    </div>
+  }
+
+  @if (loading) {
+    <div class="state-card loading-state">
+      <span class="spinner"></span>
+      <strong>Loading your assessment results...</strong>
+      <p>Please wait while we retrieve your performance data.</p>
+    </div>
+  }
+
+  @if (!loading) {
+
+    <!-- In-progress banner if any -->
+    @if (inProgressResults.length > 0) {
+      <div class="in-progress-banner">
+        <div class="banner-icon">◷</div>
+        <div class="banner-body">
+          <strong>You have {{ inProgressResults.length }} unfinished assessment{{ inProgressResults.length > 1 ? 's' : '' }}</strong>
+          <p>Complete your session to unlock your official developmental report card.</p>
+        </div>
+        <button
+          class="btn-resume"
+          type="button"
+          (click)="resumeSession(inProgressResults[0].session_id)">
+          Resume Test →
+        </button>
+      </div>
+    }
+
+    <!-- Performance Stats -->
+    <div class="stats-grid">
+      <article class="stat-card">
+        <div class="stat-icon purple">✓</div>
+        <div>
+          <span class="stat-label">Assessments Completed</span>
+          <strong class="stat-value">{{ totalCompleted }}</strong>
+        </div>
+      </article>
+
+      <article class="stat-card">
+        <div class="stat-icon green">◎</div>
+        <div>
+          <span class="stat-label">Average Performance</span>
+          <strong class="stat-value">{{ averageScore }}%</strong>
+        </div>
+      </article>
+
+      <article class="stat-card">
+        <div class="stat-icon blue">★</div>
+        <div>
+          <span class="stat-label">Highest Score</span>
+          <strong class="stat-value">{{ bestScore }}%</strong>
+        </div>
+      </article>
+
+      <article class="stat-card">
+        <div class="stat-icon orange">◷</div>
+        <div>
+          <span class="stat-label">In Progress</span>
+          <strong class="stat-value">{{ inProgressResults.length }}</strong>
+        </div>
+      </article>
+    </div>
+
+    <!-- Empty State -->
+    @if (completedResults.length === 0 && inProgressResults.length === 0) {
+      <div class="state-card empty-card">
+        <div class="empty-icon">▥</div>
+        <h2>No assessment results yet</h2>
+        <p>
+          You haven't completed any assessments yet. Take your first onboarding assessment
+          to generate your score breakdown and developmental report card.
+        </p>
+        <button class="btn-primary" type="button" (click)="goToAssessments()">
+          Explore Available Assessments →
+        </button>
+      </div>
+    }
+
+    <!-- Report Cards Section -->
+    @if (completedResults.length > 0) {
+      <div class="section-title">
+        <div>
+          <h2>Your Assessment Report Cards</h2>
+          <p>Individual evaluation summaries and developmental reports.</p>
+        </div>
+        <span class="count-pill">{{ completedResults.length }} Report{{ completedResults.length > 1 ? 's' : '' }}</span>
+      </div>
+
+      <div class="cards-grid">
+        @for (item of completedResults; track item.session_id) {
+          <article class="report-card">
+
+            <!-- Card Header -->
+            <div class="card-header">
+              <div class="header-left">
+                <span class="type-pill" [attr.data-type]="item.assessment_type">
+                  {{ typeLabel(item.assessment_type) }}
+                </span>
+                <h3>{{ item.template_name }}</h3>
+                <span class="session-meta">
+                  Session #{{ item.session_id }} · Completed {{ item.completed_at | date:'mediumDate' }}
+                </span>
+              </div>
+
+              <!-- Grade Badge -->
+              <div class="grade-box" [ngClass]="getGrade(item.overall_percentage).class">
+                <span class="score-percent">{{ item.overall_percentage | number:'1.0-1' }}%</span>
+                <span class="grade-text">{{ getGrade(item.overall_percentage).label }}</span>
+              </div>
+            </div>
+
+            <!-- Score Bar -->
+            <div class="score-summary">
+              <div class="score-row">
+                <span class="score-caption">Total Points Earned</span>
+                <strong class="score-pts">{{ item.total_score | number:'1.0-2' }} / {{ item.max_score | number:'1.0-2' }}</strong>
+              </div>
+              <div class="progress-track">
+                <div
+                  class="progress-fill"
+                  [style.width.%]="item.overall_percentage"
+                  [ngClass]="getGrade(item.overall_percentage).class">
+                </div>
+              </div>
+            </div>
+
+            <!-- Categories Breakdown -->
+            @if (item.categories.length > 0) {
+              <div class="categories-panel">
+                <span class="categories-label">Category Performance</span>
+                <div class="category-bars">
+                  @for (cat of item.categories; track cat.category) {
+                    <div class="cat-bar-item">
+                      <div class="cat-info">
+                        <span class="cat-name">{{ categoryLabel(cat.category) }}</span>
+                        <span class="cat-pct">{{ cat.percentage | number:'1.0-0' }}%</span>
+                      </div>
+                      <div class="mini-progress-track">
+                        <div class="mini-progress-fill" [style.width.%]="cat.percentage"></div>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            <!-- Card Actions -->
+            <div class="card-actions">
+              <button
+                class="btn-card-primary"
+                type="button"
+                (click)="viewReport(item.session_id)">
+                View Full Report Card →
+              </button>
+              <button
+                class="btn-card-secondary"
+                type="button"
+                (click)="viewScores(item.session_id)">
+                Category Scores
+              </button>
+            </div>
+
+          </article>
+        }
+      </div>
+    }
+
+  }
+
+</div>

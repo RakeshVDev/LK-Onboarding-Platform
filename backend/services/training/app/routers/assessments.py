@@ -1,14 +1,17 @@
 
 from datetime import datetime, timezone, timedelta
+from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 ASSESSMENT_DURATION_MINUTES = 15
 
 from services.identity.app.dependencies.auth import get_current_user
 from services.identity.app.core.roles import Role
+from services.identity.app.db.session import SessionLocal as IdentitySessionLocal
+from services.identity.app.models.user import User as IdentityUser
 
 from services.training.app.db.session import SessionLocal
 
@@ -19,6 +22,7 @@ from services.training.app.models.assessment import (
     AssessmentResponse,
     AssessmentScore,
     AssessmentReport,
+    AssessmentQuestionBank,
 )
 
 from services.training.app.schemas.assessment import (
@@ -33,10 +37,21 @@ from services.training.app.schemas.assessment import (
     AssessmentScoresResponse,
     AssessmentReportResponse,
     LearnerAssessmentStatusResponse,
+    AssessmentResumeResponse,
+    AssessmentAnswerSaveRequest,
+    AssessmentAnswerSaveResponse,
+    AssessmentBankQuestionCreate,
+    AssessmentBankQuestionResponse,
+    AssessmentCategoryScoreResponse,
+    UserAssessmentResultItem,
+    AdminAssessmentResultsResponse,
 )
 
 from services.training.app.services.assessment_mock import (
     generate_mock_questions,
+)
+from services.training.app.services.assessment_logical_reasoning import (
+    get_default_logical_reasoning_questions,
 )
 from services.training.app.services.assessment_report import (
     generate_assessment_report,
@@ -66,6 +81,9 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -77,12 +95,29 @@ def role_of(user) -> str:
 def require_assessment_manager(user):
     if role_of(user) not in {
         Role.ADMIN.value,
+        Role.SUPERADMIN.value,
         Role.TEACHER.value,
     }:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only Admin and Teacher can manage assessments",
         )
+
+
+def get_users_map(user_ids: list[int]) -> dict[int, dict[str, str]]:
+    if not user_ids:
+        return {}
+    try:
+        with IdentitySessionLocal() as id_db:
+            users = id_db.scalars(
+                select(IdentityUser).where(IdentityUser.id.in_(user_ids))
+            ).all()
+            return {
+                u.id: {"full_name": u.full_name, "email": u.email}
+                for u in users
+            }
+    except Exception:
+        return {}
 
 
 def validate_category_config(config: dict):
@@ -114,14 +149,37 @@ def validate_category_config(config: dict):
             )
 
 
-def validate_template_settings(question_count: int, config: dict):
-    if question_count != 20:
-        raise HTTPException(
-            status_code=422,
-            detail="The current mock assessment requires exactly 20 questions",
-        )
+def get_duration_minutes_for_template(template: AssessmentTemplate | None) -> int:
+    if template and getattr(template, "assessment_type", None) == "logical_reasoning":
+        return 30
+    return 15
 
-    validate_category_config(config)
+
+def to_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def validate_template_settings(question_count: int, config: dict, assessment_type: str = "psychometric"):
+    if assessment_type == "logical_reasoning":
+        if question_count != 25:
+            raise HTTPException(status_code=422, detail="Logical Reasoning assessment must contain exactly 25 questions")
+    elif assessment_type == "psychometric":
+        if question_count != 20:
+            raise HTTPException(status_code=422, detail="Each psychometric assessment must contain exactly 20 questions")
+        validate_category_config(config)
+    elif question_count <= 0:
+        raise HTTPException(status_code=422, detail="Assessment must contain at least 1 question")
+
+    if not isinstance(config, dict):
+        raise HTTPException(status_code=422, detail="Invalid category configuration")
 
 
 # --------------------------------------------------
@@ -235,6 +293,7 @@ def create_template(
     validate_template_settings(
         payload.question_count,
         payload.category_config,
+        payload.assessment_type,
     )
 
     existing = db.scalar(
@@ -251,6 +310,7 @@ def create_template(
 
     template = AssessmentTemplate(
         name=payload.name,
+        assessment_type=payload.assessment_type,
         description=payload.description,
         question_count=payload.question_count,
         category_config=payload.category_config,
@@ -308,7 +368,7 @@ def update_template(
         template.category_config,
     )
 
-    validate_template_settings(question_count, category_config)
+    validate_template_settings(question_count, category_config, changes.get("assessment_type", template.assessment_type))
 
     if "name" in changes:
         duplicate = db.scalar(
@@ -368,36 +428,130 @@ def start_assessment(
             detail="Active assessment template not found",
         )
 
-    if template.question_count != 20:
+    if template.assessment_type == "logical_reasoning":
+        if template.question_count != 25:
+            raise HTTPException(
+                status_code=400,
+                detail="Logical Reasoning assessment requires 25 questions",
+            )
+    elif template.question_count != 20:
         raise HTTPException(
             status_code=400,
             detail="This assessment currently requires 20 questions",
         )
+
+    duration_minutes = get_duration_minutes_for_template(template)
 
     existing_session = db.scalar(
         select(AssessmentSession).where(
             AssessmentSession.learner_user_id == current_user.id,
             AssessmentSession.template_id == template.id,
             AssessmentSession.status == "in_progress",
-        )
+        ).order_by(AssessmentSession.started_at.desc())
     )
 
     if existing_session:
+        started_utc = to_utc(existing_session.started_at)
+        deadline_utc = to_utc(existing_session.expires_at) or (started_utc + timedelta(minutes=duration_minutes))
+        if now_utc() >= deadline_utc:
+            # Stale / expired session! Mark as expired cleanly so learner can start fresh!
+            existing_session.status = "completed"
+            existing_session.completed_at = deadline_utc
+            db.commit()
+            existing_session = None
+        else:
+            # Active in-progress session exists! Return it so the learner can continue
+            q_records = db.scalars(
+                select(AssessmentQuestion)
+                .where(AssessmentQuestion.session_id == existing_session.id)
+                .order_by(AssessmentQuestion.display_order)
+            ).all()
+
+            public_questions = [
+                AssessmentQuestionResponse(
+                    id=q.id,
+                    category=q.category,
+                    difficulty=getattr(q, "difficulty", "Medium") or "Medium",
+                    question_type=q.question_type,
+                    question_text=q.question_text,
+                    options=q.options,
+                    display_order=q.display_order,
+                )
+                for q in q_records
+            ]
+
+            rem_sec = max(0, int((deadline_utc - now_utc()).total_seconds()))
+            return AssessmentStartResponse(
+                session_id=existing_session.id,
+                status=existing_session.status,
+                question_count=existing_session.question_count,
+                duration_minutes=duration_minutes,
+                remaining_seconds=rem_sec,
+                started_at=to_utc(existing_session.started_at),
+                expires_at=deadline_utc,
+                template_name=template.name,
+                assessment_type=template.assessment_type,
+                questions=public_questions,
+            )
+
+    bank_questions = db.scalars(
+        select(AssessmentQuestionBank)
+        .where(
+            AssessmentQuestionBank.template_id == template.id,
+            AssessmentQuestionBank.is_active.is_(True),
+        )
+        .order_by(AssessmentQuestionBank.id)
+    ).all()
+
+    if template.assessment_type == "logical_reasoning":
+        if len(bank_questions) >= template.question_count:
+            questions = [
+                {
+                    "category": q.category,
+                    "difficulty": getattr(q, "difficulty", "Medium") or "Medium",
+                    "question_type": q.question_type,
+                    "question_text": q.question_text,
+                    "options": q.options,
+                    "scoring_key": q.scoring_key,
+                    "max_score": q.max_score,
+                }
+                for q in bank_questions[:template.question_count]
+            ]
+        else:
+            questions = get_default_logical_reasoning_questions()
+    elif len(bank_questions) >= template.question_count:
+        import random
+        questions = [
+            {
+                "category": q.category,
+                "difficulty": getattr(q, "difficulty", "Medium") or "Medium",
+                "question_type": q.question_type,
+                "question_text": q.question_text,
+                "options": q.options,
+                "scoring_key": q.scoring_key,
+                "max_score": q.max_score,
+            }
+            for q in random.sample(bank_questions, template.question_count)
+        ]
+    elif template.assessment_type == "psychometric":
+        questions = generate_mock_questions()
+    else:
         raise HTTPException(
             status_code=409,
-            detail=(
-                "You already have an assessment in progress. "
-                f"Session ID: {existing_session.id}"
-            ),
+            detail=f"{template.name} needs {template.question_count} active questions before learners can start it.",
         )
 
-    questions = generate_mock_questions()
+    duration_minutes = get_duration_minutes_for_template(template)
+    started_at = datetime.now(timezone.utc)
+    expires_at = started_at + timedelta(minutes=duration_minutes)
 
     session = AssessmentSession(
         template_id=template.id,
         learner_user_id=current_user.id,
         status="in_progress",
         question_count=len(questions),
+        started_at=started_at,
+        expires_at=expires_at,
         ai_model="mock-v1",
         prompt_version="mock-v1",
         rubric_version="mock-rubric-v1",
@@ -413,6 +567,7 @@ def start_assessment(
             db_question = AssessmentQuestion(
                 session_id=session.id,
                 category=question["category"],
+                difficulty=question.get("difficulty", "Medium"),
                 question_type=question["question_type"],
                 question_text=question["question_text"],
                 options=question["options"],
@@ -428,6 +583,7 @@ def start_assessment(
                 AssessmentQuestionResponse(
                     id=db_question.id,
                     category=db_question.category,
+                    difficulty=db_question.difficulty,
                     question_type=db_question.question_type,
                     question_text=db_question.question_text,
                     options=db_question.options,
@@ -453,14 +609,216 @@ def start_assessment(
         session_id=session.id,
         status=session.status,
         question_count=session.question_count,
-        started_at=session.started_at,
+        duration_minutes=duration_minutes,
+        remaining_seconds=int(duration_minutes * 60),
+        started_at=to_utc(session.started_at),
+        expires_at=to_utc(session.expires_at),
+        template_name=template.name,
+        assessment_type=template.assessment_type,
         questions=public_questions,
     )
 
 
 
+
 # --------------------------------------------------
-# Learner: Submit assessment
+# Learner: Resume an in-progress assessment
+# --------------------------------------------------
+
+@router.get(
+    "/sessions/{session_id}/resume",
+    response_model=AssessmentResumeResponse,
+)
+def resume_assessment(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if role_of(current_user) != Role.LEARNER.value:
+        raise HTTPException(
+            status_code=403,
+            detail="Only learners can resume assessments",
+        )
+
+    assessment_session = db.scalar(
+        select(AssessmentSession).where(
+            AssessmentSession.id == session_id,
+            AssessmentSession.learner_user_id == current_user.id,
+        )
+    )
+
+    if assessment_session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Assessment session not found",
+        )
+
+    if assessment_session.status != "in_progress":
+        raise HTTPException(
+            status_code=409,
+            detail="This assessment is no longer in progress",
+        )
+
+    template = db.get(AssessmentTemplate, assessment_session.template_id)
+    duration_minutes = get_duration_minutes_for_template(template)
+    started_utc = to_utc(assessment_session.started_at)
+    expires_utc = to_utc(assessment_session.expires_at) or (started_utc + timedelta(minutes=duration_minutes))
+
+    questions = db.scalars(
+        select(AssessmentQuestion)
+        .where(AssessmentQuestion.session_id == session_id)
+        .order_by(AssessmentQuestion.display_order)
+    ).all()
+
+    if len(questions) != assessment_session.question_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Assessment questions are incomplete",
+        )
+
+    # Fetch previously saved answers and review flags
+    saved_records = db.scalars(
+        select(AssessmentResponse).where(AssessmentResponse.session_id == session_id)
+    ).all()
+    saved_answers = {
+        r.question_id: str(r.answer)
+        for r in saved_records
+        if r.answer is not None and str(r.answer).strip()
+    }
+    marked_for_review = [
+        r.question_id for r in saved_records if getattr(r, "is_marked_for_review", False)
+    ]
+
+    remaining_sec = max(0, int((expires_utc - now_utc()).total_seconds())) if expires_utc else int(duration_minutes * 60)
+
+    # Only public question fields are returned. Never expose scoring_key.
+    return AssessmentResumeResponse(
+        session_id=assessment_session.id,
+        status=assessment_session.status,
+        question_count=assessment_session.question_count,
+        duration_minutes=duration_minutes,
+        remaining_seconds=remaining_sec,
+        started_at=started_utc,
+        expires_at=expires_utc,
+        template_name=template.name if template else "Assessment",
+        assessment_type=template.assessment_type if template else "psychometric",
+        saved_answers=saved_answers,
+        marked_for_review=marked_for_review,
+        questions=[
+            AssessmentQuestionResponse(
+                id=question.id,
+                category=question.category,
+                difficulty=getattr(question, "difficulty", "Medium") or "Medium",
+                question_type=question.question_type,
+                question_text=question.question_text,
+                options=question.options,
+                display_order=question.display_order,
+            )
+            for question in questions
+        ],
+    )
+
+
+# --------------------------------------------------
+# Learner: Save answer or toggle mark for review progressively
+# --------------------------------------------------
+
+@router.post(
+    "/sessions/{session_id}/save-answer",
+    response_model=AssessmentAnswerSaveResponse,
+)
+def save_assessment_answer(
+    session_id: int,
+    payload: AssessmentAnswerSaveRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if role_of(current_user) != Role.LEARNER.value:
+        raise HTTPException(
+            status_code=403,
+            detail="Only learners can save assessment answers",
+        )
+
+    assessment_session = db.scalar(
+        select(AssessmentSession).where(
+            AssessmentSession.id == session_id,
+            AssessmentSession.learner_user_id == current_user.id,
+        )
+    )
+
+    if assessment_session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Assessment session not found",
+        )
+
+    if assessment_session.status != "in_progress":
+        raise HTTPException(
+            status_code=409,
+            detail="This assessment is no longer in progress",
+        )
+
+    template = db.get(AssessmentTemplate, assessment_session.template_id)
+    duration_minutes = get_duration_minutes_for_template(template)
+
+    started_at = to_utc(assessment_session.started_at)
+    deadline = to_utc(assessment_session.expires_at) or (started_at + timedelta(minutes=duration_minutes))
+    now = now_utc()
+
+    if now >= deadline:
+        raise HTTPException(
+            status_code=409,
+            detail="Assessment time has expired. Please submit your answers.",
+        )
+
+    question = db.scalar(
+        select(AssessmentQuestion).where(
+            AssessmentQuestion.session_id == session_id,
+            AssessmentQuestion.id == payload.question_id,
+        )
+    )
+    if question is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found in this assessment session",
+        )
+
+    record = db.scalar(
+        select(AssessmentResponse).where(
+            AssessmentResponse.session_id == session_id,
+            AssessmentResponse.question_id == payload.question_id,
+        )
+    )
+
+    if record is None:
+        record = AssessmentResponse(
+            session_id=session_id,
+            question_id=payload.question_id,
+            answer=payload.answer.strip() if payload.answer else None,
+            is_marked_for_review=payload.is_marked_for_review or False,
+        )
+        db.add(record)
+    else:
+        if payload.answer is not None:
+            record.answer = payload.answer.strip() if payload.answer else None
+        if payload.is_marked_for_review is not None:
+            record.is_marked_for_review = payload.is_marked_for_review
+
+    try:
+        db.commit()
+        db.refresh(record)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Could not save answer")
+
+    return AssessmentAnswerSaveResponse(
+        status="saved",
+        question_id=record.question_id,
+        answer=str(record.answer) if record.answer else None,
+        is_marked_for_review=record.is_marked_for_review,
+    )
+
+
 # --------------------------------------------------
 # Learner: Submit assessment
 # --------------------------------------------------
@@ -488,7 +846,6 @@ def submit_assessment(
             AssessmentSession.id == session_id,
             AssessmentSession.learner_user_id == current_user.id,
         )
-        .with_for_update()
     )
 
     if assessment_session is None:
@@ -510,7 +867,8 @@ def submit_assessment(
             detail="Assessment start time is missing",
         )
 
-    if assessment_session.question_count != 20:
+    expected_count = assessment_session.question_count
+    if expected_count <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid assessment question count",
@@ -522,33 +880,28 @@ def submit_assessment(
         .order_by(AssessmentQuestion.display_order)
     ).all()
 
-    if len(questions) != 20:
+    if len(questions) != expected_count:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Assessment must contain exactly 20 questions",
+            detail=f"Assessment must contain exactly {expected_count} questions",
         )
 
-    # Compare against the timestamp saved by the backend when the session started.
-    # MySQL commonly returns DATETIME columns as naive datetimes. In that case,
-    # use the application's local naive clock consistently for this comparison.
-    started_at = assessment_session.started_at
-    if started_at.tzinfo is not None:
-        now = datetime.now(started_at.tzinfo)
-    else:
-        now = datetime.now()
+    template = db.get(AssessmentTemplate, assessment_session.template_id)
+    duration_minutes = get_duration_minutes_for_template(template)
 
-    deadline = started_at + timedelta(minutes=ASSESSMENT_DURATION_MINUTES)
+    # Compare against the timestamp saved by the backend when the session started.
+    started_at = to_utc(assessment_session.started_at)
+    deadline = to_utc(assessment_session.expires_at) or (started_at + timedelta(minutes=duration_minutes))
+    now = now_utc()
     time_expired = now >= deadline
 
     answers = payload.answers
     answer_count = len(answers)
 
-    # Before the deadline, the learner must submit all 20 answers.
-    # At/after the deadline, any count from 0 through 20 is accepted.
-    if not time_expired and answer_count != 20:
+    if answer_count > expected_count:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="You must answer all 20 questions before the 15-minute deadline",
+            detail=f"Cannot submit more than {expected_count} answers",
         )
 
     question_ids = {question.id for question in questions}
@@ -603,6 +956,15 @@ def submit_assessment(
             for item in result["question_results"]
         }
 
+        # Clear any in-progress partial responses and existing scores
+        db.query(AssessmentResponse).filter(
+            AssessmentResponse.session_id == session_id
+        ).delete()
+        db.query(AssessmentScore).filter(
+            AssessmentScore.session_id == session_id
+        ).delete()
+        db.flush()
+
         # Save only answers actually submitted by the learner.
         response_records = []
         for item in normalized_responses:
@@ -619,7 +981,7 @@ def submit_assessment(
         if response_records:
             db.add_all(response_records)
 
-        # Always persist all five category scores, including zero-score categories.
+        # Always persist category scores, including zero-score categories.
         score_records = [
             AssessmentScore(
                 session_id=session_id,
@@ -671,7 +1033,7 @@ def submit_assessment(
 
 
 # --------------------------------------------------
-# Learner: View assessment results
+# View assessment results (Learner or Admin/Teacher)
 # --------------------------------------------------
 
 @router.get(
@@ -683,17 +1045,11 @@ def get_assessment_results(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if role_of(current_user) != Role.LEARNER.value:
-        raise HTTPException(
-            status_code=403,
-            detail="Only learners can view their assessment results",
-        )
+    role = role_of(current_user)
 
-    # Verify session ownership.
     assessment_session = db.scalar(
         select(AssessmentSession).where(
-            AssessmentSession.id == session_id,
-            AssessmentSession.learner_user_id == current_user.id,
+            AssessmentSession.id == session_id
         )
     )
 
@@ -703,11 +1059,28 @@ def get_assessment_results(
             detail="Assessment session not found",
         )
 
+    if role == Role.LEARNER.value:
+        if assessment_session.learner_user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Only learners can view their assessment results",
+            )
+    elif role not in {Role.ADMIN.value, Role.SUPERADMIN.value, Role.TEACHER.value}:
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to view assessment results",
+        )
+
     if assessment_session.status != "completed":
         raise HTTPException(
             status_code=409,
             detail="Assessment has not been completed yet",
         )
+
+    template = db.scalar(
+        select(AssessmentTemplate).where(AssessmentTemplate.id == assessment_session.template_id)
+    )
+    user_info = get_users_map([assessment_session.learner_user_id]).get(assessment_session.learner_user_id, {})
 
     # Retrieve saved scores from MySQL.
     scores = db.scalars(
@@ -716,14 +1089,31 @@ def get_assessment_results(
         .order_by(AssessmentScore.category)
     ).all()
 
-    if len(scores) != 5:
-        raise HTTPException(
-            status_code=404,
-            detail="Assessment results are not available",
+    if not scores:
+        raise HTTPException(status_code=404, detail="Assessment results are not available")
+
+    answered_count = db.scalar(
+        select(func.count(AssessmentResponse.id)).where(
+            AssessmentResponse.session_id == session_id
         )
+    ) or 0
+
+    total_score = sum(float(score.score) for score in scores)
+    max_score = sum(float(score.max_score) for score in scores)
+    overall_percentage = (
+        total_score / max_score * 100 if max_score > 0 else 0
+    )
 
     return AssessmentScoresResponse(
         session_id=session_id,
+        template_id=template.id if template else None,
+        template_name=template.name if template else "Assessment",
+        assessment_type=template.assessment_type if template else "psychometric",
+        learner_user_id=assessment_session.learner_user_id,
+        learner_name=user_info.get("full_name"),
+        learner_email=user_info.get("email"),
+        status=assessment_session.status,
+        completed_at=assessment_session.completed_at,
         categories=[
             {
                 "category": score.category,
@@ -733,12 +1123,18 @@ def get_assessment_results(
             }
             for score in scores
         ],
+        total_questions=assessment_session.question_count,
+        answered_count=answered_count,
+        unanswered_count=max(0, assessment_session.question_count - answered_count),
+        total_score=round(total_score, 2),
+        max_score=round(max_score, 2),
+        overall_percentage=round(overall_percentage, 2),
     )
 
 
 
 # --------------------------------------------------
-# Learner: Generate assessment report
+# Generate assessment report (Learner or Admin/Teacher)
 # --------------------------------------------------
 
 @router.post(
@@ -750,20 +1146,12 @@ def create_assessment_report(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if role_of(current_user) != Role.LEARNER.value:
-        raise HTTPException(
-            status_code=403,
-            detail="Only learners can generate their assessment reports",
-        )
+    role = role_of(current_user)
 
     # Lock the session during report creation.
     assessment_session = db.scalar(
         select(AssessmentSession)
-        .where(
-            AssessmentSession.id == session_id,
-            AssessmentSession.learner_user_id == current_user.id,
-        )
-        .with_for_update()
+        .where(AssessmentSession.id == session_id)
     )
 
     if assessment_session is None:
@@ -772,11 +1160,28 @@ def create_assessment_report(
             detail="Assessment session not found",
         )
 
+    if role == Role.LEARNER.value:
+        if assessment_session.learner_user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Only learners can generate their assessment reports",
+            )
+    elif role not in {Role.ADMIN.value, Role.SUPERADMIN.value, Role.TEACHER.value}:
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to generate assessment report",
+        )
+
     if assessment_session.status != "completed":
         raise HTTPException(
             status_code=409,
             detail="Complete the assessment before generating a report",
         )
+
+    template = db.scalar(
+        select(AssessmentTemplate).where(AssessmentTemplate.id == assessment_session.template_id)
+    )
+    user_info = get_users_map([assessment_session.learner_user_id]).get(assessment_session.learner_user_id, {})
 
     # Return the existing report if already generated.
     existing_report = db.scalar(
@@ -789,6 +1194,12 @@ def create_assessment_report(
         return AssessmentReportResponse(
             id=existing_report.id,
             session_id=existing_report.session_id,
+            template_id=template.id if template else None,
+            template_name=template.name if template else "Assessment Report",
+            assessment_type=template.assessment_type if template else "psychometric",
+            learner_user_id=assessment_session.learner_user_id,
+            learner_name=user_info.get("full_name"),
+            learner_email=user_info.get("email"),
             report_data=existing_report.report_data,
             report_text=existing_report.report_text,
             ai_model=existing_report.ai_model,
@@ -801,11 +1212,8 @@ def create_assessment_report(
         )
     ).all()
 
-    if len(scores) != 5:
-        raise HTTPException(
-            status_code=404,
-            detail="Five category scores are required to generate the report",
-        )
+    if not scores:
+        raise HTTPException(status_code=404, detail="Assessment scores are required to generate the report")
 
     score_data = [
         {
@@ -834,6 +1242,12 @@ def create_assessment_report(
         return AssessmentReportResponse(
             id=report.id,
             session_id=report.session_id,
+            template_id=template.id if template else None,
+            template_name=template.name if template else "Assessment Report",
+            assessment_type=template.assessment_type if template else "psychometric",
+            learner_user_id=assessment_session.learner_user_id,
+            learner_name=user_info.get("full_name"),
+            learner_email=user_info.get("email"),
             report_data=report.report_data,
             report_text=report.report_text,
             ai_model=report.ai_model,
@@ -861,6 +1275,12 @@ def create_assessment_report(
             return AssessmentReportResponse(
                 id=existing_report.id,
                 session_id=existing_report.session_id,
+                template_id=template.id if template else None,
+                template_name=template.name if template else "Assessment Report",
+                assessment_type=template.assessment_type if template else "psychometric",
+                learner_user_id=assessment_session.learner_user_id,
+                learner_name=user_info.get("full_name"),
+                learner_email=user_info.get("email"),
                 report_data=existing_report.report_data,
                 report_text=existing_report.report_text,
                 ai_model=existing_report.ai_model,
@@ -878,7 +1298,7 @@ def create_assessment_report(
 
 
 # --------------------------------------------------
-# Learner: View saved assessment report
+# View saved assessment report (Learner or Admin/Teacher)
 # --------------------------------------------------
 
 @router.get(
@@ -890,16 +1310,11 @@ def get_assessment_report(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if role_of(current_user) != Role.LEARNER.value:
-        raise HTTPException(
-            status_code=403,
-            detail="Only learners can view their assessment reports",
-        )
+    role = role_of(current_user)
 
     assessment_session = db.scalar(
         select(AssessmentSession).where(
-            AssessmentSession.id == session_id,
-            AssessmentSession.learner_user_id == current_user.id,
+            AssessmentSession.id == session_id
         )
     )
 
@@ -907,6 +1322,18 @@ def get_assessment_report(
         raise HTTPException(
             status_code=404,
             detail="Assessment session not found",
+        )
+
+    if role == Role.LEARNER.value:
+        if assessment_session.learner_user_id != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="Only learners can view their assessment reports",
+            )
+    elif role not in {Role.ADMIN.value, Role.SUPERADMIN.value, Role.TEACHER.value}:
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to view assessment reports",
         )
 
     if assessment_session.status != "completed":
@@ -927,12 +1354,336 @@ def get_assessment_report(
             detail="Assessment report has not been generated yet",
         )
 
+    template = db.scalar(
+        select(AssessmentTemplate).where(AssessmentTemplate.id == assessment_session.template_id)
+    )
+    user_info = get_users_map([assessment_session.learner_user_id]).get(assessment_session.learner_user_id, {})
+
     return AssessmentReportResponse(
         id=report.id,
         session_id=report.session_id,
+        template_id=template.id if template else None,
+        template_name=template.name if template else "Assessment Report",
+        assessment_type=template.assessment_type if template else "psychometric",
+        learner_user_id=assessment_session.learner_user_id,
+        learner_name=user_info.get("full_name"),
+        learner_email=user_info.get("email"),
         report_data=report.report_data,
         report_text=report.report_text,
         ai_model=report.ai_model,
         generated_at=report.generated_at,
     )
 
+
+# --------------------------------------------------
+# Learner: View all my assessment results & report cards
+# --------------------------------------------------
+
+@router.get(
+    "/my/results",
+    response_model=list[UserAssessmentResultItem],
+)
+def get_my_assessment_results(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    sessions = (
+        db.query(AssessmentSession, AssessmentTemplate)
+        .join(AssessmentTemplate, AssessmentSession.template_id == AssessmentTemplate.id)
+        .filter(AssessmentSession.learner_user_id == current_user.id)
+        .order_by(
+            AssessmentSession.completed_at.desc(),
+            AssessmentSession.started_at.desc(),
+        )
+        .all()
+    )
+
+    if not sessions:
+        return []
+
+    session_ids = [s.id for s, _ in sessions]
+
+    # Batch query scores
+    scores = (
+        db.query(AssessmentScore)
+        .filter(AssessmentScore.session_id.in_(session_ids))
+        .all()
+    )
+    scores_by_session = defaultdict(list)
+    for score in scores:
+        scores_by_session[score.session_id].append(score)
+
+    # Batch query report existence
+    reports = (
+        db.query(AssessmentReport.session_id)
+        .filter(AssessmentReport.session_id.in_(session_ids))
+        .all()
+    )
+    sessions_with_report = {r[0] for r in reports}
+
+    result_items = []
+    for session, template in sessions:
+        session_scores = scores_by_session.get(session.id, [])
+        total_score = sum(float(s.score) for s in session_scores)
+        max_score = sum(float(s.max_score) for s in session_scores)
+        pct = round(total_score / max_score * 100, 2) if max_score > 0 else 0.0
+
+        cat_list = [
+            AssessmentCategoryScoreResponse(
+                category=s.category,
+                score=s.score,
+                max_score=s.max_score,
+                percentage=s.percentage,
+            )
+            for s in session_scores
+        ]
+
+        result_items.append(
+            UserAssessmentResultItem(
+                session_id=session.id,
+                template_id=template.id,
+                template_name=template.name,
+                assessment_type=template.assessment_type,
+                learner_user_id=current_user.id,
+                learner_name=current_user.full_name,
+                learner_email=current_user.email,
+                status=session.status,
+                question_count=session.question_count,
+                total_score=round(total_score, 2),
+                max_score=round(max_score, 2),
+                overall_percentage=round(pct, 2),
+                started_at=session.started_at,
+                completed_at=session.completed_at,
+                has_report=session.id in sessions_with_report,
+                categories=cat_list,
+            )
+        )
+    return result_items
+
+
+# --------------------------------------------------
+# Admin & Teacher: View all learners' assessment results
+# --------------------------------------------------
+
+@router.get(
+    "/admin/results",
+    response_model=AdminAssessmentResultsResponse,
+)
+def get_admin_assessment_results(
+    template_id: int | None = None,
+    status: str | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if role_of(current_user) not in {
+        Role.ADMIN.value,
+        Role.SUPERADMIN.value,
+        Role.TEACHER.value,
+    }:
+        raise HTTPException(
+            status_code=403,
+            detail="Only Admin, Superadmin, and Teacher can view learner assessment results",
+        )
+
+    query = (
+        db.query(AssessmentSession, AssessmentTemplate)
+        .join(AssessmentTemplate, AssessmentSession.template_id == AssessmentTemplate.id)
+    )
+
+    if template_id is not None:
+        query = query.filter(AssessmentSession.template_id == template_id)
+    if status is not None and status != "all":
+        query = query.filter(AssessmentSession.status == status)
+
+    sessions = query.order_by(
+        AssessmentSession.completed_at.desc(),
+        AssessmentSession.started_at.desc(),
+    ).all()
+
+    if not sessions:
+        return AdminAssessmentResultsResponse(
+            results=[],
+            total_assessments=0,
+            completed_count=0,
+            average_score=0.0,
+            unique_learners=0,
+        )
+
+    session_ids = [s.id for s, _ in sessions]
+    learner_ids = list({s.learner_user_id for s, _ in sessions})
+
+    users_map = get_users_map(learner_ids)
+
+    # Batch query scores
+    scores = (
+        db.query(AssessmentScore)
+        .filter(AssessmentScore.session_id.in_(session_ids))
+        .all()
+    )
+    scores_by_session = defaultdict(list)
+    for score in scores:
+        scores_by_session[score.session_id].append(score)
+
+    # Batch query reports
+    reports = (
+        db.query(AssessmentReport.session_id)
+        .filter(AssessmentReport.session_id.in_(session_ids))
+        .all()
+    )
+    sessions_with_report = {r[0] for r in reports}
+
+    result_items = []
+    completed_scores = []
+    for session, template in sessions:
+        user_info = users_map.get(session.learner_user_id, {})
+        learner_name = user_info.get("full_name") or f"Learner #{session.learner_user_id}"
+        learner_email = user_info.get("email") or ""
+
+        if search:
+            s_lower = search.strip().lower()
+            if (
+                s_lower not in learner_name.lower()
+                and s_lower not in learner_email.lower()
+                and s_lower not in template.name.lower()
+            ):
+                continue
+
+        session_scores = scores_by_session.get(session.id, [])
+        total_score = sum(float(s.score) for s in session_scores)
+        max_score = sum(float(s.max_score) for s in session_scores)
+        pct = round(total_score / max_score * 100, 2) if max_score > 0 else 0.0
+
+        if session.status == "completed" and max_score > 0:
+            completed_scores.append(pct)
+
+        cat_list = [
+            AssessmentCategoryScoreResponse(
+                category=s.category,
+                score=s.score,
+                max_score=s.max_score,
+                percentage=s.percentage,
+            )
+            for s in session_scores
+        ]
+
+        result_items.append(
+            UserAssessmentResultItem(
+                session_id=session.id,
+                template_id=template.id,
+                template_name=template.name,
+                assessment_type=template.assessment_type,
+                learner_user_id=session.learner_user_id,
+                learner_name=learner_name,
+                learner_email=learner_email,
+                status=session.status,
+                question_count=session.question_count,
+                total_score=round(total_score, 2),
+                max_score=round(max_score, 2),
+                overall_percentage=round(pct, 2),
+                started_at=session.started_at,
+                completed_at=session.completed_at,
+                has_report=session.id in sessions_with_report,
+                categories=cat_list,
+            )
+        )
+
+    completed_count = sum(1 for r in result_items if r.status == "completed")
+    avg_score = round(sum(completed_scores) / len(completed_scores), 2) if completed_scores else 0.0
+    unique_learners = len({r.learner_user_id for r in result_items})
+
+    return AdminAssessmentResultsResponse(
+        results=result_items,
+        total_assessments=len(result_items),
+        completed_count=completed_count,
+        average_score=avg_score,
+        unique_learners=unique_learners,
+    )
+
+
+
+# --------------------------------------------------
+# Admin / Teacher: Manage reusable question bank
+# --------------------------------------------------
+
+@router.get(
+    "/templates/{template_id}/questions",
+    response_model=list[AssessmentBankQuestionResponse],
+)
+def list_bank_questions(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+    return db.scalars(
+        select(AssessmentQuestionBank)
+        .where(
+            AssessmentQuestionBank.template_id == template_id,
+            AssessmentQuestionBank.is_active.is_(True),
+        )
+        .order_by(AssessmentQuestionBank.id)
+    ).all()
+
+
+@router.post(
+    "/templates/{template_id}/questions",
+    response_model=AssessmentBankQuestionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_bank_question(
+    template_id: int,
+    payload: AssessmentBankQuestionCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+    option_ids = [option.id for option in payload.options]
+    if len(option_ids) != len(set(option_ids)):
+        raise HTTPException(status_code=422, detail="Option IDs must be unique")
+    if payload.correct_option_id not in option_ids:
+        raise HTTPException(status_code=422, detail="Correct option must match one of the options")
+    question = AssessmentQuestionBank(
+        template_id=template_id,
+        category=payload.category.strip(),
+        question_type=payload.question_type,
+        question_text=payload.question_text.strip(),
+        options=[option.model_dump() for option in payload.options],
+        scoring_key={option_id: (payload.max_score if option_id == payload.correct_option_id else 0) for option_id in option_ids},
+        max_score=payload.max_score,
+        created_by_user_id=current_user.id,
+    )
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    return question
+
+
+@router.delete(
+    "/templates/{template_id}/questions/{question_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_bank_question(
+    template_id: int,
+    question_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    question = db.scalar(
+        select(AssessmentQuestionBank).where(
+            AssessmentQuestionBank.id == question_id,
+            AssessmentQuestionBank.template_id == template_id,
+        )
+    )
+    if question is None:
+        raise HTTPException(status_code=404, detail="Question not found")
+    question.is_active = False
+    db.commit()
+    return None

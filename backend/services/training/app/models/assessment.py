@@ -24,6 +24,7 @@ class AssessmentTemplate(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    assessment_type: Mapped[str] = mapped_column(String(40), default="psychometric", nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     question_count: Mapped[int] = mapped_column(
@@ -92,6 +93,10 @@ class AssessmentSession(Base):
         nullable=False,
     )
 
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -136,6 +141,10 @@ class AssessmentQuestion(Base):
 
     category: Mapped[str] = mapped_column(
         String(100), nullable=False, index=True
+    )
+
+    difficulty: Mapped[str] = mapped_column(
+        String(20), default="Medium", nullable=False
     )
 
     question_type: Mapped[str] = mapped_column(
@@ -208,6 +217,10 @@ class AssessmentResponse(Base):
     # Supports selected options, text answers or structured responses.
     answer: Mapped[dict | list | str | None] = mapped_column(
         JSON, nullable=True
+    )
+
+    is_marked_for_review: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
     )
 
     # Calculated by the backend, never accepted from the student.
@@ -311,4 +324,31 @@ class AssessmentReport(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+    )
+
+
+class AssessmentQuestionBank(Base):
+    """Reusable, manager-authored questions. Scoring keys remain server-side."""
+    __tablename__ = "assessment_question_bank"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(
+        ForeignKey("assessment_templates.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    difficulty: Mapped[str] = mapped_column(String(20), default="Medium", nullable=False)
+    question_type: Mapped[str] = mapped_column(String(50), default="multiple_choice", nullable=False)
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    options: Mapped[list] = mapped_column(JSON, nullable=False)
+    scoring_key: Mapped[dict] = mapped_column(JSON, nullable=False)
+    max_score: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("max_score > 0", name="ck_assessment_bank_max_score"),
     )

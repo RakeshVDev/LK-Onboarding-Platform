@@ -1,0 +1,293 @@
+<div class="profile-container">
+
+  @if (loading()) {
+  <div class="profile-state">
+    <div class="spinner"></div>
+    <p>Loading your profile...</p>
+  </div>
+  } @else if (user()) {
+
+  <!-- Profile Header Hero -->
+  <header class="profile-hero">
+    <div class="hero-left">
+      <div class="profile-avatar-large">
+        <span>{{ userInitial }}</span>
+        <span class="online-indicator" title="Online & Verified"></span>
+      </div>
+
+      <div class="hero-details">
+        <div class="hero-name-row">
+          <h1>{{ user()?.full_name }}</h1>
+          <span class="role-pill" [attr.data-role]="user()?.role">
+            {{ roleDisplayName }}
+          </span>
+          <span class="status-pill active-status">
+            ● Active
+          </span>
+        </div>
+
+        <p class="hero-email">{{ user()?.email }}</p>
+
+        <div class="hero-meta-cluster">
+          <div class="meta-item">
+            <span class="meta-icon">🆔</span>
+            <span>User ID: <strong>#ASE-{{ user()?.id }}</strong></span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-icon">📅</span>
+            <span>Member Since: <strong>{{ formattedJoinDate }}</strong></span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-icon">🛡️</span>
+            <span>Auth: <strong>Enterprise SSO / Token</strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-right">
+      <a routerLink="/dashboard" class="btn-back-dashboard">
+        <span>← Back to Dashboard</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Modern Navigation Tabs -->
+  <nav class="profile-tabs" aria-label="Profile Sections">
+    <button type="button" class="tab-btn" [class.active]="activeTab() === 'general'" (click)="setTab('general')">
+      <span class="tab-icon">👤</span>
+      <span>Personal Information</span>
+    </button>
+
+    <button type="button" class="tab-btn" [class.active]="activeTab() === 'security'" (click)="setTab('security')">
+      <span class="tab-icon">🔒</span>
+      <span>Security &amp; Password</span>
+    </button>
+
+    <button type="button" class="tab-btn" [class.active]="activeTab() === 'permissions'" (click)="setTab('permissions')">
+      <span class="tab-icon">🛡️</span>
+      <span>Role &amp; Permissions</span>
+    </button>
+  </nav>
+
+  <!-- Tab 1: General Personal Information -->
+  @if (activeTab() === 'general') {
+  <section class="tab-content-card">
+    <div class="card-header">
+      <div>
+        <h2>Personal Details</h2>
+        <p>Review and update your public display name and account identification.</p>
+      </div>
+    </div>
+
+    @if (profileSuccess) {
+    <div class="alert-box alert-success">
+      <span>✓</span> {{ profileSuccess }}
+    </div>
+    }
+    @if (profileError) {
+    <div class="alert-box alert-error">
+      <span>⚠</span> {{ profileError }}
+    </div>
+    }
+
+    <form (ngSubmit)="saveProfile()" class="profile-form">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="fullName">Full Name</label>
+          <input
+            id="fullName"
+            type="text"
+            [(ngModel)]="editName"
+            name="editName"
+            placeholder="Enter your full name"
+            required />
+          <span class="input-hint">This name appears on your assessment reports and workspace header.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="emailAddress">Email Address</label>
+          <input
+            id="emailAddress"
+            type="email"
+            [value]="user()?.email"
+            disabled
+            class="disabled-input" />
+          <span class="input-hint">Your corporate email is managed by your organization administrator.</span>
+        </div>
+
+        <div class="form-group">
+          <label>Platform Role</label>
+          <div class="readonly-badge-input">
+            <span class="role-pill" [attr.data-role]="user()?.role">{{ roleDisplayName }}</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Account Status</label>
+          <div class="readonly-badge-input">
+            <span class="status-pill active-status">● Verified &amp; Active</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary" [disabled]="isSavingProfile">
+          <span>{{ isSavingProfile ? 'Saving Changes...' : 'Save Profile Changes' }}</span>
+        </button>
+      </div>
+    </form>
+  </section>
+  }
+
+  <!-- Tab 2: Security & Password -->
+  @if (activeTab() === 'security') {
+  <section class="tab-content-card">
+    <div class="card-header">
+      <div>
+        <h2>Security Settings</h2>
+        <p>Ensure your account remains protected with a strong, distinct password.</p>
+      </div>
+    </div>
+
+    @if (passwordSuccess) {
+    <div class="alert-box alert-success">
+      <span>✓</span> {{ passwordSuccess }}
+    </div>
+    }
+    @if (passwordError) {
+    <div class="alert-box alert-error">
+      <span>⚠</span> {{ passwordError }}
+    </div>
+    }
+
+    <form (ngSubmit)="changePassword()" class="profile-form">
+      <div class="security-form-fields">
+        <div class="form-group">
+          <label for="currPassword">Current Password</label>
+          <input
+            id="currPassword"
+            type="password"
+            [(ngModel)]="currentPassword"
+            name="currentPassword"
+            placeholder="Enter your existing password"
+            autocomplete="current-password"
+            required />
+        </div>
+
+        <div class="form-group">
+          <label for="newPassword">New Password</label>
+          <input
+            id="newPassword"
+            type="password"
+            [(ngModel)]="newPassword"
+            name="newPassword"
+            placeholder="Minimum 8 characters"
+            autocomplete="new-password"
+            required />
+          <span class="input-hint">Must contain at least 8 characters.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="confirmPassword">Confirm New Password</label>
+          <input
+            id="confirmPassword"
+            type="password"
+            [(ngModel)]="confirmPassword"
+            name="confirmPassword"
+            placeholder="Re-enter your new password"
+            autocomplete="new-password"
+            required />
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary" [disabled]="isChangingPassword">
+          <span>{{ isChangingPassword ? 'Updating Password...' : 'Change Password' }}</span>
+        </button>
+      </div>
+    </form>
+  </section>
+  }
+
+  <!-- Tab 3: Role & Permissions -->
+  @if (activeTab() === 'permissions') {
+  <section class="tab-content-card">
+    <div class="card-header">
+      <div>
+        <h2>Role Capabilities &amp; Access Controls</h2>
+        <p>Summary of modules and administrative permissions granted to your role.</p>
+      </div>
+    </div>
+
+    <div class="permissions-grid">
+      @if (user()?.role === 'superadmin') {
+      <div class="perm-card highlight-perm">
+        <div class="perm-icon">👑</div>
+        <h3>Super Administrator Capabilities</h3>
+        <p>Unrestricted full-stack control across identity, user provisioning, departments, assessments, and system audits.</p>
+        <ul class="perm-list">
+          <li>✓ Create &amp; deactivate Admin, Teacher, and Learner accounts</li>
+          <li>✓ Global assessment template configuration &amp; question bank control</li>
+          <li>✓ Organization-wide departmental management</li>
+          <li>✓ Access to all learner report cards &amp; AI psychometric summaries</li>
+        </ul>
+      </div>
+      }
+
+      @if (user()?.role === 'admin') {
+      <div class="perm-card highlight-perm">
+        <div class="perm-icon">🏢</div>
+        <h3>Administrator Capabilities</h3>
+        <p>Coordinates training cohorts, user onboarding, departmental allocations, and examination governance.</p>
+        <ul class="perm-list">
+          <li>✓ Manage teacher and learner accounts</li>
+          <li>✓ Author and maintain assessment question banks</li>
+          <li>✓ Review global examination analytics &amp; scorecards</li>
+          <li>✓ Coordinate training courses and batch enrolments</li>
+        </ul>
+      </div>
+      }
+
+      @if (user()?.role === 'teacher') {
+      <div class="perm-card highlight-perm">
+        <div class="perm-icon">🎓</div>
+        <h3>Instructor / Faculty Capabilities</h3>
+        <p>Oversees cohort learning progression, evaluates submissions, and contributes to domain question banks.</p>
+        <ul class="perm-list">
+          <li>✓ Manage assigned cohort batches and student attendance</li>
+          <li>✓ Review learner assessment submissions and score reports</li>
+          <li>✓ Author technical knowledge and grammar test questions</li>
+          <li>✓ Share syllabus documents and training modules</li>
+        </ul>
+      </div>
+      }
+
+      @if (user()?.role === 'learner') {
+      <div class="perm-card highlight-perm">
+        <div class="perm-icon">⚡</div>
+        <h3>Learner / New Joinee Capabilities</h3>
+        <p>Active participant in the corporate onboarding and skill development pathway.</p>
+        <ul class="perm-list">
+          <li>✓ Complete mandatory onboarding assessments (Logical Reasoning, Technical, Grammar, Psychometric)</li>
+          <li>✓ Access personal assessment performance report cards &amp; AI insights</li>
+          <li>✓ Enroll in training courses and track batch milestones</li>
+          <li>✓ Maintain personal profile and security credentials</li>
+        </ul>
+      </div>
+      }
+
+      <div class="perm-card info-card">
+        <div class="perm-icon">🔒</div>
+        <h3>Role-Based Access Governance</h3>
+        <p>All sensitive operations, scores, and exam submissions are signed and verified server-side via JWT tokens.</p>
+        <div class="sec-badge">
+          <span>Enterprise Encrypted</span>
+        </div>
+      </div>
+    </div>
+  </section>
+  }
+
+  }
+</div>

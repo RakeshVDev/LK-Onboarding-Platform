@@ -1,12 +1,11 @@
-
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import {
   Router,
   RouterLink,
   RouterLinkActive,
   RouterOutlet
 } from '@angular/router';
-import { AuthService } from '../../core/services/auth.service';
+import { AuthService, CurrentUser } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-main-layout',
@@ -15,17 +14,21 @@ import { AuthService } from '../../core/services/auth.service';
   templateUrl: './main-layout.html',
   styleUrl: './main-layout.scss'
 })
-export class MainLayout {
+export class MainLayout implements OnInit {
   sidebarOpen = false;
+  user: CurrentUser | null = null;
 
   constructor(
     public readonly authService: AuthService,
     private readonly router: Router
   ) {}
 
+  ngOnInit(): void {
+    this.user = this.authService.getCurrentUserSnapshot();
+  }
+
   logout(): void {
     this.authService.logout();
-    this.sidebarOpen = false;
     void this.router.navigateByUrl('/login');
   }
 }

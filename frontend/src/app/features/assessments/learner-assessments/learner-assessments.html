@@ -1,95 +1,241 @@
-
 <div class="learner-page">
 
   <header class="page-header">
+    <div class="header-left">
+      <span class="eyebrow">ASE SKILLS &amp; EVALUATION</span>
+      <h1>Available Assessments</h1>
+      <p>
+        Complete your assigned assessments to evaluate your logical reasoning, technical,
+        psychometric, and grammar capabilities.
+      </p>
+    </div>
 
-    <span class="eyebrow">LEARNING AND DEVELOPMENT</span>
-
-    <h1>My Assessments</h1>
-
-    <p>
-      Complete your assigned psychometric assessments
-      and review your development profile.
-    </p>
-
+    <a class="btn-results-link" routerLink="/my-results">
+      <span class="btn-icon">▥</span>
+      <span>View My Results &amp; Report Cards →</span>
+    </a>
   </header>
 
   @if (errorMessage) {
-    <div class="error-message">
+    <div class="error-banner">
       {{ errorMessage }}
     </div>
   }
 
   @if (loading) {
-
-    <div class="state-card">
-      Loading available assessments...
+    <div class="state-card loading-state">
+      <span class="spinner"></span>
+      <strong>Loading available assessments...</strong>
+      <p>Retrieving your assessment configurations.</p>
     </div>
-
   }
 
-  @if (
-    !loading &&
-    templates.length === 0 &&
-    !errorMessage
-  ) {
-
-    <div class="state-card">
+  @if (!loading && templates.length === 0 && !errorMessage) {
+    <div class="state-card empty-state">
+      <div class="empty-icon">▤</div>
       <h3>No assessments available</h3>
-      <p>There are currently no active assessments.</p>
+      <p>There are currently no active assessments assigned to your profile.</p>
     </div>
-
   }
 
-  <div class="assessment-grid">
+  @if (!loading && templates.length > 0) {
+    <div class="assessment-grid">
+      @for (template of templates; track template.id) {
+        <article class="assessment-card" [attr.data-type]="template.assessment_type">
+          <!-- Top Colored Accent -->
+          <div class="card-accent" [attr.data-type]="template.assessment_type"></div>
 
-    @for (template of templates; track template.id) {
+          <div class="card-header">
+            <div class="card-icon" [attr.data-type]="template.assessment_type">
+              @if (template.assessment_type === 'logical_reasoning') {
+                <span>⚡</span>
+              } @else if (template.assessment_type === 'technical') {
+                <span>💻</span>
+              } @else if (template.assessment_type === 'english_grammar') {
+                <span>✍</span>
+              } @else {
+                <span>✦</span>
+              }
+            </div>
 
-      <article class="assessment-card">
+            <div class="badge-cluster">
+              <span class="type-badge" [attr.data-type]="template.assessment_type">
+                {{ template.assessment_type.replace('_', ' ') | titlecase }}
+              </span>
+              <span class="available-badge">
+                <span class="pulse-dot"></span> Available
+              </span>
+            </div>
+          </div>
 
-        <div class="card-icon">✦</div>
+          <h2>{{ template.name }}</h2>
 
-        <span class="available-badge">
-          Available
-        </span>
+          <p class="description">
+            {{
+              template.description ||
+              'Complete this assessment to evaluate your proficiency and receive an official developmental report card.'
+            }}
+          </p>
 
-        <h2>{{ template.name }}</h2>
+          <div class="assessment-details">
+            <div class="detail-item">
+              <span class="detail-icon">☷</span>
+              <span><strong>{{ template.question_count }}</strong> Questions</span>
+            </div>
 
-        <p class="description">
-          {{
-            template.description ||
-            'Complete this assessment to understand your development profile.'
-          }}
-        </p>
+            <div class="detail-item">
+              <span class="detail-icon">◷</span>
+              <span><strong>{{ getDurationMinutes(template) }}</strong> Minutes limit</span>
+            </div>
 
-        <div class="assessment-details">
+            <div class="detail-item">
+              <span class="detail-icon">◎</span>
+              <span><strong>{{ template.question_count }}</strong> Total Marks</span>
+            </div>
+          </div>
 
-          <span>☷ {{ template.question_count }} Questions</span>
+          <button
+            type="button"
+            class="start-button"
+            [disabled]="startingId === template.id"
+            (click)="openInstructions(template)">
+            <span>{{ startingId === template.id ? 'Starting Assessment...' : 'Start Assessment' }}</span>
+            <span class="arrow-icon">→</span>
+          </button>
+        </article>
+      }
+    </div>
+  }
 
-          <span>◷ Approximately 15–20 minutes</span>
+  <!-- Assessment Instructions Modal -->
+  @if (selectedInstructionTemplate) {
+    <div class="modal-backdrop" (click)="closeInstructions()">
+      <div class="instruction-modal" (click)="$event.stopPropagation()">
+        
+        <div class="modal-header">
+          <div>
+            <span class="modal-eyebrow">EXAMINATION INSTRUCTIONS</span>
+            <h2>{{ selectedInstructionTemplate.name }}</h2>
+          </div>
+          <button class="btn-close" type="button" (click)="closeInstructions()" aria-label="Close instructions">×</button>
+        </div>
 
-          <span>◎ 5 Assessment Categories</span>
+        <div class="modal-body">
+          
+          <div class="meta-strip">
+            <div class="meta-card">
+              <span class="meta-label">Duration</span>
+              <strong>{{ getDurationMinutes(selectedInstructionTemplate) }} Minutes</strong>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Total Questions</span>
+              <strong>{{ selectedInstructionTemplate.question_count }}</strong>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Maximum Marks</span>
+              <strong>{{ selectedInstructionTemplate.question_count }} Marks</strong>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Question Type</span>
+              <strong>Multiple Choice (MCQ)</strong>
+            </div>
+            <div class="meta-card">
+              <span class="meta-label">Negative Marking</span>
+              <strong class="text-green">No (0 Marks)</strong>
+            </div>
+          </div>
+
+          <div class="rules-section">
+            <h3>Assessment Rules &amp; Guidelines</h3>
+            <ul class="rules-list">
+              <li>
+                <span class="rule-bullet">1</span>
+                <div>
+                  <strong>Immediate Timer Start:</strong>
+                  The assessment timer begins immediately upon clicking <em>Confirm &amp; Start Assessment</em>.
+                </div>
+              </li>
+              <li>
+                <span class="rule-bullet">2</span>
+                <div>
+                  <strong>Exam Duration:</strong>
+                  You have a total of {{ getDurationMinutes(selectedInstructionTemplate) }} minutes to complete and submit all {{ selectedInstructionTemplate.question_count }} questions.
+                </div>
+              </li>
+              <li>
+                <span class="rule-bullet">3</span>
+                <div>
+                  <strong>Question Navigation:</strong>
+                  You can freely navigate between questions using the question palette or the Previous and Next buttons.
+                </div>
+              </li>
+              <li>
+                <span class="rule-bullet">4</span>
+                <div>
+                  <strong>Answer Modification:</strong>
+                  You may alter, clear, or update your selected answers at any point prior to final submission.
+                </div>
+              </li>
+              <li>
+                <span class="rule-bullet">5</span>
+                <div>
+                  <strong>Mark for Review:</strong>
+                  Questions can be marked for review to revisit them before concluding the test.
+                </div>
+              </li>
+              <li>
+                <span class="rule-bullet">6</span>
+                <div>
+                  <strong>Automatic Submission:</strong>
+                  The assessment will automatically submit your saved answers when the timer reaches 00:00.
+                </div>
+              </li>
+              <li>
+                <span class="rule-bullet">7</span>
+                <div>
+                  <strong>Finality of Submission:</strong>
+                  Once submitted, answers cannot be edited or retaken unless explicitly authorized.
+                </div>
+              </li>
+            </ul>
+          </div>
 
         </div>
 
-        <button
-          type="button"
-          class="start-button"
-          [disabled]="startingId === template.id"
-          (click)="startAssessment(template)">
+        <div class="modal-footer">
+          <button class="btn-secondary" type="button" (click)="closeInstructions()">
+            Back to Assessments
+          </button>
+          <button class="btn-primary btn-large" type="button" [disabled]="startingId === selectedInstructionTemplate.id" (click)="requestStart()">
+            {{ startingId === selectedInstructionTemplate.id ? 'Launching...' : 'Start Assessment' }} →
+          </button>
+        </div>
 
-          {{
-            startingId === template.id
-              ? 'Starting...'
-              : 'Start Assessment →'
-          }}
+      </div>
+    </div>
+  }
 
-        </button>
-
-      </article>
-
-    }
-
-  </div>
+  <!-- Confirmation Dialog Before Starting -->
+  @if (showConfirmStartDialog && selectedInstructionTemplate) {
+    <div class="modal-backdrop confirm-backdrop" (click)="cancelStart()">
+      <div class="confirm-dialog" (click)="$event.stopPropagation()">
+        <div class="confirm-icon">⏱</div>
+        <h3>Ready to Begin Examination?</h3>
+        <p>
+          You are about to start the <strong>{{ selectedInstructionTemplate.name }}</strong>.
+          The <strong>{{ getDurationMinutes(selectedInstructionTemplate) }}-minute countdown timer</strong>
+          will start immediately on your screen. Ensure you have an uninterrupted environment.
+        </p>
+        <div class="confirm-actions">
+          <button class="btn-secondary" type="button" (click)="cancelStart()">
+            Cancel
+          </button>
+          <button class="btn-primary" type="button" [disabled]="startingId === selectedInstructionTemplate.id" (click)="confirmAndStart()">
+            {{ startingId === selectedInstructionTemplate.id ? 'Starting...' : 'Confirm & Start Exam' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
 
 </div>
