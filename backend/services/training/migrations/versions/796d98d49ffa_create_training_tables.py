@@ -26,7 +26,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=150), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
@@ -48,7 +48,7 @@ def upgrade() -> None:
     sa.Column('title', sa.String(length=200), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('is_published', sa.Boolean(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['department_id'], ['departments.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -57,7 +57,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('cohort_id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('joined_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('joined_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('status', sa.String(length=30), nullable=False),
     sa.ForeignKeyConstraint(['cohort_id'], ['cohorts.id'], ),
     sa.PrimaryKeyConstraint('id'),
@@ -69,7 +69,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('course_id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('enrolled_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('enrolled_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('status', sa.String(length=30), nullable=False),
     sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ),
     sa.PrimaryKeyConstraint('id'),
@@ -84,7 +84,7 @@ def upgrade() -> None:
     sa.Column('material_type', sa.String(length=50), nullable=False),
     sa.Column('storage_key', sa.String(length=500), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -118,7 +118,7 @@ def upgrade() -> None:
     sa.Column('session_id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=False),
-    sa.Column('recorded_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('recorded_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('recorded_by_user_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['session_id'], ['timetable_sessions.id'], ),
     sa.PrimaryKeyConstraint('id'),
