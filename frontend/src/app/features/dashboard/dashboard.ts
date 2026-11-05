@@ -11,6 +11,7 @@ import {
   UserAssessmentResultItem
 } from '../assessments/services/assessment';
 import { UserManagementService, ManagedUser } from '../../core/services/user-management.service';
+import { LearningService } from '../../core/services/learning.service';
 
 interface QuickAction {
   title: string;
@@ -32,6 +33,7 @@ export class Dashboard implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly assessmentService = inject(AssessmentService);
   private readonly userService = inject(UserManagementService);
+  private readonly learningService = inject(LearningService);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
 
@@ -43,7 +45,20 @@ export class Dashboard implements OnInit {
   readonly templates = signal<AssessmentTemplate[]>([]);
   readonly learnerResults = signal<UserAssessmentResultItem[]>([]);
 
-  // Admin & Teacher data
+  // Filtered completed results
+  readonly completedLearnerResults = computed(() => {
+    return this.learnerResults().filter(r => r.status === 'completed');
+  });
+
+  // Accurate true performance average across all completed assessments
+  readonly learnerAverageScore = computed(() => {
+    const completed = this.completedLearnerResults();
+    if (completed.length === 0) return 0;
+    const sum = completed.reduce((acc, curr) => acc + (curr.overall_percentage || 0), 0);
+    return Math.round(sum / completed.length);
+  });
+
+  // Admin & Teacher telemetry data
   readonly adminResultsStats = signal<{
     totalAssessments: number;
     completedCount: number;
@@ -69,9 +84,10 @@ export class Dashboard implements OnInit {
     admins: 0
   });
 
-  readonly coursesCount = signal<number>(4);
-  readonly cohortsCount = signal<number>(2);
-  readonly departmentsCount = signal<number>(3);
+  // Dynamic learning entities counts from backend
+  readonly coursesCount = signal<number>(0);
+  readonly cohortsCount = signal<number>(0);
+  readonly departmentsCount = signal<number>(0);
 
   // Time-based greeting
   readonly greeting = computed(() => {
@@ -93,10 +109,13 @@ export class Dashboard implements OnInit {
   // Onboarding progress calculation for learners
   readonly onboardingProgress = computed(() => {
     let score = 25; // 25% for verified account creation
-    const results = this.learnerResults();
-    if (results.length > 0) score += 25; // At least one assessment
-    if (results.length >= 4) score += 25; // All 4 assessments
-    score += 25; // Course track assignment
+    const completed = this.completedLearnerResults();
+    // 50% for completed assessments (up to 4 assessments, each 12.5%)
+    score += Math.min(50, Math.round((completed.length / 4) * 50));
+    // 25% for course curriculum assignment
+    if (this.coursesCount() > 0) {
+      score += 25;
+    }
     return Math.min(100, score);
   });
 
@@ -126,6 +145,10 @@ export class Dashboard implements OnInit {
   }
 
   private async loadRoleSpecificData(role: UserRole): Promise<void> {
+    // 1. Fetch real learning entity counts dynamically
+    await this.loadLearningCounts();
+
+    // 2. Role-specific calls
     if (role === 'learner') {
       await Promise.allSettled([
         this.loadTemplates(),
@@ -142,6 +165,28 @@ export class Dashboard implements OnInit {
         this.loadAdminResults(),
         this.loadUserStats()
       ]);
+    }
+  }
+
+  private async loadLearningCounts(): Promise<void> {
+    try {
+      const [coursesRes, cohortsRes, deptsRes] = await Promise.allSettled([
+        this.learningService.getCourses(),
+        this.learningService.getCohorts(),
+        this.learningService.getDepartments()
+      ]);
+
+      if (coursesRes.status === 'fulfilled' && Array.isArray(coursesRes.value)) {
+        this.coursesCount.set(coursesRes.value.length);
+      }
+      if (cohortsRes.status === 'fulfilled' && Array.isArray(cohortsRes.value)) {
+        this.cohortsCount.set(cohortsRes.value.length);
+      }
+      if (deptsRes.status === 'fulfilled' && Array.isArray(deptsRes.value)) {
+        this.departmentsCount.set(deptsRes.value.length);
+      }
+    } catch (err) {
+      console.warn('Could not load learning counts:', err);
     }
   }
 
@@ -200,7 +245,19 @@ export class Dashboard implements OnInit {
 
   // Learner test status helper
   getCompletedTest(type: string): UserAssessmentResultItem | undefined {
-    return this.learnerResults().find(r => r.assessment_type === type && r.status === 'completed');
+    const cleanType = type.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return this.learnerResults().find(r => {
+      if (r.status !== 'completed') return false;
+      const rType = (r.assessment_type || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const rName = (r.template_name || '').toLowerCase();
+      if (rType === cleanType) return true;
+      if (type === 'logical_reasoning' && (rName.includes('logical') || rType.includes('logical'))) return true;
+      if (type === 'english_grammar' && (rName.includes('english') || rName.includes('grammar') || rType.includes('grammar') || rType.includes('english'))) return true;
+      if (type === 'technical' && (rName.includes('technical') || rType.includes('technical'))) return true;
+      if (type === 'programming' && (rName.includes('programming') || rType.includes('programming'))) return true;
+      if (type === 'psychometric' && (rName.includes('psychometric') || rType.includes('psychometric') || rName.includes('assessment-2') || rName.includes('assessment 2'))) return true;
+      return false;
+    });
   }
 
   getRoleLabel(role?: string): string {

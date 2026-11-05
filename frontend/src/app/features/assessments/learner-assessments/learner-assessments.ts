@@ -1,4 +1,3 @@
-
 import {
   Component,
   OnInit,
@@ -7,11 +6,13 @@ import {
 } from '@angular/core';
 
 import { CommonModule } from '@angular/common';
-import { Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { forkJoin } from 'rxjs';
 
 import {
   AssessmentService,
-  AssessmentTemplate
+  AssessmentTemplate,
+  UserAssessmentResultItem
 } from '../services/assessment';
 
 @Component({
@@ -24,10 +25,12 @@ import {
 export class LearnerAssessments implements OnInit {
 
   private readonly api = inject(AssessmentService);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
   templates: AssessmentTemplate[] = [];
+  myResults: UserAssessmentResultItem[] = [];
 
   loading = true;
   startingId: number | null = null;
@@ -41,7 +44,22 @@ export class LearnerAssessments implements OnInit {
     this.loadAssessments();
   }
 
+  getCompletedResult(template: AssessmentTemplate): UserAssessmentResultItem | undefined {
+    return this.myResults.find(
+      r => (r.template_id === template.id || r.assessment_type === template.assessment_type) && r.status === 'completed'
+    );
+  }
+
+  getInProgressResult(template: AssessmentTemplate): UserAssessmentResultItem | undefined {
+    return this.myResults.find(
+      r => (r.template_id === template.id || r.assessment_type === template.assessment_type) && r.status === 'in_progress'
+    );
+  }
+
   openInstructions(template: AssessmentTemplate): void {
+    // If already completed, don't allow opening instructions to start
+    if (this.getCompletedResult(template)) return;
+
     this.selectedInstructionTemplate = template;
     this.showConfirmStartDialog = false;
     this.cdr.detectChanges();
@@ -75,62 +93,63 @@ export class LearnerAssessments implements OnInit {
   }
 
   loadAssessments(): void {
-
     this.loading = true;
     this.errorMessage = '';
 
-    this.api.getTemplates().subscribe({
-
-      next: (data) => {
-
-        console.log('Assessment templates response:', data);
-
-        if (!Array.isArray(data)) {
+    forkJoin({
+      templates: this.api.getTemplates(),
+      results: this.api.getMyResults()
+    }).subscribe({
+      next: ({ templates, results }) => {
+        if (!Array.isArray(templates)) {
           this.templates = [];
-          this.errorMessage =
-            'Invalid assessment response received from server.';
+          this.errorMessage = 'Invalid assessment response received from server.';
         } else {
-          this.templates = data.filter(
-            item => item.is_active
-          );
+          this.templates = templates.filter(item => item.is_active);
+          this.myResults = Array.isArray(results) ? results : [];
+
+          // Check if user came with query params like ?start=logical_reasoning
+          const startType = this.route.snapshot.queryParamMap.get('start') || this.route.snapshot.queryParamMap.get('type');
+          if (startType) {
+            const matched = this.templates.find(
+              t => t.assessment_type === startType || t.name.toLowerCase().includes(startType.toLowerCase())
+            );
+            if (matched && !this.getCompletedResult(matched)) {
+              this.openInstructions(matched);
+            }
+          }
         }
 
         this.loading = false;
-
-        // Required for reliable updates in zoneless Angular.
         this.cdr.detectChanges();
-
       },
-
       error: (error) => {
-
         console.error('Assessment loading error:', error);
-
         this.errorMessage =
           error.error?.detail ||
           'Unable to load assessments. Please try again.';
-
         this.loading = false;
-
         this.cdr.detectChanges();
-
       }
-
     });
-
   }
 
   startAssessment(template: AssessmentTemplate): void {
+    // Client-side guard
+    if (this.getCompletedResult(template)) {
+      this.errorMessage = `You have already completed the ${template.name}. Only one attempt is permitted.`;
+      this.cdr.detectChanges();
+      return;
+    }
 
     this.startingId = template.id;
     this.errorMessage = '';
 
-    this.api.startAssessment(template.id).subscribe({
-
+    this.api.startAssessment(template.id, false).subscribe({
       next: (session) => {
-
         this.startingId = null;
-
+        this.selectedInstructionTemplate = null;
+        this.showConfirmStartDialog = false;
         this.cdr.detectChanges();
 
         void this.router.navigate(
@@ -148,29 +167,17 @@ export class LearnerAssessments implements OnInit {
             }
           }
         );
-
       },
-
       error: (error) => {
         console.error('Assessment start error:', error);
         this.startingId = null;
+        this.selectedInstructionTemplate = null;
+        this.showConfirmStartDialog = false;
 
         const detail = error.error?.detail || '';
-        const match = /Session ID:\s*(\d+)/i.exec(detail);
-        if (match && match[1]) {
-          void this.router.navigate(['/assessments/take', match[1]]);
-          return;
-        }
-
-        this.errorMessage =
-          detail ||
-          'Unable to start assessment. Please try again.';
-
+        this.errorMessage = detail || 'Unable to start assessment. Please try again.';
         this.cdr.detectChanges();
       }
-
     });
-
   }
-
 }
