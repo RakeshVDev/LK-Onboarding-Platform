@@ -12,9 +12,11 @@ from services.identity.app.core.security import (
 from services.identity.app.dependencies.auth import get_current_user, get_db
 from services.identity.app.models.user import User
 from services.identity.app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
     TokenResponse,
+    UserProfileUpdateRequest,
     UserResponse,
 )
 
@@ -74,3 +76,32 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.put("/profile", response_model=UserResponse)
+def update_profile(
+    payload: UserProfileUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.full_name = payload.full_name.strip()
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    current_user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"message": "Password changed successfully"}

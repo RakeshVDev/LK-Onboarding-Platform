@@ -20,6 +20,7 @@ export interface CurrentUser {
   email: string;
   role: UserRole;
   is_active: boolean;
+  created_at?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -96,6 +97,46 @@ export class AuthService {
 
   getToken(): string | null {
     return sessionStorage.getItem(this.tokenKey);
+  }
+
+  async updateProfile(fullName: string): Promise<CurrentUser> {
+    const token = this.getToken();
+    if (!token) throw new Error('Please log in to continue.');
+
+    const updated = await firstValueFrom(
+      this.http.put<CurrentUser>(
+        `${this.apiUrl}/profile`,
+        { full_name: fullName.trim() },
+        {
+          headers: new HttpHeaders({
+            Authorization: `Bearer ${token}`
+          })
+        }
+      )
+    );
+
+    this.currentUser = updated;
+    return updated;
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+    const token = this.getToken();
+    if (!token) throw new Error('Please log in to continue.');
+
+    return firstValueFrom(
+      this.http.post<{ message: string }>(
+        `${this.apiUrl}/change-password`,
+        {
+          current_password: currentPassword,
+          new_password: newPassword
+        },
+        {
+          headers: new HttpHeaders({
+            Authorization: `Bearer ${token}`
+          })
+        }
+      )
+    );
   }
 
   getErrorMessage(error: unknown): string {

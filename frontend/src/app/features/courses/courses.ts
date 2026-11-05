@@ -1,23 +1,15 @@
-
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
 
-import { AuthService } from '../../core/services/auth.service';
+import { AuthService, CurrentUser } from '../../core/services/auth.service';
 import {
   LearningService,
-  SyllabusItem
+  Course,
+  Department,
+  SyllabusItem,
+  LearningMaterial
 } from '../../core/services/learning.service';
-
-interface Course {
-  id: number;
-  department_id: number;
-  title: string;
-  description: string | null;
-  is_published: boolean;
-}
 
 @Component({
   selector: 'app-courses',
@@ -27,85 +19,149 @@ interface Course {
   styleUrl: './courses.scss'
 })
 export class Courses implements OnInit {
+  private readonly authService = inject(AuthService);
+  private readonly learningService = inject(LearningService);
+
+  readonly user = signal<CurrentUser | null>(null);
+  readonly canManage = signal(false);
+
   readonly courses = signal<Course[]>([]);
-  readonly syllabus = signal<SyllabusItem[]>([]);
+  readonly departments = signal<Department[]>([]);
   readonly selectedCourse = signal<Course | null>(null);
+
   readonly loading = signal(false);
-  readonly syllabusLoading = signal(false);
   readonly saving = signal(false);
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
 
-  readonly canManage = signal(false);
+  // Active sub-view or modal: 'syllabus' | 'materials' | 'create' | null
+  readonly activeModal = signal<'syllabus' | 'materials' | 'create' | null>(null);
 
-  title = '';
-  description = '';
-  sequenceOrder = 1;
+  // ---------- Syllabus State ----------
+  readonly syllabus = signal<SyllabusItem[]>([]);
+  readonly syllabusLoading = signal(false);
+  syllabusTitle = '';
+  syllabusDesc = '';
+  syllabusOrder = 1;
 
-  private readonly coursesUrl = '/training-api/api/v1/courses';
+  // ---------- Learning Materials State (PDF & Links) ----------
+  readonly materials = signal<LearningMaterial[]>([]);
+  readonly materialsLoading = signal(false);
+  materialTitle = '';
+  materialType: 'pdf' | 'link' | 'video' | 'doc' = 'pdf';
+  materialUrl = '';
+  selectedFile: File | null = null;
+  isUploadingFile = signal(false);
 
-  constructor(
-    private readonly http: HttpClient,
-    private readonly authService: AuthService,
-    private readonly learningService: LearningService
-  ) {}
+  // ---------- Create Course State ----------
+  newCourseTitle = '';
+  newCourseDeptId = 1;
+  newCourseDesc = '';
+  newCoursePublished = true;
 
   ngOnInit(): void {
-    const user = this.authService.getCurrentUserSnapshot();
+    const current = this.authService.getCurrentUserSnapshot();
+    this.user.set(current);
 
     this.canManage.set(
-      user?.role === 'superadmin' || user?.role === 'admin'
+      current?.role === 'superadmin' ||
+      current?.role === 'admin' ||
+      current?.role === 'teacher'
     );
 
-    void this.loadCourses();
+    void this.loadInitialData();
   }
 
-  private getHeaders(): HttpHeaders {
-    const token = this.authService.getToken();
-
-    if (!token) {
-      throw new Error('Please log in to continue.');
-    }
-
-    return new HttpHeaders({
-      Authorization: `Bearer ${token}`
-    });
-  }
-
-  async loadCourses(): Promise<void> {
+  async loadInitialData(): Promise<void> {
     this.loading.set(true);
     this.errorMessage.set('');
 
     try {
-      const response = await firstValueFrom(
-        this.http.get<Course[]>(this.coursesUrl, {
-          headers: this.getHeaders()
-        })
-      );
-
-      this.courses.set(response);
-    } catch (error) {
-      this.errorMessage.set(this.getErrorMessage(error));
+      const [courses, depts] = await Promise.all([
+        this.learningService.getCourses(),
+        this.learningService.getDepartments().catch(() => [])
+      ]);
+      this.courses.set(courses);
+      this.departments.set(depts);
+      if (depts.length > 0) {
+        this.newCourseDeptId = depts[0].id;
+      }
+    } catch (err: any) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
     } finally {
       this.loading.set(false);
     }
   }
 
+  getDepartmentName(deptId: number): string {
+    const dept = this.departments().find(d => d.id === deptId);
+    return dept ? dept.name : `Department #${deptId}`;
+  }
+
+  // ----------------------------------
+  // Create Course
+  // ----------------------------------
+
+  openCreateModal(): void {
+    this.newCourseTitle = '';
+    this.newCourseDesc = '';
+    this.newCoursePublished = true;
+    if (this.departments().length > 0) {
+      this.newCourseDeptId = this.departments()[0].id;
+    }
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    this.activeModal.set('create');
+  }
+
+  async createCourse(): Promise<void> {
+    if (!this.newCourseTitle.trim()) {
+      this.errorMessage.set('Course title is required.');
+      return;
+    }
+
+    this.saving.set(true);
+    this.errorMessage.set('');
+
+    try {
+      const created = await this.learningService.createCourse({
+        title: this.newCourseTitle.trim(),
+        department_id: Number(this.newCourseDeptId),
+        description: this.newCourseDesc.trim() || undefined,
+        is_published: this.newCoursePublished
+      });
+
+      this.courses.update(list => [created, ...list]);
+      this.successMessage.set(`Course "${created.title}" created successfully!`);
+      this.closeModal();
+    } catch (err: any) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  // ----------------------------------
+  // Course Syllabus Management
+  // ----------------------------------
+
   async openSyllabus(course: Course): Promise<void> {
     this.selectedCourse.set(course);
     this.syllabus.set([]);
-    this.title = '';
-    this.description = '';
-    this.sequenceOrder = 1;
+    this.syllabusTitle = '';
+    this.syllabusDesc = '';
+    this.syllabusOrder = 1;
     this.errorMessage.set('');
     this.successMessage.set('');
+    this.activeModal.set('syllabus');
     this.syllabusLoading.set(true);
 
     try {
       const items = await this.learningService.getSyllabus(course.id);
       this.syllabus.set(items);
-    } catch (error) {
-      this.errorMessage.set(this.getErrorMessage(error));
+      this.syllabusOrder = items.length + 1;
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
     } finally {
       this.syllabusLoading.set(false);
     }
@@ -113,9 +169,8 @@ export class Courses implements OnInit {
 
   async addSyllabusItem(): Promise<void> {
     const course = this.selectedCourse();
-
-    if (!course || !this.title.trim()) {
-      this.errorMessage.set('Please enter a syllabus title.');
+    if (!course || !this.syllabusTitle.trim()) {
+      this.errorMessage.set('Please provide a lesson title.');
       return;
     }
 
@@ -125,24 +180,21 @@ export class Courses implements OnInit {
 
     try {
       const item = await this.learningService.createSyllabus(course.id, {
-        title: this.title.trim(),
-        description: this.description.trim() || null,
-        sequence_order: Number(this.sequenceOrder)
+        title: this.syllabusTitle.trim(),
+        description: this.syllabusDesc.trim() || null,
+        sequence_order: Number(this.syllabusOrder)
       });
 
       this.syllabus.update(items =>
-        [...items, item].sort(
-          (a, b) =>
-            a.sequence_order - b.sequence_order || a.id - b.id
-        )
+        [...items, item].sort((a, b) => a.sequence_order - b.sequence_order)
       );
 
-      this.title = '';
-      this.description = '';
-      this.sequenceOrder = this.syllabus().length + 1;
-      this.successMessage.set('Syllabus item added successfully.');
-    } catch (error) {
-      this.errorMessage.set(this.getErrorMessage(error));
+      this.syllabusTitle = '';
+      this.syllabusDesc = '';
+      this.syllabusOrder = this.syllabus().length + 1;
+      this.successMessage.set('Syllabus module added.');
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
     } finally {
       this.saving.set(false);
     }
@@ -150,54 +202,153 @@ export class Courses implements OnInit {
 
   async deleteSyllabusItem(item: SyllabusItem): Promise<void> {
     const course = this.selectedCourse();
+    if (!course || !confirm(`Delete lesson "${item.title}"?`)) return;
 
-    if (!course || !confirm(`Delete "${item.title}"?`)) {
+    try {
+      await this.learningService.deleteSyllabus(course.id, item.id);
+      this.syllabus.update(items => items.filter(x => x.id !== item.id));
+      this.successMessage.set('Syllabus item removed.');
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
+    }
+  }
+
+  // ----------------------------------
+  // Learning Materials (PDF Uploads & Resource Links)
+  // ----------------------------------
+
+  async openMaterials(course: Course): Promise<void> {
+    this.selectedCourse.set(course);
+    this.materials.set([]);
+    this.materialTitle = '';
+    this.materialType = 'pdf';
+    this.materialUrl = '';
+    this.selectedFile = null;
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    this.activeModal.set('materials');
+    this.materialsLoading.set(true);
+
+    try {
+      const list = await this.learningService.getMaterials(course.id);
+      this.materials.set(list);
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
+    } finally {
+      this.materialsLoading.set(false);
+    }
+  }
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.selectedFile = input.files[0];
+      if (!this.materialTitle.trim()) {
+        this.materialTitle = this.selectedFile.name.replace(/\.[^/.]+$/, '');
+      }
+    }
+  }
+
+  async uploadPdfResource(): Promise<void> {
+    const course = this.selectedCourse();
+    if (!course) return;
+
+    if (!this.selectedFile) {
+      this.errorMessage.set('Please select a PDF or document file to upload.');
       return;
     }
 
+    this.isUploadingFile.set(true);
     this.errorMessage.set('');
     this.successMessage.set('');
 
     try {
-      await this.learningService.deleteSyllabus(course.id, item.id);
-
-      this.syllabus.update(items =>
-        items.filter(existing => existing.id !== item.id)
+      const created = await this.learningService.uploadMaterialFile(
+        course.id,
+        this.materialTitle.trim() || this.selectedFile.name,
+        this.selectedFile
       );
 
-      this.successMessage.set('Syllabus item deleted successfully.');
-    } catch (error) {
-      this.errorMessage.set(this.getErrorMessage(error));
+      this.materials.update(list => [created, ...list]);
+      this.successMessage.set(`PDF "${created.title}" uploaded successfully!`);
+      this.selectedFile = null;
+      this.materialTitle = '';
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
+    } finally {
+      this.isUploadingFile.set(false);
     }
   }
 
-  closeSyllabus(): void {
-    this.selectedCourse.set(null);
-    this.syllabus.set([]);
+  async addLinkResource(): Promise<void> {
+    const course = this.selectedCourse();
+    if (!course) return;
+
+    if (!this.materialTitle.trim()) {
+      this.errorMessage.set('Resource title is required.');
+      return;
+    }
+
+    if (!this.materialUrl.trim()) {
+      this.errorMessage.set('Resource URL link is required.');
+      return;
+    }
+
+    this.saving.set(true);
     this.errorMessage.set('');
     this.successMessage.set('');
+
+    try {
+      const created = await this.learningService.addMaterialLink(
+        course.id,
+        this.materialTitle.trim(),
+        this.materialType,
+        this.materialUrl.trim()
+      );
+
+      this.materials.update(list => [created, ...list]);
+      this.successMessage.set(`Resource link "${created.title}" added.`);
+      this.materialTitle = '';
+      this.materialUrl = '';
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
+    } finally {
+      this.saving.set(false);
+    }
   }
 
-  private getErrorMessage(error: unknown): string {
-    if (error instanceof HttpErrorResponse) {
-      if (error.status === 0) {
-        return 'Cannot connect to the backend. Check that both APIs are running.';
-      }
+  async deleteMaterial(material: LearningMaterial): Promise<void> {
+    const course = this.selectedCourse();
+    if (!course || !confirm(`Delete resource "${material.title}"?`)) return;
 
-      if (error.status === 401) {
-        return 'Your session has expired. Please log in again.';
-      }
-
-      if (error.status === 403) {
-        return error.error?.detail ||
-          'You do not have permission to perform this action.';
-      }
-
-      return error.error?.detail || 'The request failed.';
+    try {
+      await this.learningService.deleteMaterial(course.id, material.id);
+      this.materials.update(list => list.filter(m => m.id !== material.id));
+      this.successMessage.set('Resource deleted successfully.');
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
     }
+  }
 
-    return error instanceof Error
-      ? error.message
-      : 'An unexpected error occurred.';
+  openResource(material: LearningMaterial): void {
+    if (material.material_type === 'pdf' || material.material_type === 'doc') {
+      const course = this.selectedCourse();
+      if (!course) return;
+      const downloadUrl = `/training-api/api/v1/courses/${course.id}/materials/${material.id}/file`;
+      window.open(downloadUrl, '_blank');
+    } else {
+      let target = material.storage_key;
+      if (!target.startsWith('http://') && !target.startsWith('https://')) {
+        target = 'https://' + target;
+      }
+      window.open(target, '_blank');
+    }
+  }
+
+  closeModal(): void {
+    this.activeModal.set(null);
+    this.selectedCourse.set(null);
+    this.errorMessage.set('');
+    this.successMessage.set('');
   }
 }

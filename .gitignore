@@ -1,5 +1,4 @@
-
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -21,6 +20,7 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+.vs/
 
 # Logs and local database backups
 *.log
@@ -28,5 +28,16 @@ Thumbs.db
 *.dump
 *.bak
 
-# Visual Studio
-.vs/
+# Environment secrets
+**/.env
+**/.env.*
+!.env.example
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Angular cache
+frontend/.angular/
+
+*.backup

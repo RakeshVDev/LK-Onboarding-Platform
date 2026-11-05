@@ -44,15 +44,8 @@ def generate_assessment_report(category_scores: list[dict[str, Any]]) -> dict:
     clinical or employment-suitability decisions.
     """
 
-    if len(category_scores) != 5:
-        raise ValueError("Exactly five category scores are required")
-
-    received_categories = {
-        item["category"] for item in category_scores
-    }
-
-    if received_categories != set(CATEGORY_LABELS.keys()):
-        raise ValueError("Invalid assessment categories")
+    if not category_scores:
+        raise ValueError("At least one category score is required")
 
     total_score = 0.0
     total_max_score = 0.0
@@ -91,7 +84,7 @@ def generate_assessment_report(category_scores: list[dict[str, Any]]) -> dict:
         total_score += score
         total_max_score += max_score
 
-        label = CATEGORY_LABELS[category]
+        label = CATEGORY_LABELS.get(category, category.replace("_", " ").title())
 
         if percentage >= 80:
             interpretation = (
@@ -129,7 +122,10 @@ def generate_assessment_report(category_scores: list[dict[str, Any]]) -> dict:
             )
 
             recommendations.append(
-                CATEGORY_RECOMMENDATIONS[category]
+                CATEGORY_RECOMMENDATIONS.get(
+                    category,
+                    f"Practise {label.lower()} through structured exercises and review your incorrect answers."
+                )
             )
 
     overall_percentage = (
@@ -170,7 +166,7 @@ def generate_assessment_report(category_scores: list[dict[str, Any]]) -> dict:
 
     if not development_areas:
         development_areas.append(
-            "Continue practising all five assessment categories "
+            "Continue practising all assessment categories "
             "to maintain balanced development."
         )
 
@@ -193,7 +189,7 @@ def generate_assessment_report(category_scores: list[dict[str, Any]]) -> dict:
     }
 
     report_lines = [
-        "PSYCHOMETRIC ASSESSMENT REPORT",
+        "ASSESSMENT PERFORMANCE REPORT",
         "",
         f"Overall Score: {total_score:.2f}/{total_max_score:.2f}",
         f"Overall Percentage: {overall_percentage:.2f}%",
@@ -206,7 +202,7 @@ def generate_assessment_report(category_scores: list[dict[str, Any]]) -> dict:
 
     for category, interpretation in category_interpretations.items():
         report_lines.append(
-            f"{CATEGORY_LABELS[category]}: {interpretation}"
+            f"{CATEGORY_LABELS.get(category, category.replace(chr(95), chr(32)).title())}: {interpretation}"
         )
 
     report_lines.extend([

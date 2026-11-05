@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 
 import {
   AssessmentService,
@@ -17,7 +17,7 @@ import {
 @Component({
   selector: 'app-learner-assessments',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   templateUrl: './learner-assessments.html',
   styleUrl: './learner-assessments.scss'
 })
@@ -34,8 +34,44 @@ export class LearnerAssessments implements OnInit {
 
   errorMessage = '';
 
+  selectedInstructionTemplate: AssessmentTemplate | null = null;
+  showConfirmStartDialog = false;
+
   ngOnInit(): void {
     this.loadAssessments();
+  }
+
+  openInstructions(template: AssessmentTemplate): void {
+    this.selectedInstructionTemplate = template;
+    this.showConfirmStartDialog = false;
+    this.cdr.detectChanges();
+  }
+
+  closeInstructions(): void {
+    this.selectedInstructionTemplate = null;
+    this.showConfirmStartDialog = false;
+    this.cdr.detectChanges();
+  }
+
+  requestStart(): void {
+    this.showConfirmStartDialog = true;
+    this.cdr.detectChanges();
+  }
+
+  cancelStart(): void {
+    this.showConfirmStartDialog = false;
+    this.cdr.detectChanges();
+  }
+
+  confirmAndStart(): void {
+    if (!this.selectedInstructionTemplate) return;
+    const template = this.selectedInstructionTemplate;
+    this.showConfirmStartDialog = false;
+    this.startAssessment(template);
+  }
+
+  getDurationMinutes(template: AssessmentTemplate): number {
+    return template.assessment_type === 'logical_reasoning' ? 30 : 15;
   }
 
   loadAssessments(): void {
@@ -101,27 +137,36 @@ export class LearnerAssessments implements OnInit {
           ['/assessments/take', session.session_id],
           {
             state: {
-  sessionId: session.session_id,
-  questions: session.questions,
-  startedAt: session.started_at
-}
+              sessionId: session.session_id,
+              questions: session.questions,
+              startedAt: session.started_at,
+              expiresAt: session.expires_at,
+              durationMinutes: session.duration_minutes || this.getDurationMinutes(template),
+              remainingSeconds: session.remaining_seconds,
+              templateName: session.template_name || template.name,
+              assessmentType: session.assessment_type || template.assessment_type,
+            }
           }
         );
 
       },
 
       error: (error) => {
-
         console.error('Assessment start error:', error);
-
         this.startingId = null;
 
+        const detail = error.error?.detail || '';
+        const match = /Session ID:\s*(\d+)/i.exec(detail);
+        if (match && match[1]) {
+          void this.router.navigate(['/assessments/take', match[1]]);
+          return;
+        }
+
         this.errorMessage =
-          error.error?.detail ||
+          detail ||
           'Unable to start assessment. Please try again.';
 
         this.cdr.detectChanges();
-
       }
 
     });

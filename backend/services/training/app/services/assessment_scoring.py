@@ -10,15 +10,17 @@ def calculate_assessment_scores(
     """
     Calculate assessment scores.
 
-    All 20 questions contribute to the maximum score.
+    All questions contribute to the maximum score.
     Unanswered questions receive zero points.
     """
 
-    if len(questions) != 20:
-        raise ValueError("Assessment must contain exactly 20 questions")
+    if not questions:
+        raise ValueError("Assessment must contain at least one question")
 
-    if len(responses) > 20:
-        raise ValueError("Cannot submit more than 20 answers")
+    total_expected = len(questions)
+
+    if len(responses) > total_expected:
+        raise ValueError(f"Cannot submit more than {total_expected} answers")
 
     response_map = {}
 
@@ -33,8 +35,8 @@ def calculate_assessment_scores(
 
     question_ids = {question["id"] for question in questions}
 
-    if len(question_ids) != 20:
-        raise ValueError("Duplicate question ID")
+    if len(question_ids) != total_expected:
+        raise ValueError("Duplicate question ID in assessment")
 
     if not set(response_map).issubset(question_ids):
         raise ValueError("Response contains an invalid question ID")

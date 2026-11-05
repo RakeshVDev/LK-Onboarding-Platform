@@ -1,0 +1,248 @@
+<div class="admin-results-page">
+
+  <!-- Header -->
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">ADMIN &amp; TEACHER OVERSIGHT</span>
+      <h1>Learner Assessment Results</h1>
+      <p>
+        Review performance outcomes, test scores, and developmental report cards
+        for all registered learners.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <a class="btn-secondary" routerLink="/assessments">
+        <span>▤</span> Assessment Management
+      </a>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="sub-nav">
+    <a class="tab-item" routerLink="/assessments">Templates</a>
+    <a class="tab-item active" routerLink="/assessment-results">Learner Results &amp; Report Cards</a>
+  </nav>
+
+  <!-- Statistics -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon purple">☷</div>
+      <div>
+        <span class="stat-label">Total Submissions</span>
+        <strong class="stat-value">{{ totalAssessments }}</strong>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon green">✓</div>
+      <div>
+        <span class="stat-label">Completed Tests</span>
+        <strong class="stat-value">{{ completedCount }}</strong>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon blue">◎</div>
+      <div>
+        <span class="stat-label">Average Score</span>
+        <strong class="stat-value">{{ averageScore }}%</strong>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon orange">♟</div>
+      <div>
+        <span class="stat-label">Assessed Learners</span>
+        <strong class="stat-value">{{ uniqueLearners }}</strong>
+      </div>
+    </div>
+  </div>
+
+  @if (errorMessage) {
+    <div class="error-banner" role="alert">
+      {{ errorMessage }}
+    </div>
+  }
+
+  <!-- Filter & Search Toolbar -->
+  <div class="filter-toolbar">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input
+        type="text"
+        placeholder="Search by learner name, email, or assessment..."
+        [(ngModel)]="searchQuery"
+        (input)="onFilterChange()" />
+    </div>
+
+    <div class="filter-controls">
+      <select
+        class="filter-select"
+        [(ngModel)]="selectedTemplateId"
+        (change)="onFilterChange()">
+        <option [ngValue]="null">All Assessments</option>
+        @for (tpl of templates; track tpl.id) {
+          <option [ngValue]="tpl.id">{{ tpl.name }}</option>
+        }
+      </select>
+
+      <select
+        class="filter-select"
+        [(ngModel)]="selectedStatus"
+        (change)="onFilterChange()">
+        <option value="all">All Statuses</option>
+        <option value="completed">Completed</option>
+        <option value="in_progress">In Progress</option>
+      </select>
+
+      @if (searchQuery || selectedTemplateId || selectedStatus !== 'all') {
+        <button class="btn-clear" type="button" (click)="clearFilters()">
+          Clear Filters
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- Results Table / List -->
+  @if (loading) {
+    <div class="loading-state">
+      <span class="spinner"></span>
+      <p>Loading learner results...</p>
+    </div>
+  }
+
+  @if (!loading && results.length === 0) {
+    <div class="empty-state">
+      <div class="empty-icon">▥</div>
+      <h3>No assessment results found</h3>
+      <p>
+        @if (searchQuery || selectedTemplateId || selectedStatus !== 'all') {
+          No records match your active search or filters. Try adjusting your filter options.
+        } @else {
+          No learner has taken an assessment yet.
+        }
+      </p>
+      @if (searchQuery || selectedTemplateId || selectedStatus !== 'all') {
+        <button class="btn-clear" type="button" (click)="clearFilters()">Reset Filters</button>
+      }
+    </div>
+  }
+
+  @if (!loading && results.length > 0) {
+    <div class="table-container">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Learner</th>
+            <th>Assessment</th>
+            <th>Status</th>
+            <th>Score</th>
+            <th>Performance</th>
+            <th>Date</th>
+            <th class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of results; track item.session_id) {
+            <tr>
+              <!-- Learner -->
+              <td>
+                <div class="user-cell">
+                  <div class="avatar">{{ getUserInitials(item.learner_name) }}</div>
+                  <div>
+                    <strong class="user-name">{{ item.learner_name || 'Learner' }}</strong>
+                    <span class="user-email">{{ item.learner_email || 'No email' }}</span>
+                  </div>
+                </div>
+              </td>
+
+              <!-- Assessment -->
+              <td>
+                <div class="assessment-cell">
+                  <span class="test-name">{{ item.template_name }}</span>
+                  <span class="type-pill" [attr.data-type]="item.assessment_type">
+                    {{ typeLabel(item.assessment_type) }}
+                  </span>
+                </div>
+              </td>
+
+              <!-- Status -->
+              <td>
+                <span
+                  class="status-pill"
+                  [class.status-completed]="item.status === 'completed'"
+                  [class.status-progress]="item.status === 'in_progress'">
+                  {{ item.status === 'completed' ? 'Completed' : 'In Progress' }}
+                </span>
+              </td>
+
+              <!-- Score -->
+              <td>
+                @if (item.status === 'completed') {
+                  <span class="points-val">
+                    <strong>{{ item.total_score | number:'1.0-1' }}</strong> / {{ item.max_score | number:'1.0-1' }}
+                  </span>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </td>
+
+              <!-- Performance -->
+              <td>
+                @if (item.status === 'completed') {
+                  <div class="pct-cell">
+                    <span class="pct-badge" [ngClass]="getGrade(item.overall_percentage).class">
+                      {{ item.overall_percentage | number:'1.0-0' }}%
+                    </span>
+                    <div class="table-track">
+                      <div
+                        class="table-fill"
+                        [style.width.%]="item.overall_percentage"
+                        [ngClass]="getGrade(item.overall_percentage).class">
+                      </div>
+                    </div>
+                  </div>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </td>
+
+              <!-- Date -->
+              <td>
+                <span class="date-text">
+                  {{ (item.completed_at || item.started_at) | date:'mediumDate' }}
+                </span>
+              </td>
+
+              <!-- Actions -->
+              <td class="actions-col">
+                @if (item.status === 'completed') {
+                  <div class="btn-group">
+                    <button
+                      class="btn-action-primary"
+                      type="button"
+                      title="View Report Card"
+                      (click)="viewReport(item.session_id)">
+                      Report Card
+                    </button>
+                    <button
+                      class="btn-action-secondary"
+                      type="button"
+                      title="View Detailed Scores"
+                      (click)="viewScores(item.session_id)">
+                      Scores
+                    </button>
+                  </div>
+                } @else {
+                  <span class="in-prog-label">Taking test...</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+</div>

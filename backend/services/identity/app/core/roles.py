@@ -45,6 +45,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
 
     # Teaching and assigned training operations
     Role.TEACHER: frozenset({
+        Permission.MANAGE_COURSES,
+        Permission.MANAGE_COHORTS,
         Permission.MANAGE_MATERIALS,
         Permission.MANAGE_ATTENDANCE,
         Permission.MANAGE_ASSESSMENTS,

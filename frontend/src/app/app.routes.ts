@@ -46,6 +46,17 @@ export const routes: Routes = [
         component: Dashboard
       },
 
+      // Profile
+      {
+        path: 'profile',
+        data: {
+          allowIncompleteAssessment: true
+        },
+        loadComponent: () =>
+          import('./features/profile/profile')
+            .then(m => m.Profile)
+      },
+
       // User Management
       {
         path: 'users',
@@ -133,6 +144,36 @@ export const routes: Routes = [
             .then(m => m.LearnerAssessments)
       },
 
+      // Learner Assessment Results & Report Cards
+      {
+        path: 'my-results',
+        data: {
+          allowIncompleteAssessment: true
+        },
+        canActivate: [
+          roleGuard(['learner', 'admin', 'teacher', 'superadmin'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/learner-results/learner-results')
+            .then(m => m.LearnerResults)
+      },
+      {
+        path: 'results',
+        redirectTo: 'my-results',
+        pathMatch: 'full'
+      },
+
+      // Admin & Teacher: Learner Results Panel
+      {
+        path: 'assessment-results',
+        canActivate: [
+          roleGuard(['admin', 'teacher', 'superadmin'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/admin-results/admin-results')
+            .then(m => m.AdminResults)
+      },
+
       // Take or resume assessment
       {
         path: 'assessments/take/:sessionId',
@@ -150,8 +191,11 @@ export const routes: Routes = [
       // Assessment Results
       {
         path: 'assessments/results/:sessionId',
+        data: {
+          allowIncompleteAssessment: true
+        },
         canActivate: [
-          roleGuard(['learner'])
+          roleGuard(['learner', 'admin', 'teacher', 'superadmin'])
         ],
         loadComponent: () =>
           import('./features/assessments/assessment-results/assessment-results')
@@ -161,8 +205,11 @@ export const routes: Routes = [
       // Assessment Report
       {
         path: 'assessments/report/:sessionId',
+        data: {
+          allowIncompleteAssessment: true
+        },
         canActivate: [
-          roleGuard(['learner'])
+          roleGuard(['learner', 'admin', 'teacher', 'superadmin'])
         ],
         loadComponent: () =>
           import('./features/assessments/assessment-report/assessment-report')

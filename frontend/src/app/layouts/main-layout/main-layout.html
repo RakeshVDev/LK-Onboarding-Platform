@@ -59,17 +59,43 @@
         <span class="nav-icon">◷</span>
         <span>Cohorts</span>
       </a>
-    </nav>
 
-    @if (authService.hasRole('admin', 'teacher')) {
-  <a
-    routerLink="/assessments"
-    routerLinkActive="active"
-    (click)="sidebarOpen = false">
-    <span class="nav-icon">▧</span>
-    <span>Assessment Management</span>
-  </a>
-}
+      @if (authService.hasRole('learner')) {
+        <a
+          routerLink="/my-assessments"
+          routerLinkActive="active"
+          (click)="sidebarOpen = false">
+          <span class="nav-icon">✎</span>
+          <span>My Assessments</span>
+        </a>
+
+        <a
+          routerLink="/my-results"
+          routerLinkActive="active"
+          (click)="sidebarOpen = false">
+          <span class="nav-icon">▥</span>
+          <span>My Results</span>
+        </a>
+      }
+
+      @if (authService.hasRole('admin', 'teacher', 'superadmin')) {
+        <a
+          routerLink="/assessments"
+          routerLinkActive="active"
+          (click)="sidebarOpen = false">
+          <span class="nav-icon">▧</span>
+          <span>Assessment Management</span>
+        </a>
+
+        <a
+          routerLink="/assessment-results"
+          routerLinkActive="active"
+          (click)="sidebarOpen = false">
+          <span class="nav-icon">▥</span>
+          <span>Learner Results</span>
+        </a>
+      }
+    </nav>
 
     <div class="sidebar-bottom">
       <div class="sidebar-note">

@@ -1,12 +1,27 @@
-
 import { Injectable } from '@angular/core';
 import {
   HttpClient,
   HttpHeaders,
-  HttpErrorResponse
+  HttpErrorResponse,
+  HttpParams
 } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
+
+export interface Department {
+  id: number;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+}
+
+export interface Course {
+  id: number;
+  department_id: number;
+  title: string;
+  description: string | null;
+  is_published: boolean;
+}
 
 export interface SyllabusItem {
   id: number;
@@ -20,6 +35,32 @@ export interface SyllabusCreate {
   title: string;
   description?: string | null;
   sequence_order: number;
+}
+
+export interface LearningMaterial {
+  id: number;
+  course_id: number;
+  title: string;
+  material_type: 'pdf' | 'link' | 'doc' | 'video';
+  storage_key: string;
+  is_active: boolean;
+}
+
+export interface Cohort {
+  id: number;
+  department_id: number;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: 'planned' | 'active' | 'completed';
+}
+
+export interface CohortMember {
+  id: number;
+  cohort_id: number;
+  user_id: number;
+  joined_at: string;
+  status: string;
 }
 
 export interface Enrollment {
@@ -50,6 +91,76 @@ export class LearningService {
     return new HttpHeaders({
       Authorization: `Bearer ${token}`
     });
+  }
+
+  // ---------- DEPARTMENTS ----------
+
+  getDepartments(): Promise<Department[]> {
+    return firstValueFrom(
+      this.http.get<Department[]>(
+        `${this.apiUrl}/departments`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  // ---------- COURSES ----------
+
+  getCourses(departmentId?: number): Promise<Course[]> {
+    let params = new HttpParams();
+    if (departmentId) {
+      params = params.set('department_id', departmentId.toString());
+    }
+
+    return firstValueFrom(
+      this.http.get<Course[]>(
+        `${this.apiUrl}/courses`,
+        { headers: this.getHeaders(), params }
+      )
+    );
+  }
+
+  getCourse(courseId: number): Promise<Course> {
+    return firstValueFrom(
+      this.http.get<Course>(
+        `${this.apiUrl}/courses/${courseId}`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  createCourse(payload: {
+    department_id: number;
+    title: string;
+    description?: string;
+    is_published?: boolean;
+  }): Promise<Course> {
+    return firstValueFrom(
+      this.http.post<Course>(
+        `${this.apiUrl}/courses`,
+        payload,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  updateCourse(courseId: number, payload: Partial<Course>): Promise<Course> {
+    return firstValueFrom(
+      this.http.patch<Course>(
+        `${this.apiUrl}/courses/${courseId}`,
+        payload,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  deleteCourse(courseId: number): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(
+        `${this.apiUrl}/courses/${courseId}`,
+        { headers: this.getHeaders() }
+      )
+    );
   }
 
   // ---------- COURSE SYLLABUS ----------
@@ -94,6 +205,149 @@ export class LearningService {
     return firstValueFrom(
       this.http.delete<void>(
         `${this.apiUrl}/courses/${courseId}/syllabus/${itemId}`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  // ---------- LEARNING MATERIALS (PDF UPLOADS & LINKS) ----------
+
+  getMaterials(courseId: number): Promise<LearningMaterial[]> {
+    return firstValueFrom(
+      this.http.get<LearningMaterial[]>(
+        `${this.apiUrl}/courses/${courseId}/materials`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  addMaterialLink(
+    courseId: number,
+    title: string,
+    materialType: 'link' | 'video' | 'doc' | 'pdf',
+    storageKey: string
+  ): Promise<LearningMaterial> {
+    return firstValueFrom(
+      this.http.post<LearningMaterial>(
+        `${this.apiUrl}/courses/${courseId}/materials`,
+        {
+          title,
+          material_type: materialType,
+          storage_key: storageKey
+        },
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  uploadMaterialFile(
+    courseId: number,
+    title: string,
+    file: File
+  ): Promise<LearningMaterial> {
+    const formData = new FormData();
+    formData.append('title', title);
+    formData.append('file', file);
+
+    const token = this.authService.getToken();
+    const headers = new HttpHeaders({
+      Authorization: `Bearer ${token}`
+    });
+
+    return firstValueFrom(
+      this.http.post<LearningMaterial>(
+        `${this.apiUrl}/courses/${courseId}/materials/upload`,
+        formData,
+        { headers }
+      )
+    );
+  }
+
+  deleteMaterial(courseId: number, materialId: number): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(
+        `${this.apiUrl}/courses/${courseId}/materials/${materialId}`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  // ---------- COHORTS ----------
+
+  getCohorts(departmentId?: number): Promise<Cohort[]> {
+    let params = new HttpParams();
+    if (departmentId) {
+      params = params.set('department_id', departmentId.toString());
+    }
+
+    return firstValueFrom(
+      this.http.get<Cohort[]>(
+        `${this.apiUrl}/cohorts`,
+        { headers: this.getHeaders(), params }
+      )
+    );
+  }
+
+  createCohort(payload: {
+    department_id: number;
+    name: string;
+    start_date?: string | null;
+    end_date?: string | null;
+    status?: string;
+  }): Promise<Cohort> {
+    return firstValueFrom(
+      this.http.post<Cohort>(
+        `${this.apiUrl}/cohorts`,
+        payload,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  updateCohort(cohortId: number, payload: Partial<Cohort>): Promise<Cohort> {
+    return firstValueFrom(
+      this.http.patch<Cohort>(
+        `${this.apiUrl}/cohorts/${cohortId}`,
+        payload,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  deleteCohort(cohortId: number): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(
+        `${this.apiUrl}/cohorts/${cohortId}`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  // ---------- COHORT MEMBERS ----------
+
+  getCohortMembers(cohortId: number): Promise<CohortMember[]> {
+    return firstValueFrom(
+      this.http.get<CohortMember[]>(
+        `${this.apiUrl}/cohorts/${cohortId}/members`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  addCohortMember(cohortId: number, userId: number, status = 'active'): Promise<CohortMember> {
+    return firstValueFrom(
+      this.http.post<CohortMember>(
+        `${this.apiUrl}/cohorts/${cohortId}/members`,
+        { user_id: userId, status },
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  removeCohortMember(cohortId: number, userId: number): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(
+        `${this.apiUrl}/cohorts/${cohortId}/members/${userId}`,
         { headers: this.getHeaders() }
       )
     );

@@ -11,10 +11,10 @@ from services.training.app.routers import (
 )
 
 app = FastAPI(
-    title="L&K Training Service",
+    title="ASE Assessment Tool - Training Service",
     description=(
         "Training, courses, cohorts, learning materials, "
-        "attendance, and psychometric assessment APIs"
+        "attendance, psychometric, technical and English grammar assessment APIs"
     ),
     version="1.0.0",
 )
@@ -39,6 +39,6 @@ def health_check():
 @app.get("/", tags=["Root"])
 def root():
     return {
-        "message": "L&K Training Service API",
+        "message": "ASE Assessment Tool Training API",
         "docs": "/docs",
     }

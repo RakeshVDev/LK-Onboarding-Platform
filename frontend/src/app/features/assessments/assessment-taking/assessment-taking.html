@@ -1,209 +1,305 @@
-
-<div class="take-page">
+<div class="exam-page">
 
   @if (loading) {
-
-    <div class="state-card">
-      Loading assessment...
+    <div class="loading-state">
+      <span class="loading-spinner"></span>
+      <h3>Initializing Examination Session</h3>
+      <p>Synchronizing questions and countdown timer from secure server...</p>
     </div>
-
   } @else if (questions.length > 0) {
 
-    <header class="take-header">
-
-      <div>
-        <span class="eyebrow">PSYCHOMETRIC ASSESSMENT</span>
-
-        <h1>Assessment in Progress</h1>
-
-        <p>Read each question carefully and select one answer.</p>
+    <!-- Top Examination Header -->
+    <header class="exam-header">
+      <div class="header-left">
+        <div class="exam-badge-row">
+          <span class="exam-tag">OFFICIAL ASSESSMENT</span>
+          <span class="exam-type-pill">{{ templateName }}</span>
+        </div>
+        <div class="exam-title-row">
+          <h1>{{ templateName }}</h1>
+          <span class="question-tracker">Question <strong>{{ currentIndex + 1 }}</strong> of {{ questions.length }}</span>
+        </div>
       </div>
 
-      <div class="header-stats">
+      <div class="header-right">
+        <!-- Prominent Countdown Timer -->
+        <div class="exam-timer"
+             [class.timer-warning]="isTimerWarning"
+             [class.timer-critical]="isTimerCritical"
+             role="timer"
+             aria-live="polite">
+          <div class="timer-icon">⏱</div>
+          <div class="timer-text">
+            <span class="timer-label">TIME REMAINING</span>
+            <strong class="timer-digits">{{ formattedTime }}</strong>
+          </div>
+        </div>
 
-  <div class="timer-card" [class.timer-warning]="remainingSeconds <= 120">
-    <span class="timer-label">TIME REMAINING</span>
+        <!-- Mobile Drawer Toggle Button -->
+        <button class="btn-mobile-nav" type="button" (click)="toggleMobileNav()" aria-label="Toggle Question Navigator">
+          <span>▥</span>
+          <span>Palette ({{ answeredCount }}/{{ questions.length }})</span>
+        </button>
 
-    <strong>
-      {{ formattedTime }}
-    </strong>
-
-    <small>
-      {{ remainingSeconds <= 120 ? 'Hurry up! Time is running out.' : '15-minute assessment' }}
-    </small>
-  </div>
-
-  <div class="answered-count">
-    <strong>{{ answeredCount }}/{{ questions.length }}</strong>
-    <small>Answered</small>
-  </div>
-
-</div>
-
+        <!-- Final Submit Button in Header -->
+        <button class="btn-header-submit" type="button" (click)="openSubmitModal()" [disabled]="submitting">
+          <span>Submit Exam</span>
+        </button>
+      </div>
     </header>
 
-    <div class="progress-track">
-      <div
-        class="progress-fill"
-        [style.width.%]="progress">
-      </div>
+    <!-- Global Progress Bar -->
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" [style.width.%]="progressPercentage"></div>
     </div>
 
-    <div class="assessment-layout">
+    <!-- Error Banner if any -->
+    @if (errorMessage) {
+      <div class="exam-alert error-banner" role="alert">
+        <span>⚠</span> {{ errorMessage }}
+      </div>
+    }
 
-      <main class="question-panel">
+    <!-- Main Two-Column Layout -->
+    <div class="exam-body">
 
-        <div class="question-meta">
-
-          <span>
-            QUESTION {{ currentIndex + 1 }}
-            OF {{ questions.length }}
-          </span>
-
-          <span>
-            {{ categoryLabel(currentQuestion?.category || '') }}
-          </span>
-
+      <!-- LEFT SIDEBAR: Question Palette & Navigator -->
+      <aside class="exam-sidebar" [class.mobile-open]="isMobileNavOpen">
+        
+        <div class="sidebar-header">
+          <div>
+            <h3>Question Palette</h3>
+            <p>{{ answeredCount }} of {{ questions.length }} Attempted</p>
+          </div>
+          <button class="btn-close-mobile" type="button" (click)="toggleMobileNav()" aria-label="Close palette">×</button>
         </div>
 
-        <h2>
-          {{ currentQuestion?.question_text }}
-        </h2>
-
-        <p class="instruction">
-          Select your answer below.
-        </p>
-
-        <div class="options">
-
-          @for (
-            option of currentQuestion?.options ?? [];
-            track option.id
-          ) {
-
+        <!-- Palette Grid (1 to 25) -->
+        <div class="palette-grid">
+          @for (question of questions; track question.id; let i = $index) {
             <button
               type="button"
-              class="option"
-              [class.selected]="
-                answers[currentQuestion!.id] === option.id
-              "
-              (click)="chooseAnswer(
-                currentQuestion!.id,
-                option.id
-              )">
-
-              <span class="option-key">
-                {{ option.id }}
-              </span>
-
-              <span class="option-text">
-                {{ option.text }}
-              </span>
-
-              <span class="radio"></span>
-
+              class="palette-btn"
+              [ngClass]="'state-' + getQuestionState(question, i)"
+              [class.active-question]="currentIndex === i"
+              (click)="goTo(i)"
+              [attr.aria-label]="'Question ' + (i + 1) + ', status: ' + getQuestionState(question, i)">
+              <span>{{ i + 1 }}</span>
+              @if (markedForReview.has(question.id)) {
+                <span class="review-flag-dot" title="Marked for Review"></span>
+              }
             </button>
-
           }
-
         </div>
 
-        <div class="question-actions">
+        <!-- Navigation Legend & Counters -->
+        <div class="palette-legend">
+          <h4>Status Legend</h4>
+          <div class="legend-grid">
+            <div class="legend-item">
+              <span class="legend-chip state-answered"></span>
+              <span class="legend-text">Answered (<strong>{{ answeredCount }}</strong>)</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-chip state-not-answered"></span>
+              <span class="legend-text">Not Answered (<strong>{{ notAnsweredCount }}</strong>)</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-chip state-review"></span>
+              <span class="legend-text">Marked for Review (<strong>{{ markedCount }}</strong>)</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-chip state-answered-review"></span>
+              <span class="legend-text">Ans. &amp; Review</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-chip state-not-visited"></span>
+              <span class="legend-text">Not Visited (<strong>{{ notVisitedCount }}</strong>)</span>
+            </div>
+          </div>
+        </div>
 
-          <button
-            type="button"
-            class="btn-outline"
-            [disabled]="currentIndex === 0"
-            (click)="previous()">
-            ← Previous
+        <!-- Sidebar Footer Action -->
+        <div class="sidebar-footer">
+          <button class="btn-sidebar-finish" type="button" (click)="openSubmitModal()" [disabled]="submitting">
+            Submit Assessment
           </button>
+        </div>
 
-          <span>
-            {{ currentIndex + 1 }} / {{ questions.length }}
-          </span>
+      </aside>
 
-          @if (currentIndex < questions.length - 1) {
+      <!-- MAIN CONTENT: Current Question Workspace -->
+      <main class="exam-workspace" *ngIf="currentQuestion as q">
+
+        <!-- Question Meta Toolbar -->
+        <div class="question-topbar">
+          <div class="topbar-left">
+            <span class="q-badge">Question {{ currentIndex + 1 }} of {{ questions.length }}</span>
+            <span class="topic-badge">{{ categoryLabel(q.category) }}</span>
+            <span class="difficulty-badge" [attr.data-diff]="q.difficulty || 'Medium'">
+              {{ q.difficulty || 'Medium' }}
+            </span>
+          </div>
+
+          <div class="topbar-right">
+            <span class="marks-pill">+1.0 Mark</span>
+            <span class="neg-pill">No Negative</span>
+          </div>
+        </div>
+
+        <!-- Question Text Card -->
+        <div class="question-content">
+          <h2 class="question-statement">{{ q.question_text }}</h2>
+          <p class="question-instruction">Choose the correct answer from the four choices below:</p>
+
+          <!-- 4 Options Grid -->
+          <div class="options-container">
+            @for (option of q.options; track option.id) {
+              <button
+                type="button"
+                class="option-card"
+                [class.selected]="answers[q.id] === option.id"
+                (click)="chooseAnswer(q.id, option.id)">
+                
+                <span class="option-key">{{ option.id }}</span>
+                <span class="option-label">{{ option.text }}</span>
+                <span class="option-radio">
+                  <span class="radio-inner"></span>
+                </span>
+
+              </button>
+            }
+          </div>
+
+          <!-- Clear Answer Link -->
+          @if (answers[q.id]) {
+            <div class="clear-action">
+              <button type="button" class="btn-clear" (click)="clearAnswer(q.id)">
+                ✕ Clear Selection
+              </button>
+            </div>
+          }
+        </div>
+
+        <!-- Question Bottom Action Toolbar -->
+        <div class="question-actions">
+          
+          <div class="actions-left">
+            <button
+              type="button"
+              class="btn-prev"
+              [disabled]="currentIndex === 0 || submitting"
+              (click)="previous()">
+              ← Previous
+            </button>
 
             <button
               type="button"
-              class="btn-primary"
-              (click)="next()">
-              Next Question →
+              class="btn-review"
+              [class.active-review]="isCurrentQuestionMarked"
+              (click)="toggleMarkForReview(q.id)">
+              <span class="flag-icon">⚑</span>
+              <span>{{ isCurrentQuestionMarked ? 'Unmark Review' : 'Mark for Review' }}</span>
             </button>
+          </div>
 
-          } @else {
-
-            <button
-  type="button"
-  (click)="submit()"
-  [disabled]="submitting || answeredCount !== questions.length">
-
-  {{ submitting ? 'Submitting...' : 'Submit Assessment' }}
-
-</button>
-
-          }
+          <div class="actions-right">
+            @if (currentIndex < questions.length - 1) {
+              <button
+                type="button"
+                class="btn-next"
+                (click)="saveAndNext()"
+                [disabled]="submitting">
+                Save &amp; Next →
+              </button>
+            } @else {
+              <button
+                type="button"
+                class="btn-save-last"
+                (click)="openSubmitModal()"
+                [disabled]="submitting">
+                Review &amp; Submit →
+              </button>
+            }
+          </div>
 
         </div>
 
       </main>
 
-      <aside class="question-navigation">
+    </div>
 
-        <h3>Question Navigator</h3>
+    <!-- Backdrop for Mobile Sidebar -->
+    @if (isMobileNavOpen) {
+      <div class="mobile-nav-backdrop" (click)="toggleMobileNav()"></div>
+    }
 
-        <p>Track your answered questions.</p>
+    <!-- Final Submission Confirmation Modal -->
+    @if (showSubmitModal) {
+      <div class="modal-backdrop" (click)="closeSubmitModal()">
+        <div class="submit-modal" (click)="$event.stopPropagation()">
+          
+          <div class="modal-header">
+            <div class="modal-header-icon">📑</div>
+            <div>
+              <h3>Submit Examination</h3>
+              <p>Review your assessment summary before final submission.</p>
+            </div>
+            <button class="btn-modal-close" type="button" (click)="closeSubmitModal()">×</button>
+          </div>
 
-        <div class="number-grid">
+          <div class="modal-summary-grid">
+            <div class="summary-tile">
+              <span class="tile-label">Total Questions</span>
+              <strong class="tile-val">{{ questions.length }}</strong>
+            </div>
 
-          @for (
-            question of questions;
-            track question.id;
-            let i = $index
-          ) {
+            <div class="summary-tile tile-green">
+              <span class="tile-label">Answered</span>
+              <strong class="tile-val">{{ answeredCount }}</strong>
+            </div>
 
-            <button
-              type="button"
-              [class.answered]="answers[question.id]"
-              [class.current]="currentIndex === i"
-              (click)="goTo(i)">
+            <div class="summary-tile tile-amber">
+              <span class="tile-label">Unanswered</span>
+              <strong class="tile-val">{{ unansweredCount }}</strong>
+            </div>
 
-              {{ i + 1 }}
+            <div class="summary-tile tile-purple">
+              <span class="tile-label">Marked for Review</span>
+              <strong class="tile-val">{{ markedCount }}</strong>
+            </div>
+          </div>
 
-            </button>
-
+          @if (unansweredCount > 0) {
+            <div class="modal-warning">
+              <span>⚠</span>
+              <span>You have <strong>{{ unansweredCount }} unanswered</strong> question(s). Unanswered questions will receive 0 marks.</span>
+            </div>
           }
 
+          <p class="modal-note">
+            Once submitted, your responses will be scored server-side out of 25 and cannot be altered.
+          </p>
+
+          <div class="modal-actions">
+            <button class="btn-secondary" type="button" (click)="closeSubmitModal()" [disabled]="submitting">
+              Continue Assessment
+            </button>
+            <button class="btn-primary btn-submit-final" type="button" (click)="submitFinal(false)" [disabled]="submitting">
+              {{ submitting ? 'Finalizing Submission...' : 'Submit Final Assessment' }}
+            </button>
+          </div>
+
         </div>
-
-        <div class="completion">
-
-          <strong>
-            {{ answeredCount }} / {{ questions.length }}
-          </strong>
-
-          <small>Questions answered</small>
-
-        </div>
-
-      </aside>
-
-    </div>
+      </div>
+    }
 
   } @else {
-
-    <div class="state-card error-message">
-      {{ errorMessage }}
+    <div class="empty-state">
+      <h3>Assessment session not available</h3>
+      <p>{{ errorMessage || 'Could not load questions for this session.' }}</p>
+      <a routerLink="/my-assessments" class="btn-primary">Return to Assessments</a>
     </div>
-
-  }
-
-  @if (errorMessage && questions.length > 0) {
-
-    <div class="error-message">
-      {{ errorMessage }}
-    </div>
-
   }
 
 </div>
