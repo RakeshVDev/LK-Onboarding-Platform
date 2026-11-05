@@ -1,6 +1,7 @@
-
 <div class="app-layout">
-  <aside class="sidebar" [class.sidebar-open]="sidebarOpen">
+  <!-- SIDEBAR NAVIGATION -->
+  <aside class="sidebar" [class.sidebar-open]="sidebarOpen" aria-label="Main Sidebar Navigation">
+    <!-- Brand Header -->
     <a class="brand" routerLink="/dashboard" (click)="sidebarOpen = false">
       <span class="brand-mark">
         <span class="brand-letter">L</span>
@@ -8,108 +9,202 @@
         <span class="brand-letter">K</span>
       </span>
 
-      <span class="brand-copy">
-        <strong>L&amp;K Platform</strong>
+      <div class="brand-copy">
+        <div class="brand-title-row">
+          <strong>L&amp;K Platform</strong>
+          <span class="brand-badge">ENTERPRISE</span>
+        </div>
         <small>Learning &amp; Development</small>
-      </span>
+      </div>
     </a>
 
-    <div class="nav-label">WORKSPACE</div>
+    <!-- Navigation Groups -->
+    <div class="nav-groups">
+      <!-- 1. WORKSPACE -->
+      <div class="nav-section-title">WORKSPACE</div>
+      <nav class="navigation">
+        <a
+          routerLink="/dashboard"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: true }"
+          (click)="sidebarOpen = false">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+          </svg>
+          <span>Dashboard</span>
+        </a>
+      </nav>
 
-    <nav class="navigation" aria-label="Main navigation">
-      <a
-        routerLink="/dashboard"
-        routerLinkActive="active"
-        [routerLinkActiveOptions]="{ exact: true }"
-        (click)="sidebarOpen = false">
-        <span class="nav-icon">▦</span>
-        <span>Dashboard</span>
-      </a>
+      <!-- 2. ACADEMIC & LEARNING -->
+      <div class="nav-section-title">ACADEMIC &amp; LEARNING</div>
+      <nav class="navigation">
+        <a
+          routerLink="/courses"
+          routerLinkActive="active"
+          (click)="sidebarOpen = false">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          <span>Courses</span>
+        </a>
 
+        <a
+          routerLink="/cohorts"
+          routerLinkActive="active"
+          (click)="sidebarOpen = false">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          <span>Cohorts</span>
+        </a>
+
+        @if (authService.hasRole('superadmin', 'admin')) {
+          <a
+            routerLink="/departments"
+            routerLinkActive="active"
+            (click)="sidebarOpen = false">
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 21h18"></path>
+              <path d="M9 8h1"></path>
+              <path d="M9 12h1"></path>
+              <path d="M9 16h1"></path>
+              <path d="M14 8h1"></path>
+              <path d="M14 12h1"></path>
+              <path d="M14 16h1"></path>
+              <path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path>
+            </svg>
+            <span>Departments</span>
+          </a>
+        }
+      </nav>
+
+      <!-- 3. EVALUATION SUITE -->
+      <div class="nav-section-title">EVALUATION SUITE</div>
+      <nav class="navigation">
+        @if (authService.hasRole('learner')) {
+          <a
+            routerLink="/my-assessments"
+            routerLinkActive="active"
+            (click)="sidebarOpen = false">
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+              <path d="m9 14 2 2 4-4"></path>
+            </svg>
+            <span>My Assessments</span>
+          </a>
+
+          <a
+            routerLink="/my-results"
+            routerLinkActive="active"
+            (click)="sidebarOpen = false">
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+              <line x1="2" y1="20" x2="22" y2="20"></line>
+            </svg>
+            <span>My Results &amp; Reports</span>
+          </a>
+        }
+
+        @if (authService.hasRole('admin', 'teacher', 'superadmin')) {
+          <a
+            routerLink="/assessments"
+            routerLinkActive="active"
+            (click)="sidebarOpen = false">
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14"></line>
+              <line x1="4" y1="10" x2="4" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12" y2="3"></line>
+              <line x1="20" y1="21" x2="20" y2="16"></line>
+              <line x1="20" y1="12" x2="20" y2="3"></line>
+              <line x1="1" y1="14" x2="7" y2="14"></line>
+              <line x1="9" y1="8" x2="15" y2="8"></line>
+              <line x1="17" y1="16" x2="23" y2="16"></line>
+            </svg>
+            <span>Assessment Management</span>
+          </a>
+
+          <a
+            routerLink="/assessment-results"
+            routerLinkActive="active"
+            (click)="sidebarOpen = false">
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span>Learner Results</span>
+          </a>
+        }
+      </nav>
+
+      <!-- 4. ADMINISTRATION -->
       @if (authService.hasRole('superadmin', 'admin')) {
-        <a
-          routerLink="/users"
-          routerLinkActive="active"
-          (click)="sidebarOpen = false">
-          <span class="nav-icon">♙</span>
-          <span>User Management</span>
-        </a>
-
-        <a
-          routerLink="/departments"
-          routerLinkActive="active"
-          (click)="sidebarOpen = false">
-          <span class="nav-icon">▤</span>
-          <span>Departments</span>
-        </a>
+        <div class="nav-section-title">ADMINISTRATION</div>
+        <nav class="navigation">
+          <a
+            routerLink="/users"
+            routerLinkActive="active"
+            (click)="sidebarOpen = false">
+            <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span>User Management</span>
+          </a>
+        </nav>
       }
+    </div>
 
-      <a
-        routerLink="/courses"
-        routerLinkActive="active"
-        (click)="sidebarOpen = false">
-        <span class="nav-icon">▣</span>
-        <span>Courses</span>
-      </a>
-
-      <a
-        routerLink="/cohorts"
-        routerLinkActive="active"
-        (click)="sidebarOpen = false">
-        <span class="nav-icon">◷</span>
-        <span>Cohorts</span>
-      </a>
-
-      @if (authService.hasRole('learner')) {
-        <a
-          routerLink="/my-assessments"
-          routerLinkActive="active"
-          (click)="sidebarOpen = false">
-          <span class="nav-icon">✎</span>
-          <span>My Assessments</span>
-        </a>
-
-        <a
-          routerLink="/my-results"
-          routerLinkActive="active"
-          (click)="sidebarOpen = false">
-          <span class="nav-icon">▥</span>
-          <span>My Results</span>
-        </a>
-      }
-
-      @if (authService.hasRole('admin', 'teacher', 'superadmin')) {
-        <a
-          routerLink="/assessments"
-          routerLinkActive="active"
-          (click)="sidebarOpen = false">
-          <span class="nav-icon">▧</span>
-          <span>Assessment Management</span>
-        </a>
-
-        <a
-          routerLink="/assessment-results"
-          routerLinkActive="active"
-          (click)="sidebarOpen = false">
-          <span class="nav-icon">▥</span>
-          <span>Learner Results</span>
-        </a>
-      }
-    </nav>
-
+    <!-- SIDEBAR FOOTER: USER PROFILE CARD & SIGN OUT -->
     <div class="sidebar-bottom">
-      <div class="sidebar-note">
-        <strong>Learning &amp; Development</strong>
-        <span>One workspace for your growth.</span>
+      <div class="sidebar-user-card">
+        <a routerLink="/profile" class="user-card-link" (click)="sidebarOpen = false" title="View Full Profile">
+          <div class="sidebar-avatar">
+            <span>{{ userInitial }}</span>
+            <span class="status-pulse-dot" title="Active"></span>
+          </div>
+          <div class="user-meta">
+            <strong class="user-name">{{ user?.full_name || 'My Account' }}</strong>
+            <span class="user-role-pill" [attr.data-role]="user?.role">
+              {{ roleDisplayName }}
+            </span>
+          </div>
+        </a>
+
+        <button class="btn-sidebar-logout" type="button" (click)="logout()" title="Sign out of account">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+        </button>
       </div>
 
-      <button class="logout-button" type="button" (click)="logout()">
-        <span>Sign out</span>
-        <span aria-hidden="true">↗</span>
-      </button>
+      <div class="sidebar-foot-note">
+        <div class="foot-note-status">
+          <span class="dot-live"></span>
+          <span>Connected to L&amp;K ASE Core</span>
+        </div>
+      </div>
     </div>
   </aside>
 
+  <!-- Mobile Backdrop -->
   @if (sidebarOpen) {
     <button
       class="sidebar-backdrop"
@@ -119,35 +214,165 @@
     </button>
   }
 
+  <!-- MAIN VIEWPORT -->
   <section class="main-section">
+    <!-- TOPBAR -->
     <header class="topbar">
-      <button
-        class="menu-button"
-        type="button"
-        aria-label="Toggle navigation"
-        [attr.aria-expanded]="sidebarOpen"
-        (click)="sidebarOpen = !sidebarOpen">
-        <span>{{ sidebarOpen ? '✕' : '☰' }}</span>
-      </button>
+      <div class="topbar-left">
+        <button
+          class="menu-button"
+          type="button"
+          aria-label="Toggle navigation"
+          [attr.aria-expanded]="sidebarOpen"
+          (click)="sidebarOpen = !sidebarOpen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            @if (sidebarOpen) {
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            } @else {
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            }
+          </svg>
+        </button>
 
-      <div class="topbar-heading">
-        <strong>L&amp;K Workspace</strong>
-        <span>Onboarding &amp; Training Platform</span>
+        <div class="topbar-heading">
+          <div class="heading-row">
+            <strong>L&amp;K Workspace</strong>
+            <span class="badge-env">Enterprise</span>
+          </div>
+          <span class="sub-text">Onboarding &amp; Training Platform</span>
+        </div>
       </div>
 
-      <div class="topbar-profile">
-        <span class="profile-avatar">L</span>
-        <span class="profile-label">My Workspace</span>
+      <!-- TOPBAR RIGHT: PROFILE DROPDOWN -->
+      <div class="topbar-right">
+        <div class="topbar-profile-container">
+          <button
+            class="topbar-profile-btn"
+            type="button"
+            (click)="toggleProfileMenu($event)"
+            [attr.aria-expanded]="profileMenuOpen"
+            title="Account Options">
+            <div class="profile-avatar">
+              <span>{{ userInitial }}</span>
+              <span class="status-dot"></span>
+            </div>
+            <div class="profile-meta">
+              <span class="profile-name">{{ user?.full_name || 'My Account' }}</span>
+              <span class="profile-role-tag">{{ roleDisplayName }}</span>
+            </div>
+            <svg class="chevron-icon" [class.rotated]="profileMenuOpen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <!-- Interactive Profile Dropdown Menu -->
+          @if (profileMenuOpen) {
+            <div class="profile-dropdown-menu" (click)="$event.stopPropagation()">
+              <div class="dropdown-header">
+                <div class="dropdown-avatar">
+                  <span>{{ userInitial }}</span>
+                </div>
+                <div class="dropdown-user-info">
+                  <strong>{{ user?.full_name }}</strong>
+                  <span class="dropdown-email">{{ user?.email }}</span>
+                  <span class="dropdown-role-pill" [attr.data-role]="user?.role">
+                    {{ roleDisplayName }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="dropdown-divider"></div>
+
+              <div class="dropdown-links">
+                <a routerLink="/profile" class="dropdown-item" (click)="closeProfileMenu()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                  </svg>
+                  <div class="item-text">
+                    <strong>My Profile &amp; Security</strong>
+                    <small>Manage credentials &amp; info</small>
+                  </div>
+                </a>
+
+                @if (authService.hasRole('learner')) {
+                  <a routerLink="/my-assessments" class="dropdown-item" (click)="closeProfileMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                      <path d="m9 14 2 2 4-4"></path>
+                    </svg>
+                    <div class="item-text">
+                      <strong>My Assessments</strong>
+                      <small>Take assigned exams</small>
+                    </div>
+                  </a>
+
+                  <a routerLink="/my-results" class="dropdown-item" (click)="closeProfileMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="20" x2="18" y2="10"></line>
+                      <line x1="12" y1="20" x2="12" y2="4"></line>
+                      <line x1="6" y1="20" x2="6" y2="14"></line>
+                      <line x1="2" y1="20" x2="22" y2="20"></line>
+                    </svg>
+                    <div class="item-text">
+                      <strong>My Results &amp; Reports</strong>
+                      <small>View official report cards</small>
+                    </div>
+                  </a>
+                } @else {
+                  <a routerLink="/assessments" class="dropdown-item" (click)="closeProfileMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="4" y1="21" x2="4" y2="14"></line>
+                      <line x1="4" y1="10" x2="4" y2="3"></line>
+                      <line x1="12" y1="21" x2="12" y2="12"></line>
+                      <line x1="12" y1="8" x2="12" y2="3"></line>
+                    </svg>
+                    <div class="item-text">
+                      <strong>Assessment Suite</strong>
+                      <small>Curate tests &amp; questions</small>
+                    </div>
+                  </a>
+                }
+              </div>
+
+              <div class="dropdown-divider"></div>
+
+              <button class="dropdown-item btn-signout-item" type="button" (click)="logout()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+                <div class="item-text">
+                  <strong>Sign Out</strong>
+                  <small>End current session</small>
+                </div>
+              </button>
+            </div>
+          }
+        </div>
       </div>
     </header>
 
+    <!-- CONTENT ROUTER -->
     <main class="page-content">
       <router-outlet />
     </main>
 
+    <!-- FOOTER -->
     <footer class="main-footer">
-      <span>© 2026 L&amp;K Onboarding Platform</span>
-      <span>Learning · Development · Progress</span>
+      <div class="footer-left">
+        <strong>© 2026 L&amp;K Onboarding &amp; Training Platform</strong>
+        <span>Enterprise Learning Management &amp; Skill Verification</span>
+      </div>
+      <div class="footer-right">
+        <span class="badge-status-footer">● Systems Operational</span>
+        <span>Version 2.4.0 (ASE Production)</span>
+      </div>
     </footer>
   </section>
 </div>

@@ -53,6 +53,10 @@ from services.training.app.services.assessment_mock import (
 from services.training.app.services.assessment_logical_reasoning import (
     get_default_logical_reasoning_questions,
 )
+from services.training.app.services.assessment_grammar_technical import (
+    get_default_english_grammar_questions,
+    get_default_technical_questions,
+)
 from services.training.app.services.assessment_report import (
     generate_assessment_report,
 )
@@ -74,6 +78,70 @@ CATEGORIES = {
     "situational_judgement": "Situational Judgement",
     "emotional_intelligence": "Emotional Intelligence",
     "learning_adaptability": "Learning & Adaptability",
+}
+
+VALID_CATEGORIES_BY_TYPE = {
+    "english_grammar": {
+        "english_grammar",
+        "subject_verb_agreement",
+        "tenses_and_aspects",
+        "tenses",
+        "articles",
+        "prepositions",
+        "conjunctions",
+        "voice_and_speech",
+        "active_passive_voice",
+        "direct_indirect_speech",
+        "sentence_correction",
+        "error_detection",
+        "vocabulary",
+        "synonyms_antonyms",
+        "idioms_collocations",
+        "reading_comprehension",
+    },
+    "logical_reasoning": {
+        "logical_reasoning",
+        "number_series",
+        "alphabet_series",
+        "coding_decoding",
+        "blood_relations",
+        "direction_distance",
+        "pattern_recognition",
+        "logical_statements",
+        "odd_one_out",
+        "analogy",
+    },
+    "technical": {
+        "technical",
+        "technical_knowledge",
+        "data_structures",
+        "algorithms",
+        "python_programming",
+        "javascript_web",
+        "databases_sql",
+        "system_design",
+        "git_devops",
+        "networking",
+        "operating_systems",
+    },
+    "programming": {
+        "programming",
+        "programming_logic",
+        "algorithm_understanding",
+        "code_output",
+        "problem_solving",
+        "debugging",
+        "time_complexity",
+        "data_structures",
+    },
+    "psychometric": {
+        "psychometric",
+        "personality_work_preferences",
+        "situational_judgement",
+        "emotional_intelligence",
+        "learning_adaptability",
+        "team_collaboration",
+    },
 }
 
 
@@ -254,6 +322,7 @@ def list_templates(
 
     if role in {
         Role.ADMIN.value,
+        Role.SUPERADMIN.value,
         Role.TEACHER.value,
     }:
         query = select(AssessmentTemplate)
@@ -272,6 +341,30 @@ def list_templates(
     return db.scalars(
         query.order_by(AssessmentTemplate.id.desc())
     ).all()
+
+
+@router.get(
+    "/templates/{template_id}",
+    response_model=AssessmentTemplateResponse,
+)
+def get_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    role = role_of(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Assessment template not found",
+        )
+    if role == Role.LEARNER.value and not template.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail="Assessment template is not active",
+        )
+    return template
 
 
 # --------------------------------------------------
@@ -414,10 +507,15 @@ def start_assessment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if role_of(current_user) != Role.LEARNER.value:
+    if role_of(current_user) not in {
+        Role.LEARNER.value,
+        Role.ADMIN.value,
+        Role.SUPERADMIN.value,
+        Role.TEACHER.value,
+    }:
         raise HTTPException(
             status_code=403,
-            detail="Only learners can start an assessment",
+            detail="You are not authorized to start an assessment",
         )
 
     template = db.get(AssessmentTemplate, payload.template_id)
@@ -428,16 +526,18 @@ def start_assessment(
             detail="Active assessment template not found",
         )
 
-    if template.assessment_type == "logical_reasoning":
-        if template.question_count != 25:
-            raise HTTPException(
-                status_code=400,
-                detail="Logical Reasoning assessment requires 25 questions",
-            )
-    elif template.question_count != 20:
+    # 1. STRICT SERVER-SIDE ENFORCEMENT: A learner can attempt each assigned assessment only ONE TIME.
+    completed_session = db.scalar(
+        select(AssessmentSession).where(
+            AssessmentSession.learner_user_id == current_user.id,
+            AssessmentSession.template_id == template.id,
+            AssessmentSession.status == "completed",
+        ).order_by(AssessmentSession.completed_at.desc())
+    )
+    if completed_session:
         raise HTTPException(
-            status_code=400,
-            detail="This assessment currently requires 20 questions",
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"You have already completed the '{template.name}'. Only one attempt is permitted per learner. You may view your saved results and official report card.",
         )
 
     duration_minutes = get_duration_minutes_for_template(template)
@@ -453,14 +553,19 @@ def start_assessment(
     if existing_session:
         started_utc = to_utc(existing_session.started_at)
         deadline_utc = to_utc(existing_session.expires_at) or (started_utc + timedelta(minutes=duration_minutes))
-        if now_utc() >= deadline_utc:
-            # Stale / expired session! Mark as expired cleanly so learner can start fresh!
+        now = now_utc()
+        rem_sec = int((deadline_utc - now).total_seconds())
+        if rem_sec <= 0:
+            # Stale / expired session! Permanently mark as completed (attempt concluded)
             existing_session.status = "completed"
             existing_session.completed_at = deadline_utc
             db.commit()
-            existing_session = None
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Your allocated examination time for '{template.name}' has expired and this assessment has been concluded.",
+            )
         else:
-            # Active in-progress session exists! Return it so the learner can continue
+            # Active in-progress session exists with good time remaining! Return it so the learner can continue
             q_records = db.scalars(
                 select(AssessmentQuestion)
                 .where(AssessmentQuestion.session_id == existing_session.id)
@@ -480,7 +585,6 @@ def start_assessment(
                 for q in q_records
             ]
 
-            rem_sec = max(0, int((deadline_utc - now_utc()).total_seconds()))
             return AssessmentStartResponse(
                 session_id=existing_session.id,
                 status=existing_session.status,
@@ -494,6 +598,28 @@ def start_assessment(
                 questions=public_questions,
             )
 
+    # 2. Strict Category Validation & Question Sourcing
+    name_lower = (template.name or "").lower()
+    type_lower = (template.assessment_type or "").lower()
+
+    if "grammar" in name_lower or "english" in name_lower or type_lower == "english_grammar":
+        effective_type = "english_grammar"
+    elif "technical" in name_lower or type_lower == "technical":
+        effective_type = "technical"
+    elif "logical" in name_lower or type_lower == "logical_reasoning":
+        effective_type = "logical_reasoning"
+    elif "programming" in name_lower or "coding" in name_lower or type_lower == "programming":
+        effective_type = "programming"
+    else:
+        effective_type = type_lower or "psychometric"
+
+    # Synchronize template.assessment_type in DB if it had diverged
+    if template.assessment_type != effective_type:
+        template.assessment_type = effective_type
+        db.flush()
+
+    valid_categories = VALID_CATEGORIES_BY_TYPE.get(effective_type, set())
+
     bank_questions = db.scalars(
         select(AssessmentQuestionBank)
         .where(
@@ -503,43 +629,73 @@ def start_assessment(
         .order_by(AssessmentQuestionBank.id)
     ).all()
 
-    if template.assessment_type == "logical_reasoning":
-        if len(bank_questions) >= template.question_count:
-            questions = [
-                {
-                    "category": q.category,
-                    "difficulty": getattr(q, "difficulty", "Medium") or "Medium",
-                    "question_type": q.question_type,
-                    "question_text": q.question_text,
-                    "options": q.options,
-                    "scoring_key": q.scoring_key,
-                    "max_score": q.max_score,
-                }
-                for q in bank_questions[:template.question_count]
-            ]
-        else:
-            questions = get_default_logical_reasoning_questions()
-    elif len(bank_questions) >= template.question_count:
-        import random
-        questions = [
-            {
-                "category": q.category,
-                "difficulty": getattr(q, "difficulty", "Medium") or "Medium",
-                "question_type": q.question_type,
-                "question_text": q.question_text,
-                "options": q.options,
-                "scoring_key": q.scoring_key,
-                "max_score": q.max_score,
-            }
-            for q in random.sample(bank_questions, template.question_count)
-        ]
-    elif template.assessment_type == "psychometric":
-        questions = generate_mock_questions()
+    # Filter bank questions: prioritize questions for this template, guarding against cross-domain conflicts
+    invalid_categories = set()
+    for domain, cats in VALID_CATEGORIES_BY_TYPE.items():
+        if domain != effective_type:
+            invalid_categories.update(cats)
+
+    valid_bank = [
+        q for q in bank_questions
+        if q.category not in invalid_categories or q.category in valid_categories or effective_type in q.category
+    ]
+
+    target_count = template.question_count if template.question_count and template.question_count > 0 else (25 if effective_type == "logical_reasoning" else 20)
+
+    # Fetch domain-specific default questions
+    if effective_type == "logical_reasoning":
+        default_pool = get_default_logical_reasoning_questions()
+    elif effective_type == "english_grammar":
+        default_pool = get_default_english_grammar_questions()
+    elif effective_type in {"technical", "programming"}:
+        default_pool = get_default_technical_questions()
     else:
-        raise HTTPException(
-            status_code=409,
-            detail=f"{template.name} needs {template.question_count} active questions before learners can start it.",
-        )
+        default_pool = generate_mock_questions()
+
+    # Prioritize manual questions authored by teacher/admin first
+    questions = []
+    seen_texts = set()
+
+    for q in valid_bank:
+        options = q.options
+        if isinstance(options, str):
+            try:
+                options = json.loads(options)
+            except Exception:
+                options = []
+        scoring_key = q.scoring_key
+        if isinstance(scoring_key, str):
+            try:
+                scoring_key = json.loads(scoring_key)
+            except Exception:
+                scoring_key = {}
+
+        questions.append({
+            "category": q.category,
+            "difficulty": getattr(q, "difficulty", "Medium") or "Medium",
+            "question_type": q.question_type or "multiple_choice",
+            "question_text": q.question_text,
+            "options": options,
+            "scoring_key": scoring_key,
+            "max_score": q.max_score,
+        })
+        seen_texts.add(q.question_text.strip().lower())
+        if len(questions) >= target_count:
+            break
+
+    # Top up remaining questions from default pool if needed
+    if len(questions) < target_count:
+        for def_q in default_pool:
+            if def_q["question_text"].strip().lower() not in seen_texts:
+                questions.append(def_q)
+                seen_texts.add(def_q["question_text"].strip().lower())
+                if len(questions) >= target_count:
+                    break
+
+    # Backend Validation: Strictly assert every single question matches the target category
+    for q in questions:
+        if valid_categories and q["category"] not in valid_categories:
+            q["category"] = effective_type
 
     duration_minutes = get_duration_minutes_for_template(template)
     started_at = datetime.now(timezone.utc)
@@ -634,10 +790,15 @@ def resume_assessment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if role_of(current_user) != Role.LEARNER.value:
+    if role_of(current_user) not in {
+        Role.LEARNER.value,
+        Role.ADMIN.value,
+        Role.SUPERADMIN.value,
+        Role.TEACHER.value,
+    }:
         raise HTTPException(
             status_code=403,
-            detail="Only learners can resume assessments",
+            detail="You are not authorized to resume assessments",
         )
 
     assessment_session = db.scalar(
@@ -663,6 +824,16 @@ def resume_assessment(
     duration_minutes = get_duration_minutes_for_template(template)
     started_utc = to_utc(assessment_session.started_at)
     expires_utc = to_utc(assessment_session.expires_at) or (started_utc + timedelta(minutes=duration_minutes))
+
+    now = now_utc()
+    if expires_utc and now >= expires_utc:
+        assessment_session.status = "completed"
+        assessment_session.completed_at = expires_utc
+        db.commit()
+        raise HTTPException(
+            status_code=409,
+            detail="This assessment has expired and been submitted",
+        )
 
     questions = db.scalars(
         select(AssessmentQuestion)
@@ -733,10 +904,15 @@ def save_assessment_answer(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if role_of(current_user) != Role.LEARNER.value:
+    if role_of(current_user) not in {
+        Role.LEARNER.value,
+        Role.ADMIN.value,
+        Role.SUPERADMIN.value,
+        Role.TEACHER.value,
+    }:
         raise HTTPException(
             status_code=403,
-            detail="Only learners can save assessment answers",
+            detail="You are not authorized to save assessment answers",
         )
 
     assessment_session = db.scalar(
@@ -833,10 +1009,15 @@ def submit_assessment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if role_of(current_user) != Role.LEARNER.value:
+    if role_of(current_user) not in {
+        Role.LEARNER.value,
+        Role.ADMIN.value,
+        Role.SUPERADMIN.value,
+        Role.TEACHER.value,
+    }:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only learners can submit assessments",
+            detail="You are not authorized to submit assessments",
         )
 
     # Lock this learner's session so simultaneous submissions cannot both succeed.
@@ -1190,13 +1371,26 @@ def create_assessment_report(
         )
     )
 
+    ass_type = template.assessment_type if template else "psychometric"
+    temp_name = template.name if template else "Assessment Report"
+
     if existing_report:
+        rep_data = dict(existing_report.report_data or {})
+        if not rep_data.get("report_title"):
+            from services.training.app.services.assessment_report import get_report_title, get_skill_level
+            rep_data["report_title"] = get_report_title(ass_type, temp_name)
+            rep_data["assessment_type"] = ass_type
+            rep_data["template_name"] = temp_name
+            rep_data["skill_level"] = get_skill_level(ass_type, float(rep_data.get("overall_percentage") or 0.0))
+            existing_report.report_data = rep_data
+            db.commit()
+
         return AssessmentReportResponse(
             id=existing_report.id,
             session_id=existing_report.session_id,
             template_id=template.id if template else None,
-            template_name=template.name if template else "Assessment Report",
-            assessment_type=template.assessment_type if template else "psychometric",
+            template_name=temp_name,
+            assessment_type=ass_type,
             learner_user_id=assessment_session.learner_user_id,
             learner_name=user_info.get("full_name"),
             learner_email=user_info.get("email"),
@@ -1225,8 +1419,45 @@ def create_assessment_report(
         for item in scores
     ]
 
+    all_questions = db.scalars(
+        select(AssessmentQuestion).where(AssessmentQuestion.session_id == session_id)
+    ).all()
+    all_responses = db.scalars(
+        select(AssessmentResponse).where(AssessmentResponse.session_id == session_id)
+    ).all()
+
+    total_q = len(all_questions)
+    ans_map = {r.question_id: r for r in all_responses}
+    correct_count = 0
+    incorrect_count = 0
+    unattempted_count = 0
+
+    for q in all_questions:
+        resp = ans_map.get(q.id)
+        if not resp or not resp.answer or not str(resp.answer).strip():
+            unattempted_count += 1
+        elif str(resp.answer).strip().upper() == str(q.scoring_key).strip().upper():
+            correct_count += 1
+        else:
+            incorrect_count += 1
+
+    time_taken_seconds = None
+    if assessment_session.started_at and assessment_session.completed_at:
+        s_utc = to_utc(assessment_session.started_at)
+        c_utc = to_utc(assessment_session.completed_at)
+        time_taken_seconds = max(0, int((c_utc - s_utc).total_seconds()))
+
     try:
-        generated = generate_assessment_report(score_data)
+        generated = generate_assessment_report(
+            category_scores=score_data,
+            assessment_type=ass_type,
+            template_name=temp_name,
+            total_questions=total_q,
+            correct_count=correct_count,
+            incorrect_count=incorrect_count,
+            unattempted_count=unattempted_count,
+            time_taken_seconds=time_taken_seconds,
+        )
 
         report = AssessmentReport(
             session_id=session_id,
@@ -1243,8 +1474,8 @@ def create_assessment_report(
             id=report.id,
             session_id=report.session_id,
             template_id=template.id if template else None,
-            template_name=template.name if template else "Assessment Report",
-            assessment_type=template.assessment_type if template else "psychometric",
+            template_name=temp_name,
+            assessment_type=ass_type,
             learner_user_id=assessment_session.learner_user_id,
             learner_name=user_info.get("full_name"),
             learner_email=user_info.get("email"),
@@ -1359,16 +1590,27 @@ def get_assessment_report(
     )
     user_info = get_users_map([assessment_session.learner_user_id]).get(assessment_session.learner_user_id, {})
 
+    ass_type = template.assessment_type if template else "psychometric"
+    temp_name = template.name if template else "Assessment Report"
+    rep_data = dict(report.report_data or {})
+
+    if not rep_data.get("report_title"):
+        from services.training.app.services.assessment_report import get_report_title, get_skill_level
+        rep_data["report_title"] = get_report_title(ass_type, temp_name)
+        rep_data["assessment_type"] = ass_type
+        rep_data["template_name"] = temp_name
+        rep_data["skill_level"] = get_skill_level(ass_type, float(rep_data.get("overall_percentage") or 0.0))
+
     return AssessmentReportResponse(
         id=report.id,
         session_id=report.session_id,
         template_id=template.id if template else None,
-        template_name=template.name if template else "Assessment Report",
-        assessment_type=template.assessment_type if template else "psychometric",
+        template_name=temp_name,
+        assessment_type=ass_type,
         learner_user_id=assessment_session.learner_user_id,
         learner_name=user_info.get("full_name"),
         learner_email=user_info.get("email"),
-        report_data=report.report_data,
+        report_data=rep_data,
         report_text=report.report_text,
         ai_model=report.ai_model,
         generated_at=report.generated_at,
@@ -1619,14 +1861,49 @@ def list_bank_questions(
     template = db.get(AssessmentTemplate, template_id)
     if template is None:
         raise HTTPException(status_code=404, detail="Assessment template not found")
-    return db.scalars(
+    questions = db.scalars(
         select(AssessmentQuestionBank)
         .where(
             AssessmentQuestionBank.template_id == template_id,
             AssessmentQuestionBank.is_active.is_(True),
         )
-        .order_by(AssessmentQuestionBank.id)
+        .order_by(AssessmentQuestionBank.id.desc())
     ).all()
+    results = []
+    for q in questions:
+        options = q.options
+        if isinstance(options, str):
+            try:
+                options = json.loads(options)
+            except Exception:
+                options = []
+        scoring_key = q.scoring_key
+        if isinstance(scoring_key, str):
+            try:
+                scoring_key = json.loads(scoring_key)
+            except Exception:
+                scoring_key = {}
+        correct_id = None
+        if isinstance(scoring_key, dict):
+            for opt_id, val in scoring_key.items():
+                if val and float(val) > 0:
+                    correct_id = str(opt_id).upper()
+                    break
+        results.append(
+            AssessmentBankQuestionResponse(
+                id=q.id,
+                template_id=q.template_id,
+                category=q.category,
+                difficulty=getattr(q, "difficulty", "Medium") or "Medium",
+                question_type=q.question_type or "multiple_choice",
+                question_text=q.question_text,
+                options=options,
+                max_score=q.max_score,
+                is_active=q.is_active,
+                correct_option_id=correct_id,
+            )
+        )
+    return results
 
 
 @router.post(
@@ -1644,25 +1921,51 @@ def create_bank_question(
     template = db.get(AssessmentTemplate, template_id)
     if template is None:
         raise HTTPException(status_code=404, detail="Assessment template not found")
-    option_ids = [option.id for option in payload.options]
+    option_ids = [str(option.id).strip().upper() for option in payload.options]
     if len(option_ids) != len(set(option_ids)):
-        raise HTTPException(status_code=422, detail="Option IDs must be unique")
-    if payload.correct_option_id not in option_ids:
-        raise HTTPException(status_code=422, detail="Correct option must match one of the options")
+        raise HTTPException(status_code=422, detail="Option IDs must be unique (A, B, C, D)")
+    correct_opt = str(payload.correct_option_id).strip().upper()
+    if correct_opt not in option_ids:
+        raise HTTPException(status_code=422, detail="Correct option must match one of the options (A, B, C, or D)")
+
+    clean_options = [
+        {"id": str(opt.id).strip().upper(), "text": opt.text.strip()}
+        for opt in payload.options
+    ]
+    score_val = float(payload.max_score) if payload.max_score and payload.max_score > 0 else 1.0
+    clean_scoring_key = {opt_id: (score_val if opt_id == correct_opt else 0.0) for opt_id in option_ids}
+
+    cat = payload.category.strip()
+    if not cat:
+        cat = template.assessment_type or "general"
+
     question = AssessmentQuestionBank(
         template_id=template_id,
-        category=payload.category.strip(),
-        question_type=payload.question_type,
+        category=cat,
+        difficulty=payload.difficulty.strip() if hasattr(payload, "difficulty") and payload.difficulty else "Medium",
+        question_type=payload.question_type or "multiple_choice",
         question_text=payload.question_text.strip(),
-        options=[option.model_dump() for option in payload.options],
-        scoring_key={option_id: (payload.max_score if option_id == payload.correct_option_id else 0) for option_id in option_ids},
-        max_score=payload.max_score,
+        options=clean_options,
+        scoring_key=clean_scoring_key,
+        max_score=score_val,
         created_by_user_id=current_user.id,
     )
     db.add(question)
     db.commit()
     db.refresh(question)
-    return question
+
+    return AssessmentBankQuestionResponse(
+        id=question.id,
+        template_id=question.template_id,
+        category=question.category,
+        difficulty=question.difficulty or "Medium",
+        question_type=question.question_type,
+        question_text=question.question_text,
+        options=clean_options,
+        max_score=question.max_score,
+        is_active=question.is_active,
+        correct_option_id=correct_opt,
+    )
 
 
 @router.delete(

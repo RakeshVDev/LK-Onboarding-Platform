@@ -28,16 +28,17 @@ Thumbs.db
 *.dump
 *.bak
 
-# Environment secrets
+# Additional environment and secret protection
 **/.env
 **/.env.*
 !.env.example
 
-# Python cache
+# Python cache protection
 **/__pycache__/
 *.pyc
 
-# Angular cache
+# Angular cache protection
 frontend/.angular/
 
+# Local backup files
 *.backup

@@ -10,7 +10,7 @@ export interface AssessmentCategory {
 export interface AssessmentTemplate {
   id: number;
   name: string;
-  assessment_type: "psychometric" | "technical" | "english_grammar" | "logical_reasoning";
+  assessment_type: "psychometric" | "technical" | "english_grammar" | "logical_reasoning" | "programming";
   description: string | null;
   question_count: number;
   category_config: Record<string, AssessmentCategory>;
@@ -21,7 +21,7 @@ export interface AssessmentTemplate {
 
 export interface CreateAssessmentTemplate {
   name: string;
-  assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning";
+  assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning" | "programming";
   description: string | null;
   question_count: number;
   category_config: Record<string, AssessmentCategory>;
@@ -29,7 +29,7 @@ export interface CreateAssessmentTemplate {
 
 export interface UpdateAssessmentTemplate {
   name?: string;
-  assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning";
+  assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning" | "programming";
   description?: string | null;
   question_count?: number;
   category_config?: Record<string, AssessmentCategory>;
@@ -118,6 +118,13 @@ export interface AssessmentScoresResponse {
 }
 
 export interface AssessmentReportData {
+  report_title?: string;
+  skill_level?: string;
+  total_questions?: number;
+  correct_answers?: number;
+  incorrect_answers?: number;
+  unattempted_questions?: number;
+  time_taken_str?: string;
   summary: string;
   strengths: string[];
   development_areas: string[];
@@ -127,6 +134,7 @@ export interface AssessmentReportData {
   total_score?: number;
   max_score?: number;
   category_scores?: CategoryScore[];
+  [key: string]: any;
 }
 
 export interface AssessmentReport {
@@ -171,6 +179,34 @@ export interface AdminAssessmentResultsResponse {
   unique_learners: number;
 }
 
+export interface BankQuestionOption {
+  id: string;
+  text: string;
+}
+
+export interface BankQuestion {
+  id: number;
+  template_id: number;
+  category: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard' | string;
+  question_type: string;
+  question_text: string;
+  options: BankQuestionOption[];
+  max_score: number;
+  is_active: boolean;
+  correct_option_id?: string;
+}
+
+export interface CreateBankQuestionPayload {
+  category: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard' | string;
+  question_type?: string;
+  question_text: string;
+  options: BankQuestionOption[];
+  correct_option_id: string;
+  max_score?: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -188,6 +224,37 @@ export class AssessmentService {
   getTemplates(): Observable<AssessmentTemplate[]> {
     return this.http.get<AssessmentTemplate[]>(
       `${this.apiUrl}/templates`
+    );
+  }
+
+  getTemplate(id: number): Observable<AssessmentTemplate> {
+    return this.http.get<AssessmentTemplate>(
+      `${this.apiUrl}/templates/${id}`
+    );
+  }
+
+  getBankQuestions(templateId: number): Observable<BankQuestion[]> {
+    return this.http.get<BankQuestion[]>(
+      `${this.apiUrl}/templates/${templateId}/questions`
+    );
+  }
+
+  createBankQuestion(
+    templateId: number,
+    data: CreateBankQuestionPayload
+  ): Observable<BankQuestion> {
+    return this.http.post<BankQuestion>(
+      `${this.apiUrl}/templates/${templateId}/questions`,
+      data
+    );
+  }
+
+  deleteBankQuestion(
+    templateId: number,
+    questionId: number
+  ): Observable<void> {
+    return this.http.delete<void>(
+      `${this.apiUrl}/templates/${templateId}/questions/${questionId}`
     );
   }
 
@@ -223,12 +290,14 @@ export class AssessmentService {
   // ----------------------------------
 
   startAssessment(
-    templateId: number
+    templateId: number,
+    forceNew: boolean = false
   ): Observable<AssessmentStartResponse> {
     return this.http.post<AssessmentStartResponse>(
       `${this.apiUrl}/start`,
       {
-        template_id: templateId
+        template_id: templateId,
+        force_new: forceNew
       }
     );
   }

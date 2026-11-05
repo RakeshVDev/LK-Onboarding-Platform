@@ -83,20 +83,20 @@
           </div>
         </div>
 
-        <div class="milestone-step" [class.step-completed]="learnerResults().length >= 1" [class.step-active]="learnerResults().length === 0">
+        <div class="milestone-step" [class.step-completed]="completedLearnerResults().length >= 1" [class.step-active]="completedLearnerResults().length === 0">
           <div class="step-icon">
-            {{ learnerResults().length >= 1 ? '✓' : '⚡' }}
+            {{ completedLearnerResults().length >= 1 ? '✓' : '⚡' }}
           </div>
           <div class="step-info">
             <span class="step-num">Step 2</span>
             <strong>Skill Assessments</strong>
             <span class="step-status">
-              {{ learnerResults().length }}/4 Completed
+              {{ completedLearnerResults().length }}/4 Completed
             </span>
           </div>
         </div>
 
-        <div class="milestone-step" [class.step-completed]="learnerResults().length >= 4" [class.step-active]="learnerResults().length >= 1 && learnerResults().length < 4">
+        <div class="milestone-step" [class.step-completed]="completedLearnerResults().length >= 4" [class.step-active]="completedLearnerResults().length >= 1 && completedLearnerResults().length < 4">
           <div class="step-icon">▣</div>
           <div class="step-info">
             <span class="step-num">Step 3</span>
@@ -124,7 +124,7 @@
         </div>
         <div class="stat-meta">
           <span class="stat-label">Assessments Completed</span>
-          <strong class="stat-value">{{ learnerResults().length }} of 4</strong>
+          <strong class="stat-value">{{ completedLearnerResults().length }} of 4</strong>
           <span class="stat-trend positive">Mandatory Onboarding</span>
         </div>
       </div>
@@ -136,8 +136,8 @@
         <div class="stat-meta">
           <span class="stat-label">Performance Average</span>
           <strong class="stat-value">
-            @if (learnerResults().length > 0) {
-              {{ learnerResults()[0].overall_percentage }}%
+            @if (completedLearnerResults().length > 0) {
+              {{ learnerAverageScore() }}%
             } @else {
               Pending
             }
@@ -204,9 +204,14 @@
 
             <div class="test-action-wrap">
               @if (getCompletedTest('logical_reasoning'); as completed) {
-                <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-test-action btn-completed">
-                  <span>✓ Completed ({{ completed.overall_percentage }}%) · View Report</span>
-                </a>
+                <div class="completed-actions-row">
+                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
+                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
+                  </a>
+                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
+                    <span>Breakdown &rarr;</span>
+                  </a>
+                </div>
               } @else {
                 <a routerLink="/my-assessments" class="btn-test-action btn-start">
                   <span>Start Assessment &rarr;</span>
@@ -236,9 +241,14 @@
 
             <div class="test-action-wrap">
               @if (getCompletedTest('technical'); as completed) {
-                <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-test-action btn-completed">
-                  <span>✓ Completed ({{ completed.overall_percentage }}%) · View Report</span>
-                </a>
+                <div class="completed-actions-row">
+                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
+                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
+                  </a>
+                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
+                    <span>Breakdown &rarr;</span>
+                  </a>
+                </div>
               } @else {
                 <a routerLink="/my-assessments" class="btn-test-action btn-start">
                   <span>Start Assessment &rarr;</span>
@@ -268,9 +278,14 @@
 
             <div class="test-action-wrap">
               @if (getCompletedTest('english_grammar'); as completed) {
-                <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-test-action btn-completed">
-                  <span>✓ Completed ({{ completed.overall_percentage }}%) · View Report</span>
-                </a>
+                <div class="completed-actions-row">
+                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
+                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
+                  </a>
+                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
+                    <span>Breakdown &rarr;</span>
+                  </a>
+                </div>
               } @else {
                 <a routerLink="/my-assessments" class="btn-test-action btn-start">
                   <span>Start Assessment &rarr;</span>
@@ -300,9 +315,14 @@
 
             <div class="test-action-wrap">
               @if (getCompletedTest('psychometric'); as completed) {
-                <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-test-action btn-completed">
-                  <span>✓ Completed ({{ completed.overall_percentage }}%) · View Report</span>
-                </a>
+                <div class="completed-actions-row">
+                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
+                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
+                  </a>
+                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
+                    <span>Breakdown &rarr;</span>
+                  </a>
+                </div>
               } @else {
                 <a routerLink="/my-assessments" class="btn-test-action btn-start">
                   <span>Start Assessment &rarr;</span>

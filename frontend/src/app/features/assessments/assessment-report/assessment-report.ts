@@ -6,7 +6,7 @@ import {
 } from '@angular/core';
 
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
 
@@ -19,7 +19,7 @@ import {
 @Component({
   selector: 'app-assessment-report',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   templateUrl: './assessment-report.html',
   styleUrl: './assessment-report.scss'
 })
@@ -72,6 +72,47 @@ export class AssessmentReportPage implements OnInit {
     });
   }
 
+  get reportTitle(): string {
+    if (this.report?.report_data?.report_title) {
+      return this.report.report_data.report_title;
+    }
+    const type = (this.report?.assessment_type || '').toLowerCase();
+    if (type === 'english_grammar') return 'English Grammar Assessment Report';
+    if (type === 'logical_reasoning') return 'Logical Reasoning Assessment Report';
+    if (type === 'technical') return 'Technical Assessment Report';
+    if (type === 'programming') return 'Programming Assessment Report';
+    if (type === 'psychometric') return 'Psychometric Assessment Report';
+    return this.report?.template_name ? `${this.report.template_name} Report` : 'Assessment Performance Report';
+  }
+
+  get skillLevel(): string {
+    return this.report?.report_data?.skill_level || 'Evaluated';
+  }
+
+  get totalQuestions(): number | null {
+    return this.report?.report_data?.total_questions ?? null;
+  }
+
+  get correctAnswers(): number | null {
+    return this.report?.report_data?.correct_answers ?? null;
+  }
+
+  get incorrectAnswers(): number | null {
+    return this.report?.report_data?.incorrect_answers ?? null;
+  }
+
+  get unattemptedQuestions(): number | null {
+    return this.report?.report_data?.unattempted_questions ?? null;
+  }
+
+  get timeTakenStr(): string | null {
+    return this.report?.report_data?.time_taken_str ?? null;
+  }
+
+  get isPsychometric(): boolean {
+    return this.report?.assessment_type === 'psychometric';
+  }
+
   get categoryEntries(): [string, string][] {
     return Object.entries(
       this.report?.report_data?.category_interpretations ?? {}
@@ -95,7 +136,46 @@ export class AssessmentReportPage implements OnInit {
   }
 
   categoryLabel(category: string): string {
-    return category
+    const labels: Record<string, string> = {
+      english_grammar: 'English Grammar & Syntax',
+      subject_verb_agreement: 'Subject-Verb Agreement',
+      tenses_and_aspects: 'Tenses & Aspects',
+      tenses: 'Verb Tenses',
+      articles: 'Articles & Determiners',
+      prepositions: 'Prepositions & Phrasal Verbs',
+      conjunctions: 'Conjunctions & Connectors',
+      voice_and_speech: 'Active/Passive Voice & Speech',
+      sentence_correction: 'Sentence Correction & Syntax',
+      error_detection: 'Error Detection & Spotting',
+      vocabulary: 'Corporate Vocabulary & Usage',
+      idioms_collocations: 'Idioms & Professional Collocations',
+      reading_comprehension: 'Reading Comprehension & Analysis',
+      logical_reasoning: 'Logical Reasoning & Deduction',
+      number_series: 'Number Series & Sequences',
+      alphabet_series: 'Alphabet Series & Letter Patterns',
+      coding_decoding: 'Coding-Decoding & Cipher Logic',
+      blood_relations: 'Family Trees & Blood Relations',
+      direction_distance: 'Direction & Spatial Distance',
+      pattern_recognition: 'Pattern Recognition & Matrices',
+      logical_statements: 'Logical Statements & Assumptions',
+      odd_one_out: 'Classification & Odd One Out',
+      analogy: 'Analogy & Semantic Relationships',
+      technical: 'Core Technical Engineering',
+      technical_knowledge: 'Fundamentals & Architecture',
+      data_structures: 'Data Structures & Efficiency',
+      algorithms: 'Algorithms & Complexity',
+      python_programming: 'Python Programming',
+      javascript_web: 'JavaScript, TypeScript & Web',
+      databases_sql: 'Databases & SQL Queries',
+      system_design: 'System Design & Distributed Systems',
+      git_devops: 'Git, CI/CD & DevOps Practices',
+      personality_work_preferences: 'Personality & Work Preferences',
+      situational_judgement: 'Situational Judgement',
+      emotional_intelligence: 'Emotional Intelligence',
+      learning_adaptability: 'Learning Agility & Adaptability',
+    };
+
+    return labels[category] || category
       .replaceAll('_', ' ')
       .replace(/\b\w/g, char => char.toUpperCase());
   }

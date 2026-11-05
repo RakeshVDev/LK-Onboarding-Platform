@@ -119,6 +119,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
         this.isAlreadySubmitted = true;
         this.loading = false;
         this.cdr.detectChanges();
+        void this.router.navigate(['/assessments/results', this.sessionId]);
         return;
       }
 
@@ -151,6 +152,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
         this.isAlreadySubmitted = true;
         this.loading = false;
         this.cdr.detectChanges();
+        void this.router.navigate(['/assessments/results', this.sessionId]);
         return;
       }
 

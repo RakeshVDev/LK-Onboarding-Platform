@@ -70,6 +70,7 @@ class AssessmentQuestionResponse(BaseModel):
 
 class AssessmentStartRequest(BaseModel):
     template_id: int = Field(gt=0)
+    force_new: bool = False
 
 
 class AssessmentStartResponse(BaseModel):
@@ -307,3 +308,4 @@ class AssessmentBankQuestionResponse(BaseModel):
     options: list[AssessmentOptionResponse]
     max_score: float
     is_active: bool
+    correct_option_id: str | None = None
