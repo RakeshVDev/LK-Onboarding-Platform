@@ -87,6 +87,32 @@ export class AssessmentManagement implements OnInit {
     void this.router.navigate(['/assessments/edit', id]);
   }
 
+  manageQuestions(id: number): void {
+    void this.router.navigate(['/assessments/edit', id], {
+      queryParams: { tab: 'questions' }
+    });
+  }
+
+  getTypeLabel(type?: string): string {
+    switch (type) {
+      case 'logical_reasoning': return 'Logical Reasoning';
+      case 'english_grammar': return 'English Grammar';
+      case 'technical': return 'Technical Skills';
+      case 'psychometric': return 'Psychometric Profile';
+      default: return 'General Assessment';
+    }
+  }
+
+  getTypeIcon(type?: string): string {
+    switch (type) {
+      case 'logical_reasoning': return '⚡';
+      case 'english_grammar': return '✍';
+      case 'technical': return '💻';
+      case 'psychometric': return '✦';
+      default: return '▤';
+    }
+  }
+
   toggleStatus(template: AssessmentTemplate): void {
 
     this.errorMessage = '';

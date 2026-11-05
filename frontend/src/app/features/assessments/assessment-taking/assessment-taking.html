@@ -6,6 +6,23 @@
       <h3>Initializing Examination Session</h3>
       <p>Synchronizing questions and countdown timer from secure server...</p>
     </div>
+  } @else if (isAlreadySubmitted) {
+    <div class="exam-completed-card">
+      <div class="completed-icon-badge">✓</div>
+      <h2>Assessment Already Completed</h2>
+      <p>This assessment session (#{{ sessionId }}) has already been completed and submitted.</p>
+      <div class="completed-actions">
+        <a [routerLink]="['/assessments/report', sessionId]" class="btn-primary">
+          View Official Report Card →
+        </a>
+        <a [routerLink]="['/assessments/results', sessionId]" class="btn-secondary">
+          View Detailed Breakdown
+        </a>
+        <a routerLink="/my-assessments" class="btn-ghost">
+          Back to Available Assessments
+        </a>
+      </div>
+    </div>
   } @else if (questions.length > 0) {
 
     <!-- Top Examination Header -->
