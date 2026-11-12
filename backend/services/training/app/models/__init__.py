@@ -7,6 +7,7 @@ from services.training.app.models.entities import (
     CourseEnrollment,
     Department,
     LearningMaterial,
+    StudentDepartmentRequest,
     SyllabusItem,
     TimetableSession,
 )
@@ -19,10 +20,12 @@ from services.training.app.models.assessment import (
     AssessmentScore,
     AssessmentReport,
     AssessmentQuestionBank,
+    AssessmentAssignment,
 )
 
 __all__ = [
     "Department",
+    "StudentDepartmentRequest",
     "Cohort",
     "CohortMember",
     "Course",
@@ -38,4 +41,5 @@ __all__ = [
     "AssessmentScore",
     "AssessmentReport",
     "AssessmentQuestionBank",
+    "AssessmentAssignment",
 ]

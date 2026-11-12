@@ -74,6 +74,35 @@
   </header>
 
   <!-- ========================================================================= -->
+  <!-- LEARNER ASSIGNED DEPARTMENT STATUS BANNER                                 -->
+  <!-- ========================================================================= -->
+  @if (viewMode() === 'learner' && isLearnerApproved()) {
+    <div class="learner-department-banner">
+      <div class="dept-badge-col">
+        <span class="dept-badge-pill">
+          <span class="dept-pill-icon">🏢</span>
+          <span class="dept-pill-text">Assigned Department: <strong>{{ approvedDepartmentName() }}</strong></span>
+          <span class="dept-verified-tag">✓ Verified &amp; Locked</span>
+        </span>
+        @if (hasPendingChangeRequest()) {
+          <span class="pending-change-indicator">
+            ⏳ Transfer Request Pending: <strong>{{ pendingTargetDepartmentName() }}</strong> (Under Review)
+          </span>
+        }
+      </div>
+      <div class="dept-actions-col">
+        <button
+          type="button"
+          class="btn-request-dept-change"
+          (click)="openChangeDepartmentModal()"
+          [disabled]="hasPendingChangeRequest()">
+          🔄 Request Department Change
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- ========================================================================= -->
   <!-- TEACHER WORKSPACE VIEW (MATCHING USER SCREENSHOTS)                        -->
   <!-- ========================================================================= -->
   @if (viewMode() === 'teacher') {
@@ -228,13 +257,103 @@
           </div>
         </div>
 
+        <!-- Department Filter Pills Bar -->
+        <div class="dept-filter-bar">
+          <span class="dept-filter-lbl">Filter by Department:</span>
+          <button
+            type="button"
+            class="dept-pill-btn"
+            [class.active]="teacherDeptFilter() === 'ALL'"
+            (click)="teacherDeptFilter.set('ALL')">
+            All Departments
+          </button>
+          @for (d of availableDepartments(); track d.id) {
+            <button
+              type="button"
+              class="dept-pill-btn"
+              [class.active]="teacherDeptFilter() === d.name"
+              (click)="teacherDeptFilter.set(d.name)">
+              {{ d.name }}
+            </button>
+          }
+        </div>
+
+        <!-- Pending Department Allocation & Change Requests Approval Queue -->
+        @if (pendingTrackRequests().length > 0) {
+          <div class="teacher-pending-requests-card">
+            <div class="pending-card-header">
+              <div class="pending-header-title">
+                <span class="pending-card-icon">⚡</span>
+                <div>
+                  <h3>Pending Department Approvals</h3>
+                  <p>Learners waiting for technical department assignment or transfer approval.</p>
+                </div>
+              </div>
+              <span class="pending-counter-badge">{{ pendingTrackRequests().length }} Action Required</span>
+            </div>
+
+            <div class="pending-requests-table">
+              @for (req of pendingTrackRequests(); track req.id) {
+                <div class="pending-request-row">
+                  <div class="req-user-info">
+                    <span class="req-avatar">👤</span>
+                    <div>
+                      <strong>{{ req.user_name || 'Learner #' + req.user_id }}</strong>
+                      <span class="req-user-email">{{ req.user_email }}</span>
+                    </div>
+                  </div>
+
+                  <div class="req-track-info">
+                    @if (req.is_change_request) {
+                      <span class="req-type-pill transfer">Department Change</span>
+                      <div class="transfer-flow">
+                        <span class="old-dept">{{ req.current_approved_department_name }}</span>
+                        <span class="flow-arrow">➔</span>
+                        <strong class="new-dept">{{ req.department_name }}</strong>
+                      </div>
+                    } @else {
+                      <span class="req-type-pill initial">Initial Allocation</span>
+                      <strong class="new-dept">{{ req.department_name }} Engineering</strong>
+                    }
+                    @if (req.notes) {
+                      <div class="req-notes-snippet" [title]="req.notes">
+                        <em>&ldquo;{{ req.notes }}&rdquo;</em>
+                      </div>
+                    }
+                  </div>
+
+                  <div class="req-actions">
+                    <button
+                      type="button"
+                      class="btn-approve-track"
+                      (click)="approveTrackRequest(req)"
+                      [disabled]="isReviewingRequest()">
+                      ✓ Approve
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-reject-track"
+                      (click)="rejectTrackRequest(req)"
+                      [disabled]="isReviewingRequest()">
+                      ✕ Reject
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
         <!-- Batches Grid matching Screenshot 1 (Arrow 03) -->
         <div class="batches-cards-grid">
           @for (batch of filteredBatches(); track batch.id) {
             <article class="batch-card" [class.batch-active]="batch.id === cohortData().activeBatchId">
               <div class="batch-card-header">
                 <div>
-                  <h3>{{ batch.name }}</h3>
+                  <div class="batch-title-row">
+                    <h3>{{ batch.name }}</h3>
+                    <span class="batch-dept-tag">{{ batch.departmentName || 'All / Common' }}</span>
+                  </div>
                   <p class="batch-track-subtitle">{{ batch.track }}</p>
                 </div>
                 <div class="learner-count-badge">
@@ -318,6 +437,9 @@
                     <div class="chapter-left">
                       <span class="drag-handle">⠿</span>
                       <strong class="chap-title">{{ chap.title }}</strong>
+                      @if (chap.departmentName) {
+                        <span class="chap-dept-badge">{{ chap.departmentName }}</span>
+                      }
                       <span class="lesson-count-tag">{{ chap.lessons.length }} lessons</span>
                     </div>
 
@@ -1529,7 +1651,89 @@
   <!-- LEARNER PREVIEW VIEW (FULL 10-FEATURE EXPERIENCE)                         -->
   <!-- ========================================================================= -->
   @if (viewMode() === 'learner') {
-    <!-- 10-Feature Tabbed Navigation Bar -->
+    @if (!isLearnerApproved()) {
+      <section class="learner-locked-track-section">
+        @if (departmentAllocationStatus() === 'pending') {
+          <div class="locked-card pending-card">
+            <div class="locked-icon-bubble">⏳</div>
+            <h2>Department Allocation Under Review</h2>
+            <p class="locked-subtitle">
+              Your technical department preference for <strong>{{ requestedDepartmentName() }}</strong> has been submitted and is currently awaiting approval from your instructor or super administrator.
+            </p>
+
+            <div class="locked-status-box">
+              <div class="status-row">
+                <span class="status-label">Requested Track:</span>
+                <span class="status-val highlight">{{ requestedDepartmentName() }} Engineering Track</span>
+              </div>
+              <div class="status-row">
+                <span class="status-label">Approval Status:</span>
+                <span class="status-badge-pending">Pending Review</span>
+              </div>
+              <div class="status-row">
+                <span class="status-label">Curriculum &amp; Resources:</span>
+                <span class="status-val text-muted">All cohort chapters, live sessions, assignments, and study materials unlock immediately once approved.</span>
+              </div>
+            </div>
+
+            <div class="locked-hint-box">
+              <span class="hint-icon">💡</span>
+              <p>Instructors review and allocate departments based on your initial psychometric &amp; technical assessment results. You will receive immediate dashboard access once reviewed.</p>
+            </div>
+          </div>
+        } @else {
+          <div class="locked-card selection-card">
+            <div class="locked-icon-bubble">🎯</div>
+            <h2>Select Your Engineering Department</h2>
+            <p class="locked-subtitle">
+              Congratulations on completing your foundational onboarding assessments! Please choose the technical department and tech stack you are most interested in and comfortable with.
+            </p>
+
+            <div class="track-select-form">
+              <div class="form-group">
+                <label for="initialTrackSelect">Choose Your Engineering Department Track <span class="required">*</span></label>
+                <select
+                  id="initialTrackSelect"
+                  class="form-select track-dropdown"
+                  [(ngModel)]="selectedInitialDeptId">
+                  <option [ngValue]="null" disabled>-- Select a Technical Department --</option>
+                  @for (dept of availableDepartments(); track dept.id) {
+                    @if (dept.name !== 'All / Common') {
+                      <option [value]="dept.id">{{ dept.name }} Engineering Track</option>
+                    }
+                  }
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="initialTrackNotes">Candidate Background &amp; Motivation (Optional)</label>
+                <textarea
+                  id="initialTrackNotes"
+                  class="form-textarea"
+                  rows="3"
+                  [(ngModel)]="initialTrackNotes"
+                  placeholder="Share prior experience with this tech stack, projects, or why you want to join this department..."></textarea>
+              </div>
+
+              <div class="form-actions">
+                <button
+                  type="button"
+                  class="btn-submit-track"
+                  (click)="submitInitialTrackPreference()"
+                  [disabled]="!selectedInitialDeptId || isSubmittingInitialTrack()">
+                  @if (isSubmittingInitialTrack()) {
+                    <span>Submitting Track Request...</span>
+                  } @else {
+                    <span>Submit Department Request for Approval →</span>
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+      </section>
+    } @else {
+      <!-- 10-Feature Tabbed Navigation Bar -->
     <nav class="cohort-tab-bar" aria-label="Cohort Features">
       <button
         type="button"
@@ -1557,7 +1761,7 @@
         (click)="setTab('materials')">
         <span class="tab-icon">📚</span>
         <span class="tab-title">Learning Materials</span>
-        <span class="tab-badge-count">{{ materials().length }}</span>
+        <span class="tab-badge-count">{{ filteredMaterials().length }}</span>
       </button>
 
       <button
@@ -1854,7 +2058,7 @@
         </div>
 
         <div class="assignments-list">
-          @for (asg of assignments(); track asg.id) {
+          @for (asg of filteredAssignments(); track asg.id) {
             <article class="assignment-card" [ngClass]="asg.status">
               <div class="assignment-header">
                 <div>
@@ -2033,7 +2237,7 @@
         </div>
 
         <div class="quizzes-grid">
-          @for (quiz of quizzes(); track quiz.id) {
+          @for (quiz of filteredQuizzes(); track quiz.id) {
             <article class="quiz-card" [ngClass]="quiz.status">
               <div class="quiz-header">
                 <span class="quiz-module-tag">{{ quiz.module }}</span>
@@ -2439,6 +2643,7 @@
       </section>
     }
   }
+}
 
   <!-- ========================================================================= -->
   <!-- SHARED TEMPLATE: COHORT DETAILS (SYNCED FOR TEACHER & LEARNER)             -->
@@ -2520,7 +2725,7 @@
             </div>
           </div>
           <div class="trainings-summary-pills">
-            <span class="pill-total-sessions">{{ sessions().length }} Total Sessions</span>
+            <span class="pill-total-sessions">{{ overviewSessions().length }} Total Sessions</span>
             @if (currentLiveSession()) {
               <span class="pill-live-badge"><span class="pulse-dot-live"></span> 1 Session Live Now</span>
             }
@@ -2532,7 +2737,7 @@
           </div>
         </div>
 
-        @if (sessions().length === 0) {
+        @if (overviewSessions().length === 0) {
           <div class="empty-cohort-trainings">
             <span class="empty-icon">📅</span>
             <h4>No Training Sessions Scheduled Yet</h4>
@@ -2545,7 +2750,7 @@
           </div>
         } @else {
           <div class="cohort-trainings-list">
-            @for (sess of sessions(); track sess.id) {
+            @for (sess of overviewSessions(); track sess.id) {
               <div class="cohort-training-row" [class.is-live-row]="sess.status === 'today'">
                 <!-- Left: Status & Timing Indicator -->
                 <div class="training-time-col">
@@ -2743,6 +2948,19 @@
               class="form-input"
               [(ngModel)]="newBatchName"
               placeholder="e.g. ASE Cloud & Microservices Batch 2026-Q2" />
+          </div>
+
+          <div class="form-group">
+            <label for="batchDepartment">Department Track <span class="required">*</span></label>
+            <select
+              id="batchDepartment"
+              class="form-select"
+              [ngModel]="newBatchDepartmentName"
+              (ngModelChange)="onBatchDeptSelect($event)">
+              @for (dept of availableDepartments(); track dept.id) {
+                <option [value]="dept.name">{{ dept.name }}</option>
+              }
+            </select>
           </div>
 
           <div class="form-group">
@@ -3599,6 +3817,74 @@
           }
           <button type="button" class="btn-primary" (click)="activeWatchingVideo.set(null)">
             Done Watching
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+  <!-- ========================================================================= -->
+  <!-- LEARNER MODAL: REQUEST DEPARTMENT CHANGE                                  -->
+  <!-- ========================================================================= -->
+  @if (isChangeDeptModalOpen()) {
+    <div class="modal-backdrop" (click)="closeChangeDepartmentModal()">
+      <div class="modal-window change-dept-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <span class="modal-eyebrow">LEARNER PROFILE ACTION</span>
+            <h2>Request Department Change</h2>
+          </div>
+          <button type="button" class="btn-modal-close" (click)="closeChangeDepartmentModal()">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="current-dept-callout">
+            <span class="callout-icon">🏢</span>
+            <div>
+              <span class="callout-lbl">Currently Approved Department:</span>
+              <strong class="curr-dept-name">{{ approvedDepartmentName() }}</strong>
+            </div>
+          </div>
+
+          <p class="modal-intro-text">
+            To maintain curriculum integrity and cohort pacing, department reassignments require review and approval by an instructor or administrator. While pending, you retain access to your current department.
+          </p>
+
+          <div class="form-group">
+            <label for="targetDeptSelect">Select New Target Department <span class="required">*</span></label>
+            <select
+              id="targetDeptSelect"
+              class="form-select"
+              [(ngModel)]="selectedTargetDeptId">
+              <option [ngValue]="null" disabled>-- Select New Department --</option>
+              @for (dept of availableTargetDepartments(); track dept.id) {
+                <option [value]="dept.id">{{ dept.name }} Engineering Track</option>
+              }
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="changeDeptReason">Reason for Department Transfer Request <span class="required">*</span></label>
+            <textarea
+              id="changeDeptReason"
+              class="form-textarea"
+              rows="3"
+              [(ngModel)]="changeDeptNotes"
+              placeholder="Explain why you wish to transition to this department..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" (click)="closeChangeDepartmentModal()">Cancel</button>
+          <button
+            type="button"
+            class="btn-primary"
+            (click)="submitDepartmentChangeRequest()"
+            [disabled]="!selectedTargetDeptId || !changeDeptNotes.trim() || isSubmittingChangeDept()">
+            @if (isSubmittingChangeDept()) {
+              <span>Submitting Request...</span>
+            } @else {
+              <span>Submit Request for Approval →</span>
+            }
           </button>
         </div>
       </div>

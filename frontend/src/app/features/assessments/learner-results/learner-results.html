@@ -16,13 +16,13 @@
     </button>
   </header>
 
-  @if (errorMessage) {
+  @if (errorMessage()) {
     <div class="error-banner" role="alert">
-      {{ errorMessage }}
+      {{ errorMessage() }}
     </div>
   }
 
-  @if (loading) {
+  @if (loading()) {
     <div class="state-card loading-state">
       <span class="spinner"></span>
       <strong>Loading your assessment results...</strong>
@@ -30,7 +30,7 @@
     </div>
   }
 
-  @if (!loading) {
+  @if (!loading()) {
 
     <!-- In-progress banner if any -->
     @if (inProgressResults.length > 0) {
@@ -90,7 +90,7 @@
         <div class="empty-icon">▥</div>
         <h2>No assessment results yet</h2>
         <p>
-          You haven't completed any assessments yet. Take your first onboarding assessment
+          You haven't completed any assessments yet. Take your first assigned assessment
           to generate your score breakdown and developmental report card.
         </p>
         <button class="btn-primary" type="button" (click)="goToAssessments()">

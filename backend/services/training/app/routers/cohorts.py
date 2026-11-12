@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from services.training.app.db.session import SessionLocal
-from services.training.app.models.entities import Cohort, CohortMember, Department
+from services.training.app.models.entities import Cohort, CohortMember, Department, StudentDepartmentRequest
 from services.training.app.schemas.cohort import (
     CohortCreate,
     CohortMemberCreate,
@@ -14,7 +14,7 @@ from services.training.app.schemas.cohort import (
     CohortUpdate,
 )
 
-from services.identity.app.core.roles import Permission
+from services.identity.app.core.roles import Permission, Role
 from services.identity.app.dependencies.auth import (
     get_current_user,
     require_permissions,
@@ -32,13 +32,47 @@ def get_db():
 
 
 def validate_department(db: Session, department_id: int):
-    if not db.get(Department, department_id):
+    dept = db.get(Department, department_id)
+    if not dept:
         raise HTTPException(status_code=404, detail="Department not found")
+    return dept
+
+
+def get_learner_approved_dept_ids(db: Session, user_id: int) -> set[int] | None:
+    """
+    Returns set of allowed department IDs (the student's approved department + All/Common department).
+    If the learner has no approved department allocation, returns None.
+    """
+    approved_req = db.scalar(
+        select(StudentDepartmentRequest).where(
+            StudentDepartmentRequest.user_id == user_id,
+            StudentDepartmentRequest.status == "approved",
+        )
+    )
+    if not approved_req:
+        return None
+
+    allowed_ids = {approved_req.department_id}
+    common_dept = db.scalar(
+        select(Department).where(
+            Department.name.in_(["All / Common", "All/Common", "Common"])
+        )
+    )
+    if common_dept:
+        allowed_ids.add(common_dept.id)
+
+    return allowed_ids
 
 
 @router.post("", response_model=CohortResponse, status_code=status.HTTP_201_CREATED)
-def create_cohort(payload: CohortCreate, db: Session = Depends(get_db)):
-    validate_department(db, payload.department_id)
+def create_cohort(
+    payload: CohortCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(
+        require_permissions(Permission.MANAGE_COHORTS)
+    ),
+):
+    dept = validate_department(db, payload.department_id)
 
     if (
         payload.start_date
@@ -66,26 +100,88 @@ def create_cohort(payload: CohortCreate, db: Session = Depends(get_db)):
     db.add(cohort)
     db.commit()
     db.refresh(cohort)
-    return cohort
+    return CohortResponse(
+        id=cohort.id,
+        department_id=cohort.department_id,
+        department_name=dept.name,
+        name=cohort.name,
+        start_date=cohort.start_date,
+        end_date=cohort.end_date,
+        status=cohort.status,
+    )
 
 
 @router.get("", response_model=list[CohortResponse])
 def list_cohorts(
     department_id: int | None = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     query = select(Cohort).order_by(Cohort.id)
-    if department_id is not None:
+
+    if current_user.role == Role.LEARNER:
+        allowed_dept_ids = get_learner_approved_dept_ids(db, current_user.id)
+        if not allowed_dept_ids:
+            return []
+        query = query.where(Cohort.department_id.in_(allowed_dept_ids))
+    elif department_id is not None:
         query = query.where(Cohort.department_id == department_id)
-    return db.scalars(query).all()
+
+    cohorts = db.scalars(query).all()
+    if not cohorts:
+        return []
+
+    dept_ids = {c.department_id for c in cohorts}
+    departments = db.scalars(select(Department).where(Department.id.in_(dept_ids))).all()
+    dept_map = {d.id: d.name for d in departments}
+
+    return [
+        CohortResponse(
+            id=c.id,
+            department_id=c.department_id,
+            department_name=dept_map.get(c.department_id),
+            name=c.name,
+            start_date=c.start_date,
+            end_date=c.end_date,
+            status=c.status,
+        )
+        for c in cohorts
+    ]
 
 
 @router.get("/{cohort_id}", response_model=CohortResponse)
-def get_cohort(cohort_id: int, db: Session = Depends(get_db)):
+def get_cohort(
+    cohort_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     cohort = db.get(Cohort, cohort_id)
     if not cohort:
         raise HTTPException(status_code=404, detail="Cohort not found")
-    return cohort
+
+    if current_user.role == Role.LEARNER:
+        allowed_dept_ids = get_learner_approved_dept_ids(db, current_user.id)
+        if not allowed_dept_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your department allocation is pending instructor/admin approval. Cohorts will unlock once approved.",
+            )
+        if cohort.department_id not in allowed_dept_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to cohorts outside your approved department.",
+            )
+
+    dept = db.get(Department, cohort.department_id)
+    return CohortResponse(
+        id=cohort.id,
+        department_id=cohort.department_id,
+        department_name=dept.name if dept else None,
+        name=cohort.name,
+        start_date=cohort.start_date,
+        end_date=cohort.end_date,
+        status=cohort.status,
+    )
 
 
 @router.patch("/{cohort_id}", response_model=CohortResponse)
@@ -93,6 +189,9 @@ def update_cohort(
     cohort_id: int,
     payload: CohortUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(
+        require_permissions(Permission.MANAGE_COHORTS)
+    ),
 ):
     cohort = db.get(Cohort, cohort_id)
     if not cohort:
@@ -131,7 +230,16 @@ def update_cohort(
 
     db.commit()
     db.refresh(cohort)
-    return cohort
+    dept = db.get(Department, cohort.department_id)
+    return CohortResponse(
+        id=cohort.id,
+        department_id=cohort.department_id,
+        department_name=dept.name if dept else None,
+        name=cohort.name,
+        start_date=cohort.start_date,
+        end_date=cohort.end_date,
+        status=cohort.status,
+    )
 
 
 @router.delete("/{cohort_id}", status_code=status.HTTP_204_NO_CONTENT)

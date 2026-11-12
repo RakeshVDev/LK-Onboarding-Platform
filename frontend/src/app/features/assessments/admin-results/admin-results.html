@@ -59,9 +59,9 @@
     </div>
   </div>
 
-  @if (errorMessage) {
+  @if (errorMessage()) {
     <div class="error-banner" role="alert">
-      {{ errorMessage }}
+      {{ errorMessage() }}
     </div>
   }
 
@@ -105,14 +105,14 @@
   </div>
 
   <!-- Results Table / List -->
-  @if (loading) {
+  @if (loading()) {
     <div class="loading-state">
       <span class="spinner"></span>
       <p>Loading learner results...</p>
     </div>
   }
 
-  @if (!loading && results.length === 0) {
+  @if (!loading() && results().length === 0) {
     <div class="empty-state">
       <div class="empty-icon">▥</div>
       <h3>No assessment results found</h3>
@@ -129,7 +129,7 @@
     </div>
   }
 
-  @if (!loading && results.length > 0) {
+  @if (!loading() && results().length > 0) {
     <div class="table-container">
       <table class="results-table">
         <thead>
@@ -137,6 +137,7 @@
             <th>Learner</th>
             <th>Assessment</th>
             <th>Status</th>
+            <th>Proctoring</th>
             <th>Score</th>
             <th>Performance</th>
             <th>Date</th>
@@ -144,7 +145,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (item of results; track item.session_id) {
+          @for (item of results(); track item.session_id) {
             <tr>
               <!-- Learner -->
               <td>
@@ -175,6 +176,26 @@
                   [class.status-progress]="item.status === 'in_progress'">
                   {{ item.status === 'completed' ? 'Completed' : 'In Progress' }}
                 </span>
+              </td>
+
+              <!-- Proctoring / Violations -->
+              <td>
+                @if (item.tab_switch_count === 0 || !item.tab_switch_count) {
+                  <span class="proctor-pill proctor-clean">
+                    <span class="proctor-dot dot-clean"></span>
+                    Clean (0)
+                  </span>
+                } @else if (item.tab_switch_count < 3) {
+                  <span class="proctor-pill proctor-warning">
+                    <span class="proctor-dot dot-warning"></span>
+                    {{ item.tab_switch_count }} {{ item.tab_switch_count === 1 ? 'Switch' : 'Switches' }}
+                  </span>
+                } @else {
+                  <span class="proctor-pill proctor-danger">
+                    <span class="proctor-dot dot-danger"></span>
+                    {{ item.tab_switch_count }} Switches (Terminated)
+                  </span>
+                }
               </td>
 
               <!-- Score -->

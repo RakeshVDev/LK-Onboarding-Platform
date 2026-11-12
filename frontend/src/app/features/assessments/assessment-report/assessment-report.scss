@@ -262,6 +262,12 @@
         .metric-val { color: #059669; }
       }
 
+      &.tile-warning {
+        background: #fffbeb;
+        border-color: #fde68a;
+        .metric-val { color: #d97706; }
+      }
+
       &.tile-danger {
         background: #fff1f2;
         border-color: #fecdd3;

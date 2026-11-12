@@ -193,6 +193,7 @@ def generate_assessment_report(
     incorrect_count: int | None = None,
     unattempted_count: int | None = None,
     time_taken_seconds: int | None = None,
+    tab_switch_count: int | None = 0,
 ) -> dict:
     """Generate an assessment-specific performance and diagnostic report.
 
@@ -430,6 +431,8 @@ def generate_assessment_report(
         "unattempted_questions": unattempted_count,
         "time_taken_seconds": time_taken_seconds,
         "time_taken_str": time_taken_str,
+        "tab_switch_count": int(tab_switch_count or 0),
+        "proctoring_status": "Clean" if not tab_switch_count else ("Warning Issued" if tab_switch_count < 3 else "Terminated (Limit Reached)"),
     }
 
     report_lines = [
@@ -480,7 +483,7 @@ def generate_assessment_report(
     if clean_type == "psychometric":
         report_lines.append("Note: This report provides developmental feedback. It is not a clinical diagnosis or an employment-suitability decision.")
     else:
-        report_lines.append(f"Note: This official {report_title} certifies candidate proficiency demonstrated during the timed onboarding examination.")
+        report_lines.append(f"Note: This official {report_title} certifies candidate proficiency demonstrated during the timed ASE Assessment Tool examination.")
 
     return {
         "report_data": report_data,

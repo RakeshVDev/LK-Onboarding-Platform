@@ -52,7 +52,7 @@ def get_current_user(
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
             issuer="lk-identity",
-            audience="lk-platform",
+            audience=["ase-assessment-tool", "lk-platform"],
             options={"require": ["sub", "exp", "iat", "iss", "aud"]},
         )
         user_id = int(payload["sub"])

@@ -50,9 +50,21 @@ def build_request_response(
     req: StudentDepartmentRequest,
     dept: Department | None,
     users_map: dict[int, dict[str, str]],
+    approved_req: StudentDepartmentRequest | None = None,
+    approved_dept: Department | None = None,
 ) -> StudentDepartmentRequestResponse:
     user_info = users_map.get(req.user_id, {})
     reviewer_info = users_map.get(req.reviewed_by_user_id, {}) if req.reviewed_by_user_id else {}
+
+    current_approved_id = None
+    current_approved_name = None
+    is_change_request = False
+    if approved_req and req.status == "pending" and approved_req.id != req.id:
+        is_change_request = True
+        current_approved_id = approved_req.department_id
+        if approved_dept:
+            current_approved_name = approved_dept.name
+
     return StudentDepartmentRequestResponse(
         id=req.id,
         user_id=req.user_id,
@@ -67,6 +79,9 @@ def build_request_response(
         reviewed_at=req.reviewed_at,
         created_at=req.created_at,
         updated_at=req.updated_at,
+        current_approved_department_id=current_approved_id,
+        current_approved_department_name=current_approved_name,
+        is_change_request=is_change_request,
     )
 
 
@@ -90,18 +105,22 @@ def submit_my_department_request(
     if not department.is_active:
         raise HTTPException(status_code=400, detail="This department is not currently active")
 
-    # Check if already approved
+    # Check if learner already has an approved allocation in this SAME department
     existing_approved = db.scalar(
         select(StudentDepartmentRequest).where(
             StudentDepartmentRequest.user_id == current_user.id,
             StudentDepartmentRequest.status == "approved",
         )
     )
-    if existing_approved:
+    if existing_approved and existing_approved.department_id == payload.department_id:
         raise HTTPException(
             status_code=400,
-            detail="You already have an approved department allocation.",
+            detail=f"You already have an approved allocation in the {department.name} department.",
         )
+
+    approved_dept = None
+    if existing_approved:
+        approved_dept = db.get(Department, existing_approved.department_id)
 
     # Check if there is an existing pending request
     req = db.scalar(
@@ -128,7 +147,9 @@ def submit_my_department_request(
     db.refresh(req)
 
     users_map = get_users_map({current_user.id})
-    return build_request_response(req, department, users_map)
+    return build_request_response(
+        req, department, users_map, approved_req=existing_approved, approved_dept=approved_dept
+    )
 
 
 @router.get("/my-request", response_model=StudentDepartmentRequestResponse | None)
@@ -136,27 +157,48 @@ def get_my_department_request(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # Retrieve active approved request, or latest pending request
-    req = db.scalar(
+    # Check for pending request first (could be an initial request or a change request)
+    pending_req = db.scalar(
+        select(StudentDepartmentRequest).where(
+            StudentDepartmentRequest.user_id == current_user.id,
+            StudentDepartmentRequest.status == "pending",
+        ).order_by(StudentDepartmentRequest.id.desc())
+    )
+    approved_req = db.scalar(
         select(StudentDepartmentRequest).where(
             StudentDepartmentRequest.user_id == current_user.id,
             StudentDepartmentRequest.status == "approved",
-        )
+        ).order_by(StudentDepartmentRequest.id.desc())
     )
-    if not req:
-        req = db.scalar(
-            select(StudentDepartmentRequest).where(
-                StudentDepartmentRequest.user_id == current_user.id,
-            ).order_by(StudentDepartmentRequest.id.desc())
+
+    if pending_req:
+        dept = db.get(Department, pending_req.department_id)
+        approved_dept = db.get(Department, approved_req.department_id) if approved_req else None
+        reviewer_ids = {pending_req.reviewed_by_user_id} if pending_req.reviewed_by_user_id else set()
+        users_map = get_users_map({current_user.id} | reviewer_ids)
+        return build_request_response(
+            pending_req, dept, users_map, approved_req=approved_req, approved_dept=approved_dept
         )
 
-    if not req:
+    if approved_req:
+        dept = db.get(Department, approved_req.department_id)
+        reviewer_ids = {approved_req.reviewed_by_user_id} if approved_req.reviewed_by_user_id else set()
+        users_map = get_users_map({current_user.id} | reviewer_ids)
+        return build_request_response(approved_req, dept, users_map)
+
+    # If neither, return latest request (e.g. rejected or superseded)
+    latest_req = db.scalar(
+        select(StudentDepartmentRequest).where(
+            StudentDepartmentRequest.user_id == current_user.id,
+        ).order_by(StudentDepartmentRequest.id.desc())
+    )
+    if not latest_req:
         return None
 
-    dept = db.get(Department, req.department_id)
-    reviewer_ids = {req.reviewed_by_user_id} if req.reviewed_by_user_id else set()
+    dept = db.get(Department, latest_req.department_id)
+    reviewer_ids = {latest_req.reviewed_by_user_id} if latest_req.reviewed_by_user_id else set()
     users_map = get_users_map({current_user.id} | reviewer_ids)
-    return build_request_response(req, dept, users_map)
+    return build_request_response(latest_req, dept, users_map)
 
 
 @router.get("/requests", response_model=list[StudentDepartmentRequestResponse])

@@ -107,7 +107,7 @@ def seed_logical_reasoning_bank(db, template):
         AssessmentQuestionBank.template_id == template.id
     ).delete()
     db.flush()
-    for item in LOGICAL_REASONING_QUESTIONS:
+    for idx, item in enumerate(LOGICAL_REASONING_QUESTIONS, start=1):
         scoring_key = {
             opt["id"]: (1.0 if opt["id"] == item["correct_answer"] else 0.0)
             for opt in item["options"]
@@ -121,6 +121,9 @@ def seed_logical_reasoning_bank(db, template):
             options=item["options"],
             scoring_key=scoring_key,
             max_score=1.0,
+            negative_marks=0.0,
+            display_order=idx,
+            in_assessment=True,
             is_active=True,
             created_by_user_id=MANAGER_ID,
         ))
@@ -135,7 +138,7 @@ def seed_bank(db, template, rows, category):
     ).count()
     if existing_count:
         return
-    for question, choices, correct in rows:
+    for idx, (question, choices, correct) in enumerate(rows, start=1):
         options = [{"id": chr(65+i), "text": text} for i, text in enumerate(choices)]
         key = {option["id"]: (1.0 if option["id"] == correct else 0.0) for option in options}
         db.add(AssessmentQuestionBank(
@@ -147,6 +150,9 @@ def seed_bank(db, template, rows, category):
             options=options,
             scoring_key=key,
             max_score=1.0,
+            negative_marks=0.0,
+            display_order=idx,
+            in_assessment=True,
             is_active=True,
             created_by_user_id=MANAGER_ID,
         ))

@@ -100,4 +100,7 @@ class StudentDepartmentRequestResponse(BaseModel):
     reviewed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    current_approved_department_id: int | None = None
+    current_approved_department_name: str | None = None
+    is_change_request: bool = False
 

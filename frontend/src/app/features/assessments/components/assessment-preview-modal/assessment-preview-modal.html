@@ -1,0 +1,295 @@
+@if (isOpen) {
+  <div class="preview-backdrop" (click)="close()">
+    <div class="preview-shell" [class.single-mode]="isSingleQuestionMode" (click)="$event.stopPropagation()">
+
+      <!-- Non-Persistent Preview Banner -->
+      <div class="preview-mode-ribbon" [class.ribbon-admin]="previewMode === 'admin'">
+        <div class="ribbon-left">
+          <span class="ribbon-dot"></span>
+          <strong>
+            {{ previewMode === 'admin' ? 'ADMIN ANSWER PREVIEW' : 'STUDENT PREVIEW MODE' }}
+          </strong>
+          <span class="ribbon-sep">·</span>
+          <span>Zero backend attempts or official scores are recorded during preview</span>
+        </div>
+
+        <div class="ribbon-right">
+          <div class="mode-toggle" role="tablist" aria-label="Preview mode selector">
+            <button
+              type="button"
+              class="mode-btn"
+              [class.active]="previewMode === 'student'"
+              (click)="setMode('student')">
+              👁 Student View
+            </button>
+            <button
+              type="button"
+              class="mode-btn"
+              [class.active]="previewMode === 'admin'"
+              (click)="setMode('admin')">
+              ✓ Admin Answer Key
+            </button>
+          </div>
+
+          <button type="button" class="btn-close-preview" (click)="close()" aria-label="Close Preview">
+            ✕ Close
+          </button>
+        </div>
+      </div>
+
+      <!-- SINGLE QUESTION PREVIEW -->
+      @if (isSingleQuestionMode && currentQuestion; as sq) {
+        <div class="single-preview-body">
+          <div class="single-preview-header">
+            <div>
+              <span class="sp-eyebrow">{{ contextTitle }}</span>
+              <h3>Interactive Question Preview</h3>
+            </div>
+            <span class="sp-chip">Non-Persistent Sandbox</span>
+          </div>
+
+          <div class="single-renderer-card">
+            <app-question-renderer
+              [question]="sq"
+              [questionNumber]="singleQuestionNumber"
+              [totalQuestions]="singleTotalQuestions"
+              [mode]="rendererMode"
+              [selectedAnswer]="singleSelectedAnswer"
+              [showClear]="true"
+              (answerChange)="onAnswerSelected(sq.id, $event)"
+              (answerClear)="onClearAnswer(sq.id)">
+            </app-question-renderer>
+          </div>
+        </div>
+      } @else {
+        <!-- FULL ASSESSMENT PREVIEW -->
+        @if (loading) {
+          <div class="preview-state-box">
+            <div class="spinner"></div>
+            <h3>Rendering Assessment Preview</h3>
+            <p>Loading ordered questions and candidate layout...</p>
+          </div>
+        } @else if (errorMessage) {
+          <div class="preview-state-box is-error">
+            <h3>Preview Unavailable</h3>
+            <p>{{ errorMessage }}</p>
+            <button type="button" class="btn-outline" (click)="loadTemplatePreview()">Retry Preview</button>
+          </div>
+        } @else if (previewData) {
+          <div class="full-preview-content">
+
+            <!-- Simulated Exam Header -->
+            <div class="preview-exam-header">
+              <div class="peh-left">
+                <div class="peh-badges">
+                  <span class="badge-sim">EXAM SIMULATION</span>
+                  <span class="badge-type">{{ previewData.assessment_type.replace('_', ' ') | titlecase }}</span>
+                  @if (hasBothCustomAndBuiltin) {
+                    <div class="scope-switch">
+                      <button
+                        type="button"
+                        class="scope-chip"
+                        [class.active]="!customOnly"
+                        (click)="toggleScope(false)">
+                        Full Exam Mix
+                      </button>
+                      <button
+                        type="button"
+                        class="scope-chip"
+                        [class.active]="customOnly"
+                        (click)="toggleScope(true)">
+                        Custom Bank Only ({{ previewData.custom_question_count }})
+                      </button>
+                    </div>
+                  }
+                </div>
+                <h2>{{ displayTitle }}</h2>
+                <p class="peh-submeta">
+                  <span><strong>{{ questions.length }}</strong> Questions</span>
+                  <span>·</span>
+                  <span><strong>{{ previewData.total_marks }}</strong> Total Marks</span>
+                  <span>·</span>
+                  <span>Question {{ currentIndex + 1 }} of {{ questions.length }}</span>
+                </p>
+              </div>
+
+              <div class="peh-right">
+                <div class="sim-timer" title="Simulated exam countdown duration">
+                  <span class="st-icon">⏱</span>
+                  <div>
+                    <span class="st-label">DURATION LIMIT</span>
+                    <strong>{{ formattedDuration }}</strong>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  class="btn-inst-toggle"
+                  (click)="toggleInstructions()">
+                  {{ showInstructions ? 'Hide Instructions' : 'View Instructions' }}
+                </button>
+
+                <button
+                  type="button"
+                  class="btn-sim-submit"
+                  [disabled]="questions.length === 0"
+                  (click)="openSummarySimulation()">
+                  Preview Submit
+                </button>
+              </div>
+            </div>
+
+            <!-- Collapsible Instructions Panel -->
+            @if (showInstructions && displayInstructions) {
+              <div class="preview-instructions-banner">
+                <strong>Candidate Guidelines &amp; Instructions:</strong>
+                <p>{{ displayInstructions }}</p>
+              </div>
+            }
+
+            @if (questions.length === 0) {
+              <div class="preview-state-box">
+                <h3>No Questions Available to Preview</h3>
+                <p>Add questions to this assessment to inspect how students will experience it.</p>
+              </div>
+            } @else if (showSummaryView) {
+              <!-- Simulated Non-Persistent Submit Summary -->
+              <div class="sim-summary-card">
+                <div class="sim-summary-head">
+                  <span class="sim-pill">SIMULATION COMPLETE · NO DATA SAVED</span>
+                  <h3>Assessment Preview Submission Summary</h3>
+                  <p>This simulates the confirmation &amp; completion screen a candidate sees before submitting.</p>
+                </div>
+
+                <div class="sim-stats-grid">
+                  <div class="sim-stat">
+                    <span>Total Questions</span>
+                    <strong>{{ questions.length }}</strong>
+                  </div>
+                  <div class="sim-stat is-green">
+                    <span>Answered in Preview</span>
+                    <strong>{{ answeredCount }}</strong>
+                  </div>
+                  <div class="sim-stat is-amber">
+                    <span>Unanswered</span>
+                    <strong>{{ unansweredCount }}</strong>
+                  </div>
+                  <div class="sim-stat is-purple">
+                    <span>Marked for Review</span>
+                    <strong>{{ markedCount }}</strong>
+                  </div>
+                </div>
+
+                @if (previewMode === 'admin') {
+                  <div class="admin-score-sim">
+                    <div>
+                      <span class="ass-label">Simulated Admin Check (Client Preview Only)</span>
+                      <p>
+                        Correct Answers Matched: <strong>{{ simulatedScoreSummary.correct }} / {{ questions.length }}</strong>
+                        · Estimated Score: <strong>{{ simulatedScoreSummary.earned }} / {{ simulatedScoreSummary.max }} Marks</strong>
+                      </p>
+                    </div>
+                  </div>
+                }
+
+                <div class="sim-summary-actions">
+                  <button type="button" class="btn-outline" (click)="backToQuestions()">
+                    ← Return to Questions
+                  </button>
+                  <button type="button" class="btn-outline" (click)="resetSimulation()">
+                    ↺ Reset Preview Answers
+                  </button>
+                  <button type="button" class="btn-primary-close" (click)="close()">
+                    Close Preview Modal
+                  </button>
+                </div>
+              </div>
+            } @else {
+              <!-- Two-Column Exam Layout -->
+              <div class="preview-exam-grid">
+                <!-- Left Question Navigation Palette -->
+                <aside class="preview-palette-card">
+                  <div class="pp-header">
+                    <h4>Question Palette</h4>
+                    <span>{{ answeredCount }} / {{ questions.length }} Attempted</span>
+                  </div>
+
+                  <div class="pp-grid">
+                    @for (q of questions; track q.id; let idx = $index) {
+                      <button
+                        type="button"
+                        class="pp-btn"
+                        [ngClass]="'state-' + getQuestionState(q)"
+                        [class.active]="currentIndex === idx"
+                        (click)="goTo(idx)">
+                        <span>{{ idx + 1 }}</span>
+                        @if (markedForReview.has(q.id)) {
+                          <span class="pp-flag"></span>
+                        }
+                      </button>
+                    }
+                  </div>
+
+                  <div class="pp-legend">
+                    <div><span class="chip c-ans"></span> Answered ({{ answeredCount }})</div>
+                    <div><span class="chip c-mark"></span> Review ({{ markedCount }})</div>
+                    <div><span class="chip c-unans"></span> Visited / Unanswered</div>
+                    <div><span class="chip c-idle"></span> Not Visited</div>
+                  </div>
+                </aside>
+
+                <!-- Right Active Question Workspace -->
+                <div class="preview-question-workspace">
+                  @if (currentQuestion; as cq) {
+                    <app-question-renderer
+                      [question]="cq"
+                      [questionNumber]="currentIndex + 1"
+                      [totalQuestions]="questions.length"
+                      [mode]="rendererMode"
+                      [selectedAnswer]="currentQuestionAnswer"
+                      [showClear]="true"
+                      (answerChange)="onAnswerSelected(cq.id, $event)"
+                      (answerClear)="onClearAnswer(cq.id)">
+                    </app-question-renderer>
+
+                    <div class="preview-bottom-bar">
+                      <div class="pbb-left">
+                        <button
+                          type="button"
+                          class="btn-prev"
+                          [disabled]="currentIndex === 0"
+                          (click)="previous()">
+                          ← Previous
+                        </button>
+                        <button
+                          type="button"
+                          class="btn-review"
+                          [class.active]="markedForReview.has(cq.id || 0)"
+                          (click)="toggleReview(cq.id || 0)">
+                          ⚑ {{ markedForReview.has(cq.id || 0) ? 'Unmark Review' : 'Mark for Review' }}
+                        </button>
+                      </div>
+
+                      <div class="pbb-right">
+                        @if (currentIndex < questions.length - 1) {
+                          <button type="button" class="btn-next" (click)="next()">
+                            Save &amp; Next →
+                          </button>
+                        } @else {
+                          <button type="button" class="btn-finish" (click)="openSummarySimulation()">
+                            Review &amp; Preview Submit →
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
+      }
+    </div>
+  </div>
+}
+

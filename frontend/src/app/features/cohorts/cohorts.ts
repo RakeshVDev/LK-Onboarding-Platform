@@ -1,7 +1,8 @@
-import { Component, OnInit, signal, computed, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   CohortService,
   CohortFullData,
@@ -24,6 +25,7 @@ import {
 } from '../../core/services/cohort.service';
 import { AuthService } from '../../core/services/auth.service';
 import { UserManagementService, ManagedUser } from '../../core/services/user-management.service';
+import { LearningService, Department, StudentDepartmentRequest } from '../../core/services/learning.service';
 
 export type CohortTab =
   | 'overview'
@@ -54,6 +56,8 @@ export class Cohorts implements OnInit {
   private readonly cohortService = inject(CohortService);
   private readonly authService = inject(AuthService);
   private readonly userManagementService = inject(UserManagementService);
+  private readonly learningService = inject(LearningService);
+  private readonly destroyRef = inject(DestroyRef);
 
   // Role & View Mode
   readonly isTeacherRole = computed(() => this.authService.hasRole('teacher', 'admin', 'superadmin'));
@@ -65,6 +69,75 @@ export class Cohorts implements OnInit {
   // Alerts & Notifications
   readonly toastMessage = signal<string>('');
   readonly toastType = signal<'success' | 'info' | 'warning'>('success');
+
+  // Department & Tech Track Gating
+  readonly availableDepartments = signal<Department[]>([]);
+  readonly myDeptRequest = signal<StudentDepartmentRequest | null>(null);
+  readonly loadingDeptStatus = signal<boolean>(true);
+  readonly teacherDeptFilter = signal<string>('all');
+  newBatchDepartmentName = 'Python';
+  newBatchDepartmentId: number | null = 8;
+
+  readonly isLearnerApproved = computed<boolean>(() => {
+    if (this.isTeacherRole()) return true;
+    const req = this.myDeptRequest();
+    return req?.status === 'approved' || !!req?.current_approved_department_id;
+  });
+
+  readonly approvedDepartmentName = computed<string>(() => {
+    const req = this.myDeptRequest();
+    if (!req) return '';
+    if (req.status === 'approved') return req.department_name || '';
+    return req.current_approved_department_name || '';
+  });
+
+  readonly requestedDepartmentName = computed<string>(() => {
+    const req = this.myDeptRequest();
+    return req?.department_name || '';
+  });
+
+  readonly departmentAllocationStatus = computed<'none' | 'pending' | 'approved' | 'rejected'>(() => {
+    const req = this.myDeptRequest();
+    if (!req) return 'none';
+    if (req.status === 'approved') return 'approved';
+    if (req.status === 'pending') {
+      return req.current_approved_department_id ? 'approved' : 'pending';
+    }
+    return req.status as any;
+  });
+
+  readonly hasPendingChangeRequest = computed<boolean>(() => {
+    const req = this.myDeptRequest();
+    return !!req && req.status === 'pending' && !!req.is_change_request;
+  });
+
+  readonly pendingTargetDepartmentName = computed<string>(() => {
+    const req = this.myDeptRequest();
+    if (req && req.status === 'pending') return req.department_name || '';
+    return '';
+  });
+
+  readonly availableTargetDepartments = computed<Department[]>(() => {
+    const currentDeptName = this.approvedDepartmentName().toLowerCase();
+    return this.availableDepartments().filter(
+      d => d.name.toLowerCase() !== currentDeptName && !d.name.toLowerCase().includes('common')
+    );
+  });
+
+  // Learner Initial Department Request
+  selectedInitialDeptId: number | null = null;
+  initialTrackNotes = '';
+  readonly isSubmittingInitialTrack = signal<boolean>(false);
+
+  // Learner Department Change Request Modal
+  readonly isChangeDeptModalOpen = signal<boolean>(false);
+  selectedTargetDeptId: number | null = null;
+  changeDeptNotes = '';
+  readonly isSubmittingChangeDept = signal<boolean>(false);
+
+  // Teacher Review of Track Allocation Requests
+  readonly pendingTrackRequests = signal<StudentDepartmentRequest[]>([]);
+  readonly isReviewingRequest = signal<number | null>(null);
 
   // Teacher Screenshot 1: Batches Filter & Search
   readonly batchFilter = signal<'current' | 'alumni' | 'all'>('current');
@@ -354,22 +427,60 @@ export class Cohorts implements OnInit {
   // Filtered Batches (Screenshot 1)
   readonly filteredBatches = computed<CohortBatchCard[]>(() => {
     let list = this.batches();
-    const filter = this.batchFilter();
-    const search = this.batchSearch().toLowerCase().trim();
+    const isLearner = this.viewMode() === 'learner';
 
-    if (filter === 'current') {
-      list = list.filter(b => b.status === 'current');
-    } else if (filter === 'alumni') {
-      list = list.filter(b => b.status === 'alumni');
+    if (isLearner) {
+      const dept = this.approvedDepartmentName().toLowerCase();
+      if (dept) {
+        list = list.filter(b => {
+          const bDept = (b.departmentName || '').toLowerCase();
+          return bDept === dept || bDept.includes('common') || bDept.includes('all') || !bDept;
+        });
+      }
+    } else {
+      const deptFilter = this.teacherDeptFilter();
+      if (deptFilter !== 'all') {
+        list = list.filter(b => (b.departmentName || '').toLowerCase() === deptFilter.toLowerCase());
+      }
+      const filter = this.batchFilter();
+      if (filter === 'current') {
+        list = list.filter(b => b.status === 'current');
+      } else if (filter === 'alumni') {
+        list = list.filter(b => b.status === 'alumni');
+      }
     }
 
+    const search = this.batchSearch().toLowerCase().trim();
     if (search) {
       list = list.filter(b =>
         b.name.toLowerCase().includes(search) ||
-        (b.track && b.track.toLowerCase().includes(search))
+        (b.track && b.track.toLowerCase().includes(search)) ||
+        (b.departmentName && b.departmentName.toLowerCase().includes(search))
       );
     }
     return list;
+  });
+
+  // Filtered Curriculum for Learner vs Teacher
+  readonly filteredCurriculum = computed<CurriculumChapter[]>(() => {
+    const all = this.curriculum();
+    if (this.viewMode() === 'learner') {
+      const dept = this.approvedDepartmentName().toLowerCase();
+      if (!dept) return [];
+      return all
+        .filter(chap => {
+          const cDept = (chap.departmentName || '').toLowerCase();
+          return !cDept || cDept === dept || cDept.includes('common') || cDept.includes('all');
+        })
+        .map(chap => ({
+          ...chap,
+          lessons: chap.lessons.filter(les => {
+            const lDept = (les.departmentName || chap.departmentName || '').toLowerCase();
+            return !lDept || lDept === dept || lDept.includes('common') || lDept.includes('all');
+          })
+        }));
+    }
+    return all;
   });
 
   // Available Super Admin Learners for Batch Inclusion
@@ -457,17 +568,31 @@ export class Cohorts implements OnInit {
 
   // Pending assignments count
   readonly pendingAssignmentsCount = computed<number>(() => {
-    return this.assignments().filter(a => a.status === 'pending').length;
+    return this.filteredAssignments().filter(a => a.status === 'pending').length;
   });
 
   // Available quizzes count
   readonly availableQuizzesCount = computed<number>(() => {
-    return this.quizzes().filter(q => q.status === 'available').length;
+    return this.filteredQuizzes().filter(q => q.status === 'available').length;
+  });
+
+  // Sessions for Cohort Details Overview (Filtered for learner, all for teacher)
+  readonly overviewSessions = computed<TrainingSession[]>(() => {
+    return this.viewMode() === 'learner' ? this.filteredSessions() : this.sessions();
   });
 
   // Filtered Sessions
   readonly filteredSessions = computed<TrainingSession[]>(() => {
-    const list = this.sessions();
+    let list = this.sessions();
+    if (this.viewMode() === 'learner') {
+      const dept = this.approvedDepartmentName().toLowerCase();
+      if (dept) {
+        list = list.filter(s => {
+          const sDept = (s.departmentName || '').toLowerCase();
+          return !sDept || sDept === dept || sDept.includes('common') || sDept.includes('all');
+        });
+      }
+    }
     const filter = this.sessionFilter();
     if (filter === 'all') return list;
     return list.filter(s => s.status === filter);
@@ -539,6 +664,15 @@ export class Cohorts implements OnInit {
   // Filtered Materials
   readonly filteredMaterials = computed<LearningMaterialItem[]>(() => {
     let list = this.materials();
+    if (this.viewMode() === 'learner') {
+      const dept = this.approvedDepartmentName().toLowerCase();
+      if (dept) {
+        list = list.filter(m => {
+          const mDept = (m.departmentName || '').toLowerCase();
+          return !mDept || mDept === dept || mDept.includes('common') || mDept.includes('all');
+        });
+      }
+    }
     const mod = this.materialModuleFilter();
     const type = this.materialTypeFilter();
     const search = this.materialSearch().toLowerCase().trim();
@@ -553,8 +687,39 @@ export class Cohorts implements OnInit {
       list = list.filter(m =>
         m.title.toLowerCase().includes(search) ||
         m.description.toLowerCase().includes(search) ||
-        m.author.toLowerCase().includes(search)
+        m.author.toLowerCase().includes(search) ||
+        (m.departmentName && m.departmentName.toLowerCase().includes(search))
       );
+    }
+    return list;
+  });
+
+  // Filtered Assignments for Learner vs Teacher
+  readonly filteredAssignments = computed<CohortAssignment[]>(() => {
+    let list = this.assignments();
+    if (this.viewMode() === 'learner') {
+      const dept = this.approvedDepartmentName().toLowerCase();
+      if (dept) {
+        list = list.filter(a => {
+          const aDept = (a.departmentName || '').toLowerCase();
+          return !aDept || aDept === dept || aDept.includes('common') || aDept.includes('all');
+        });
+      }
+    }
+    return list;
+  });
+
+  // Filtered Quizzes for Learner vs Teacher
+  readonly filteredQuizzes = computed<CohortQuiz[]>(() => {
+    let list = this.quizzes();
+    if (this.viewMode() === 'learner') {
+      const dept = this.approvedDepartmentName().toLowerCase();
+      if (dept) {
+        list = list.filter(q => {
+          const qDept = (q.departmentName || '').toLowerCase();
+          return !qDept || qDept === dept || qDept.includes('common') || qDept.includes('all');
+        });
+      }
     }
     return list;
   });
@@ -615,10 +780,17 @@ export class Cohorts implements OnInit {
     this.loadSuperAdminTeachers();
     this.loadSuperAdminLearners();
 
+    // Load active engineering departments and student track allocation
+    void this.loadDepartmentContext();
+
     if (typeof window !== 'undefined') {
-      window.addEventListener('ase_users_changed', () => {
-        this.loadSuperAdminTeachers();
-        this.loadSuperAdminLearners();
+      const handleUsersChanged = () => {
+        void this.loadSuperAdminTeachers();
+        void this.loadSuperAdminLearners();
+      };
+      window.addEventListener('ase_users_changed', handleUsersChanged);
+      this.destroyRef.onDestroy(() => {
+        window.removeEventListener('ase_users_changed', handleUsersChanged);
       });
     }
 
@@ -631,9 +803,160 @@ export class Cohorts implements OnInit {
       this.activeTab.set('overview');
     }
 
-    this.cohortService.data$.subscribe(data => {
-      this.cohortData.set(data);
-    });
+    this.cohortService.data$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(data => {
+        this.cohortData.set(data);
+      });
+  }
+
+  async loadDepartmentContext(): Promise<void> {
+    this.loadingDeptStatus.set(true);
+    try {
+      const [depts, myReq] = await Promise.all([
+        this.learningService.getDepartments().catch(() => []),
+        this.isTeacherRole() ? Promise.resolve(null) : this.learningService.getMyDepartmentRequest().catch(() => null)
+      ]);
+      const activeDepts = depts.filter(d => d.is_active);
+      this.availableDepartments.set(activeDepts);
+      this.myDeptRequest.set(myReq);
+      if (activeDepts.length > 0) {
+        this.selectedInitialDeptId = activeDepts[0].id;
+        this.newBatchDepartmentId = activeDepts[0].id;
+        this.newBatchDepartmentName = activeDepts[0].name;
+        this.newBatchTrack = `${activeDepts[0].name} Engineering Track`;
+      }
+      if (this.isTeacherRole()) {
+        void this.loadPendingTrackRequests();
+      }
+    } finally {
+      this.loadingDeptStatus.set(false);
+    }
+  }
+
+  async loadPendingTrackRequests(): Promise<void> {
+    if (!this.isTeacherRole()) return;
+    try {
+      const reqs = await this.learningService.getDepartmentRequests('pending');
+      this.pendingTrackRequests.set(reqs);
+    } catch {
+      this.pendingTrackRequests.set([]);
+    }
+  }
+
+  async approveTrackRequest(req: StudentDepartmentRequest): Promise<void> {
+    this.isReviewingRequest.set(req.id);
+    try {
+      await this.learningService.reviewDepartmentRequest(req.id, {
+        status: 'approved',
+        department_id: req.department_id
+      });
+      this.showToast(`Approved ${req.user_name || 'student'} for ${req.department_name} track!`, 'success');
+      await this.loadPendingTrackRequests();
+    } catch (err: any) {
+      this.showToast(err.error?.detail || 'Failed to approve request.', 'warning');
+    } finally {
+      this.isReviewingRequest.set(null);
+    }
+  }
+
+  async rejectTrackRequest(req: StudentDepartmentRequest): Promise<void> {
+    this.isReviewingRequest.set(req.id);
+    try {
+      await this.learningService.reviewDepartmentRequest(req.id, {
+        status: 'rejected'
+      });
+      this.showToast(`Rejected request for ${req.user_name || 'student'}.`, 'info');
+      await this.loadPendingTrackRequests();
+    } catch (err: any) {
+      this.showToast(err.error?.detail || 'Failed to reject request.', 'warning');
+    } finally {
+      this.isReviewingRequest.set(null);
+    }
+  }
+
+  async submitInitialTrackPreference(): Promise<void> {
+    if (!this.selectedInitialDeptId) return;
+    this.isSubmittingInitialTrack.set(true);
+    try {
+      const res = await this.learningService.submitDepartmentRequest(
+        this.selectedInitialDeptId,
+        this.initialTrackNotes
+      );
+      this.myDeptRequest.set(res);
+      this.showToast('Department request submitted! Awaiting instructor approval.', 'success');
+    } catch (err: any) {
+      this.showToast(err.error?.detail || 'Failed to submit department request.', 'warning');
+    } finally {
+      this.isSubmittingInitialTrack.set(false);
+    }
+  }
+
+  openChangeDepartmentModal(): void {
+    const targets = this.availableTargetDepartments();
+    if (targets.length > 0) {
+      this.selectedTargetDeptId = targets[0].id;
+    } else {
+      this.selectedTargetDeptId = null;
+    }
+    this.changeDeptNotes = '';
+    this.isChangeDeptModalOpen.set(true);
+  }
+
+  closeChangeDepartmentModal(): void {
+    this.isChangeDeptModalOpen.set(false);
+  }
+
+  async submitDepartmentChangeRequest(): Promise<void> {
+    if (!this.selectedTargetDeptId) return;
+    this.isSubmittingChangeDept.set(true);
+    try {
+      const res = await this.learningService.submitDepartmentRequest(
+        this.selectedTargetDeptId,
+        this.changeDeptNotes
+      );
+      this.myDeptRequest.set(res);
+      this.isChangeDeptModalOpen.set(false);
+      this.showToast(
+        `Department change request for ${res.department_name} submitted to instructors/admins.`,
+        'success'
+      );
+    } catch (err: any) {
+      this.showToast(err.error?.detail || 'Failed to submit department change request.', 'warning');
+    } finally {
+      this.isSubmittingChangeDept.set(false);
+    }
+  }
+
+  onBatchDeptSelect(deptName: string): void {
+    this.newBatchDepartmentName = deptName;
+    const found = this.availableDepartments().find(d => d.name === deptName);
+    this.newBatchDepartmentId = found ? found.id : null;
+    this.newBatchTrack = `${deptName} Engineering Track`;
+  }
+
+  async openAddBatchModal(): Promise<void> {
+    await this.loadSuperAdminLearners();
+    this.isCreatingBatch.set(true);
+    this.newBatchName = '';
+    this.newBatchStartDate = '01 Dec 2026';
+    this.newBatchEndDate = '01 Mar 2027';
+    if (this.availableDepartments().length > 0) {
+      this.newBatchDepartmentName = this.availableDepartments()[0].name;
+      this.newBatchDepartmentId = this.availableDepartments()[0].id;
+      this.newBatchTrack = `${this.newBatchDepartmentName} Engineering Track`;
+    } else {
+      this.newBatchDepartmentName = 'Python';
+      this.newBatchDepartmentId = 8;
+      this.newBatchTrack = 'Python Engineering Track';
+    }
+    this.batchLearnerSearch.set('');
+
+    // Pre-select all available learners created by super admin
+    const learners = this.availableSuperAdminLearners();
+    const idSet = new Set<number | string>(learners.map(l => l.id));
+    this.selectedBatchLearnerIds.set(idSet);
+    this.newBatchLearnerCount = idSet.size;
   }
 
   async loadSuperAdminTeachers(): Promise<void> {
@@ -684,22 +1007,6 @@ export class Cohorts implements OnInit {
   }
 
   // ---------------- TEACHER: BATCH MANAGEMENT (SCREENSHOT 1) ----------------
-  async openAddBatchModal(): Promise<void> {
-    await this.loadSuperAdminLearners();
-    this.isCreatingBatch.set(true);
-    this.newBatchName = '';
-    this.newBatchStartDate = '01 Dec 2026';
-    this.newBatchEndDate = '01 Mar 2027';
-    this.newBatchTrack = 'Associate Software Engineer Track';
-    this.batchLearnerSearch.set('');
-
-    // Pre-select all available learners created by super admin
-    const learners = this.availableSuperAdminLearners();
-    const idSet = new Set<number | string>(learners.map(l => l.id));
-    this.selectedBatchLearnerIds.set(idSet);
-    this.newBatchLearnerCount = idSet.size;
-  }
-
   toggleBatchLearner(learnerId: number | string): void {
     const current = new Set(this.selectedBatchLearnerIds());
     if (current.has(learnerId)) {
@@ -750,7 +1057,9 @@ export class Cohorts implements OnInit {
       this.newBatchTrack,
       selectedIds.length,
       selectedIds,
-      learnerNames
+      learnerNames,
+      this.newBatchDepartmentName,
+      this.newBatchDepartmentId || undefined
     );
 
     this.isCreatingBatch.set(false);

@@ -39,6 +39,19 @@
       </div>
 
       <div class="header-right">
+        <!-- Proctoring Tab Switch Security Badge -->
+        <div class="proctor-badge"
+             [class.badge-clean]="tabSwitchCount === 0"
+             [class.badge-warning]="tabSwitchCount === 1"
+             [class.badge-critical]="tabSwitchCount >= 2"
+             title="Proctoring Monitor: Maximum 3 Tab Switches Allowed">
+          <span class="proctor-badge-icon">🛡️</span>
+          <div class="proctor-badge-info">
+            <span class="proctor-badge-label">TAB SWITCHES</span>
+            <strong class="proctor-badge-val">{{ tabSwitchCount }} / {{ maxTabSwitches }}</strong>
+          </div>
+        </div>
+
         <!-- Prominent Countdown Timer -->
         <div class="exam-timer"
              [class.timer-warning]="isTimerWarning"
@@ -59,7 +72,7 @@
         </button>
 
         <!-- Final Submit Button in Header -->
-        <button class="btn-header-submit" type="button" (click)="openSubmitModal()" [disabled]="submitting">
+        <button class="btn-header-submit" type="button" (click)="openSubmitModal()" [disabled]="submitting || isTerminatedDueToViolation">
           <span>Submit Exam</span>
         </button>
       </div>
@@ -138,7 +151,7 @@
 
         <!-- Sidebar Footer Action -->
         <div class="sidebar-footer">
-          <button class="btn-sidebar-finish" type="button" (click)="openSubmitModal()" [disabled]="submitting">
+          <button class="btn-sidebar-finish" type="button" (click)="openSubmitModal()" [disabled]="submitting || isTerminatedDueToViolation">
             Submit Assessment
           </button>
         </div>
@@ -148,55 +161,17 @@
       <!-- MAIN CONTENT: Current Question Workspace -->
       <main class="exam-workspace" *ngIf="currentQuestion as q">
 
-        <!-- Question Meta Toolbar -->
-        <div class="question-topbar">
-          <div class="topbar-left">
-            <span class="q-badge">Question {{ currentIndex + 1 }} of {{ questions.length }}</span>
-            <span class="topic-badge">{{ categoryLabel(q.category) }}</span>
-            <span class="difficulty-badge" [attr.data-diff]="q.difficulty || 'Medium'">
-              {{ q.difficulty || 'Medium' }}
-            </span>
-          </div>
-
-          <div class="topbar-right">
-            <span class="marks-pill">+1.0 Mark</span>
-            <span class="neg-pill">No Negative</span>
-          </div>
-        </div>
-
-        <!-- Question Text Card -->
-        <div class="question-content">
-          <h2 class="question-statement">{{ q.question_text }}</h2>
-          <p class="question-instruction">Choose the correct answer from the four choices below:</p>
-
-          <!-- 4 Options Grid -->
-          <div class="options-container">
-            @for (option of q.options; track option.id) {
-              <button
-                type="button"
-                class="option-card"
-                [class.selected]="answers[q.id] === option.id"
-                (click)="chooseAnswer(q.id, option.id)">
-                
-                <span class="option-key">{{ option.id }}</span>
-                <span class="option-label">{{ option.text }}</span>
-                <span class="option-radio">
-                  <span class="radio-inner"></span>
-                </span>
-
-              </button>
-            }
-          </div>
-
-          <!-- Clear Answer Link -->
-          @if (answers[q.id]) {
-            <div class="clear-action">
-              <button type="button" class="btn-clear" (click)="clearAnswer(q.id)">
-                ✕ Clear Selection
-              </button>
-            </div>
-          }
-        </div>
+        <app-question-renderer
+          [question]="q"
+          [questionNumber]="currentIndex + 1"
+          [totalQuestions]="questions.length"
+          mode="exam"
+          [selectedAnswer]="answers[q.id] || ''"
+          [disabled]="submitting || isTerminatedDueToViolation"
+          [showClear]="true"
+          (answerChange)="chooseAnswer(q.id, $event)"
+          (answerClear)="clearAnswer(q.id)">
+        </app-question-renderer>
 
         <!-- Question Bottom Action Toolbar -->
         <div class="question-actions">
@@ -205,7 +180,7 @@
             <button
               type="button"
               class="btn-prev"
-              [disabled]="currentIndex === 0 || submitting"
+              [disabled]="currentIndex === 0 || submitting || isTerminatedDueToViolation"
               (click)="previous()">
               ← Previous
             </button>
@@ -214,6 +189,7 @@
               type="button"
               class="btn-review"
               [class.active-review]="isCurrentQuestionMarked"
+              [disabled]="submitting || isTerminatedDueToViolation"
               (click)="toggleMarkForReview(q.id)">
               <span class="flag-icon">⚑</span>
               <span>{{ isCurrentQuestionMarked ? 'Unmark Review' : 'Mark for Review' }}</span>
@@ -226,7 +202,7 @@
                 type="button"
                 class="btn-next"
                 (click)="saveAndNext()"
-                [disabled]="submitting">
+                [disabled]="submitting || isTerminatedDueToViolation">
                 Save &amp; Next →
               </button>
             } @else {
@@ -234,7 +210,7 @@
                 type="button"
                 class="btn-save-last"
                 (click)="openSubmitModal()"
-                [disabled]="submitting">
+                [disabled]="submitting || isTerminatedDueToViolation">
                 Review &amp; Submit →
               </button>
             }
@@ -295,7 +271,7 @@
           }
 
           <p class="modal-note">
-            Once submitted, your responses will be scored server-side out of 25 and cannot be altered.
+            Once submitted, your responses will be scored server-side out of {{ totalMaxScore }} and cannot be altered.
           </p>
 
           <div class="modal-actions">
@@ -305,6 +281,97 @@
             <button class="btn-primary btn-submit-final" type="button" (click)="submitFinal(false)" [disabled]="submitting">
               {{ submitting ? 'Finalizing Submission...' : 'Submit Final Assessment' }}
             </button>
+          </div>
+
+        </div>
+      </div>
+    }
+
+    <!-- TAB SWITCH PROCTORING WARNING MODAL (MAX 3 WARNINGS) -->
+    @if (showTabWarningModal) {
+      <div class="modal-backdrop proctor-modal-backdrop" (click)="$event.stopPropagation()">
+        <div class="proctor-modal" [class.modal-terminal]="tabSwitchCount >= maxTabSwitches" (click)="$event.stopPropagation()">
+          
+          <div class="proctor-modal-top">
+            <div class="proctor-alert-icon" [class.icon-terminal]="tabSwitchCount >= maxTabSwitches">
+              @if (tabSwitchCount >= maxTabSwitches) {
+                <span>🚨</span>
+              } @else {
+                <span>⚠️</span>
+              }
+            </div>
+
+            <div class="proctor-alert-heading">
+              <span class="proctor-eyebrow" [class.eyebrow-terminal]="tabSwitchCount >= maxTabSwitches">
+                EXAMINATION INTEGRITY &amp; PROCTORING ALERT
+              </span>
+              <h3>
+                @if (tabSwitchCount >= maxTabSwitches) {
+                  Security Limit Reached: Final Warning (3 of 3)
+                } @else {
+                  Tab Switch Detected: Warning {{ tabSwitchCount }} of {{ maxTabSwitches }}
+                }
+              </h3>
+            </div>
+          </div>
+
+          <!-- Stepper Pips: Warning 1, Warning 2, Auto-Submit -->
+          <div class="violation-stepper">
+            <div class="violation-step" [class.step-violated]="tabSwitchCount >= 1" [class.step-danger]="tabSwitchCount >= 3">
+              <div class="step-circle">1</div>
+              <span class="step-title">Warning 1</span>
+            </div>
+            <div class="step-line" [class.line-violated]="tabSwitchCount >= 2"></div>
+            <div class="violation-step" [class.step-violated]="tabSwitchCount >= 2" [class.step-danger]="tabSwitchCount >= 3">
+              <div class="step-circle">2</div>
+              <span class="step-title">Warning 2</span>
+            </div>
+            <div class="step-line" [class.line-violated]="tabSwitchCount >= 3"></div>
+            <div class="violation-step" [class.step-violated]="tabSwitchCount >= 3" [class.step-danger]="tabSwitchCount >= 3">
+              <div class="step-circle">3</div>
+              <span class="step-title">Auto-Submit</span>
+            </div>
+          </div>
+
+          <div class="proctor-body-message">
+            @if (tabSwitchCount === 1) {
+              <p>
+                You navigated away from the assessment window. Switching browser tabs, minimizing the browser, or accessing external applications during an official examination is <strong>strictly prohibited</strong>.
+              </p>
+              <div class="warning-callout callout-amber">
+                <strong>⚠️ 2 Warnings Remaining:</strong>
+                <span>Further tab switches will trigger immediate examination termination and automatic submission.</span>
+              </div>
+            } @else if (tabSwitchCount === 2) {
+              <p>
+                Second tab switch detected! This is your <strong>PENULTIMATE WARNING</strong>.
+              </p>
+              <div class="warning-callout callout-red">
+                <strong>🚨 1 Warning Remaining:</strong>
+                <span>Any additional navigation away from this assessment will permanently lock and automatically submit your test.</span>
+              </div>
+            } @else {
+              <p>
+                You have exceeded the maximum allowed tab switches (<strong>3 of 3</strong>).
+              </p>
+              <div class="warning-callout callout-critical">
+                <strong>🚫 Policy Limit Reached:</strong>
+                <span>Your examination session has been terminated for proctoring violations and is being submitted automatically.</span>
+              </div>
+            }
+          </div>
+
+          <div class="proctor-actions">
+            @if (tabSwitchCount < maxTabSwitches) {
+              <button class="btn-proctor-resume" type="button" (click)="dismissTabWarningModal()">
+                <span>I Understand &amp; Resume Assessment ({{ maxTabSwitches - tabSwitchCount }} Remaining) →</span>
+              </button>
+            } @else {
+              <button class="btn-proctor-submitting" type="button" disabled>
+                <span class="spinner-small"></span>
+                <span>Submitting Examination Due to Security Policy...</span>
+              </button>
+            }
           </div>
 
         </div>

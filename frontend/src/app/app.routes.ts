@@ -43,6 +43,7 @@ export const routes: Routes = [
       // Dashboard
       {
         path: 'dashboard',
+        data: { allowIncompleteAssessment: true },
         component: Dashboard
       },
 
@@ -69,7 +70,7 @@ export const routes: Routes = [
       // Departments
       {
         path: 'departments',
-        canActivate: [roleGuard(['superadmin', 'admin'])],
+        canActivate: [roleGuard(['superadmin', 'admin', 'teacher'])],
         loadComponent: () =>
           import('./features/departments/departments')
             .then(m => m.Departments)

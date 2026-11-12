@@ -38,6 +38,9 @@ export interface StudentDepartmentRequest {
   reviewed_at?: string | null;
   created_at: string;
   updated_at: string;
+  current_approved_department_id?: number | null;
+  current_approved_department_name?: string | null;
+  is_change_request?: boolean;
 }
 
 export interface SyllabusItem {

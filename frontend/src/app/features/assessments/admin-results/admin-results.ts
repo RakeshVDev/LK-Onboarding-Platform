@@ -2,7 +2,8 @@ import {
   ChangeDetectorRef,
   Component,
   OnInit,
-  inject
+  inject,
+  signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -28,11 +29,11 @@ export class AdminResults implements OnInit {
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
-  results: UserAssessmentResultItem[] = [];
+  readonly results = signal<UserAssessmentResultItem[]>([]);
   templates: AssessmentTemplate[] = [];
 
-  loading = true;
-  errorMessage = '';
+  readonly loading = signal(true);
+  readonly errorMessage = signal('');
 
   // Filter state
   searchQuery = '';
@@ -61,9 +62,8 @@ export class AdminResults implements OnInit {
   }
 
   loadResults(): void {
-    this.loading = true;
-    this.errorMessage = '';
-    this.cdr.detectChanges();
+    this.loading.set(true);
+    this.errorMessage.set('');
 
     const params: {
       template_id?: number;
@@ -83,18 +83,19 @@ export class AdminResults implements OnInit {
 
     this.api.getAdminResults(params).subscribe({
       next: (data: AdminAssessmentResultsResponse) => {
-        this.results = data.results || [];
+        this.results.set(data.results || []);
         this.totalAssessments = data.total_assessments;
         this.completedCount = data.completed_count;
         this.averageScore = data.average_score;
         this.uniqueLearners = data.unique_learners;
-        this.loading = false;
+        this.loading.set(false);
         this.cdr.detectChanges();
       },
       error: (error: HttpErrorResponse) => {
-        this.errorMessage =
-          error.error?.detail || 'Unable to load learner assessment results.';
-        this.loading = false;
+        this.errorMessage.set(
+          error.error?.detail || 'Unable to load learner assessment results.'
+        );
+        this.loading.set(false);
         this.cdr.detectChanges();
       }
     });

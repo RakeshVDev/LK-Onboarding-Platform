@@ -1,5 +1,5 @@
-
 import { Component, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
@@ -7,7 +7,7 @@ import { AuthService } from '../../../core/services/auth.service';
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [FormsModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './login.html',
   styleUrl: './login.scss'
 })
@@ -24,6 +24,10 @@ export class Login {
     private readonly router: Router
   ) {}
 
+  togglePasswordVisibility(): void {
+    this.showPassword.set(!this.showPassword());
+  }
+
   async submitLogin(): Promise<void> {
     if (this.loading()) return;
 
@@ -39,7 +43,6 @@ export class Login {
     try {
       await this.authService.login(this.email.trim(), this.password);
       this.password = '';
-
       await this.router.navigateByUrl('/dashboard');
     } catch (error: unknown) {
       this.errorMessage.set(this.authService.getErrorMessage(error));
