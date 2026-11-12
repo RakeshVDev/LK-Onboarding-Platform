@@ -142,6 +142,19 @@
     color: #64748b;
     font-size: 12px;
   }
+
+  &.proctor-violation {
+    border-color: #fca5a5;
+    background: #fffafa;
+
+    .metric-label {
+      color: #dc2626;
+    }
+
+    > strong {
+      color: #b91c1c;
+    }
+  }
 }
 
 .overall-card {

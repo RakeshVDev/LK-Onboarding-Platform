@@ -1,5 +1,5 @@
 
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import {
   HttpClient,
   HttpErrorResponse,
@@ -26,11 +26,36 @@ export interface CurrentUser {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly tokenKey = 'lk_access_token';
+  private readonly currentUserKey = 'lk_current_user';
   private readonly apiUrl = '/api/v1/auth';
 
-  private currentUser: CurrentUser | null = null;
+  private readonly currentUserState = signal<CurrentUser | null>(null);
+  readonly currentUser = this.currentUserState.asReadonly();
+  private currentUserPromise: Promise<CurrentUser> | null = null;
 
   constructor(private readonly http: HttpClient) {}
+
+  private setCurrentUser(user: CurrentUser | null): void {
+    this.currentUserState.set(user);
+
+    if (typeof sessionStorage !== 'undefined') {
+      if (user) {
+        sessionStorage.setItem(
+          this.currentUserKey,
+          JSON.stringify({
+            id: user.id,
+            full_name: user.full_name,
+            email: user.email,
+            role: user.role,
+            is_active: user.is_active,
+            created_at: user.created_at
+          })
+        );
+      } else {
+        sessionStorage.removeItem(this.currentUserKey);
+      }
+    }
+  }
 
   async login(email: string, password: string): Promise<CurrentUser> {
     const response = await firstValueFrom(
@@ -40,11 +65,15 @@ export class AuthService {
       })
     );
 
-    sessionStorage.setItem(this.tokenKey, response.access_token);
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(this.tokenKey, response.access_token);
+    }
+    this.setCurrentUser(null);
+    this.currentUserPromise = null;
 
     try {
-      const user = await this.getCurrentUser();
-      this.currentUser = user;
+      const user = await this.getCurrentUser(true);
+      this.setCurrentUser(user);
       return user;
     } catch (error) {
       this.logout();
@@ -52,51 +81,73 @@ export class AuthService {
     }
   }
 
-  async getCurrentUser(): Promise<CurrentUser> {
-    const token = sessionStorage.getItem(this.tokenKey);
+  async getCurrentUser(force = false): Promise<CurrentUser> {
+    const token = this.getToken();
 
     if (!token) {
-      this.currentUser = null;
+      this.setCurrentUser(null);
+      this.currentUserPromise = null;
       throw new Error('Please log in to continue.');
     }
 
-    try {
-      const user = await firstValueFrom(
-        this.http.get<CurrentUser>(`${this.apiUrl}/me`, {
-          headers: new HttpHeaders({
-            Authorization: `Bearer ${token}`
-          })
-        })
-      );
-
-      this.currentUser = user;
-      return user;
-    } catch (error) {
-      if (error instanceof HttpErrorResponse && error.status === 401) {
-        this.logout();
-      }
-
-      throw error;
+    const existingUser = this.currentUserState();
+    if (!force && existingUser) {
+      return existingUser;
     }
+
+    if (!force && this.currentUserPromise) {
+      return this.currentUserPromise;
+    }
+
+    this.currentUserPromise = (async () => {
+      try {
+        const user = await firstValueFrom(
+          this.http.get<CurrentUser>(`${this.apiUrl}/me`, {
+            headers: new HttpHeaders({
+              Authorization: `Bearer ${token}`
+            })
+          })
+        );
+
+        this.setCurrentUser(user);
+        return user;
+      } catch (error) {
+        if (error instanceof HttpErrorResponse && error.status === 401) {
+          this.logout();
+        }
+
+        throw error;
+      } finally {
+        this.currentUserPromise = null;
+      }
+    })();
+
+    return this.currentUserPromise;
   }
 
   hasRole(...roles: UserRole[]): boolean {
-    return this.currentUser !== null &&
-      this.currentUser.is_active &&
-      roles.includes(this.currentUser.role);
+    const user = this.currentUserState();
+    return user !== null &&
+      user.is_active &&
+      roles.includes(user.role);
   }
 
   getCurrentUserSnapshot(): CurrentUser | null {
-    return this.currentUser;
+    return this.currentUserState();
   }
 
   logout(): void {
-    sessionStorage.removeItem(this.tokenKey);
-    this.currentUser = null;
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(this.tokenKey);
+    }
+    this.setCurrentUser(null);
+    this.currentUserPromise = null;
   }
 
   getToken(): string | null {
-    return sessionStorage.getItem(this.tokenKey);
+    return typeof sessionStorage !== 'undefined'
+      ? sessionStorage.getItem(this.tokenKey)
+      : null;
   }
 
   async updateProfile(fullName: string): Promise<CurrentUser> {
@@ -115,7 +166,7 @@ export class AuthService {
       )
     );
 
-    this.currentUser = updated;
+    this.setCurrentUser(updated);
     return updated;
   }
 

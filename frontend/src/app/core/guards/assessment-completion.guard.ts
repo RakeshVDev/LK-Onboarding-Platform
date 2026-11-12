@@ -11,6 +11,11 @@ import { AssessmentStatusService } from '../services/assessment-status.service';
 export const assessmentCompletionGuard: CanActivateChildFn =
   async (route) => {
 
+    // Allow immediate access to assessment-related pages without any blocking checks
+    if (route.data && route.data['allowIncompleteAssessment'] === true) {
+      return true;
+    }
+
     const authService = inject(AuthService);
     const assessmentService = inject(AssessmentStatusService);
     const router = inject(Router);
@@ -20,11 +25,6 @@ export const assessmentCompletionGuard: CanActivateChildFn =
 
       // Only learners need to complete the mandatory assessment.
       if (user.role !== 'learner') {
-        return true;
-      }
-
-      // Allow learners to access assessment-related pages.
-      if (route.data['allowIncompleteAssessment'] === true) {
         return true;
       }
 

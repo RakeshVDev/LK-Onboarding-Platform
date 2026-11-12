@@ -14,11 +14,12 @@ import {
   AssessmentQuestion,
   AssessmentAnswer
 } from '../services/assessment';
+import { QuestionRenderer } from '../components/question-renderer/question-renderer';
 
 @Component({
   selector: 'app-assessment-taking',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, QuestionRenderer],
   templateUrl: './assessment-taking.html',
   styleUrl: './assessment-taking.scss'
 })
@@ -53,6 +54,15 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   isAlreadySubmitted = false;
   showSubmitModal = false;
   isMobileNavOpen = false;
+
+  // Proctoring & Tab Switch Warning System (Max 3 Warnings)
+  tabSwitchCount = 0;
+  readonly maxTabSwitches = 3;
+  showTabWarningModal = false;
+  isTerminatedDueToViolation = false;
+  private lastViolationTimestamp = 0;
+  private visibilityListener: (() => void) | null = null;
+  private windowBlurListener: (() => void) | null = null;
 
   remainingSeconds = 1800; // 30:00
   errorMessage = '';
@@ -99,6 +109,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopTimer();
+    this.detachTabSwitchListeners();
   }
 
   // ----------------------------------
@@ -114,6 +125,15 @@ export class AssessmentTaking implements OnInit, OnDestroy {
       const session = await firstValueFrom(
         this.api.resumeAssessment(this.sessionId)
       );
+
+      if (session.status === 'expired') {
+        this.isExpired = true;
+        this.errorMessage = 'This assessment session has expired without submission and cannot be resumed.';
+        this.loading = false;
+        this.api.notifyStatusChanged();
+        this.cdr.detectChanges();
+        return;
+      }
 
       if (session.status !== 'in_progress') {
         this.isAlreadySubmitted = true;
@@ -144,6 +164,16 @@ export class AssessmentTaking implements OnInit, OnDestroy {
     } catch (error: any) {
       console.error('Assessment resume failed:', error);
       const detail = String(error?.error?.detail || error?.message || '').toLowerCase();
+      if (detail.includes('expired')) {
+        this.isExpired = true;
+        this.errorMessage =
+          error?.error?.detail ||
+          'This assessment session has expired without submission and is no longer available.';
+        this.loading = false;
+        this.api.notifyStatusChanged();
+        this.cdr.detectChanges();
+        return;
+      }
       if (
         detail.includes('no longer in progress') ||
         detail.includes('already been submitted') ||
@@ -187,11 +217,22 @@ export class AssessmentTaking implements OnInit, OnDestroy {
     this.startedAt = startedAt;
     this.expiresAt = expiresAt || '';
 
-    const minutes = durationMinutes || (this.assessmentType === 'logical_reasoning' ? 30 : 15);
+    const minutes =
+      durationMinutes ||
+      ((this.assessmentType === 'logical_reasoning' || this.assessmentType === 'programming') ? 30 : 15);
     this.durationSeconds = minutes * 60;
 
     // Restore local cache as fallback/supplement
     this.restoreLocalCache();
+
+    // Restore tab switch count from session storage if candidate previously switched
+    const cachedViolations = sessionStorage.getItem(`lk_tab_switch_${this.sessionId}`);
+    if (cachedViolations) {
+      this.tabSwitchCount = Number(cachedViolations) || 0;
+    }
+
+    // Attach proctoring listeners for tab switching
+    this.attachTabSwitchListeners();
 
     // Mark current question as visited
     if (this.questions[this.currentIndex]) {
@@ -200,7 +241,101 @@ export class AssessmentTaking implements OnInit, OnDestroy {
 
     this.loading = false;
     this.startTimer(startedAt, expiresAt, remainingSec);
+    this.api.notifyStatusChanged();
     this.cdr.detectChanges();
+  }
+
+  // ----------------------------------
+  // Proctoring & Tab Switch Management (Max 3 Warnings)
+  // ----------------------------------
+
+  private attachTabSwitchListeners(): void {
+    this.detachTabSwitchListeners();
+
+    this.visibilityListener = () => {
+      if (document.hidden) {
+        this.handleTabSwitchViolation('tab_hidden');
+      }
+    };
+
+    this.windowBlurListener = () => {
+      // Trigger if window lost focus and document is not active
+      if (!document.hidden) {
+        this.handleTabSwitchViolation('window_blur');
+      }
+    };
+
+    document.addEventListener('visibilitychange', this.visibilityListener);
+    window.addEventListener('blur', this.windowBlurListener);
+  }
+
+  private detachTabSwitchListeners(): void {
+    if (this.visibilityListener) {
+      document.removeEventListener('visibilitychange', this.visibilityListener);
+      this.visibilityListener = null;
+    }
+    if (this.windowBlurListener) {
+      window.removeEventListener('blur', this.windowBlurListener);
+      this.windowBlurListener = null;
+    }
+  }
+
+  handleTabSwitchViolation(source = 'visibility'): void {
+    if (
+      this.loading ||
+      this.submitting ||
+      this.isExpired ||
+      this.isAlreadySubmitted ||
+      this.isTerminatedDueToViolation ||
+      this.questions.length === 0
+    ) {
+      return;
+    }
+
+    const now = Date.now();
+    // 2-second debounce to prevent double-firing
+    if (now - this.lastViolationTimestamp < 2000) {
+      return;
+    }
+    // Ignore first 2 seconds after page load
+    if (now - this.mountedTimestamp < 2000) {
+      return;
+    }
+    this.lastViolationTimestamp = now;
+
+    this.tabSwitchCount++;
+    try {
+      sessionStorage.setItem(`lk_tab_switch_${this.sessionId}`, String(this.tabSwitchCount));
+    } catch {
+      // storage unavailable
+    }
+
+    // Persist live tab switch violation to server
+    this.api.recordTabSwitch(this.sessionId, this.tabSwitchCount).subscribe({
+      error: (err) => console.warn('Tab switch recording warning:', err)
+    });
+
+    this.showTabWarningModal = true;
+
+    if (this.tabSwitchCount >= this.maxTabSwitches) {
+      this.isTerminatedDueToViolation = true;
+      this.stopTimer();
+      this.detachTabSwitchListeners();
+
+      // Automatically submit after 2.5 seconds to display final terminal warning
+      setTimeout(() => {
+        void this.submitFinal(true);
+      }, 2500);
+    }
+
+    this.cdr.detectChanges();
+  }
+
+  dismissTabWarningModal(): void {
+    if (this.tabSwitchCount < this.maxTabSwitches) {
+      this.showTabWarningModal = false;
+      this.cdr.detectChanges();
+    }
   }
 
   // ----------------------------------
@@ -354,8 +489,14 @@ export class AssessmentTaking implements OnInit, OnDestroy {
     return this.questions[this.currentIndex];
   }
 
+  get totalMaxScore(): number {
+    if (!this.questions.length) return 0;
+    const total = this.questions.reduce((sum, q) => sum + (Number(q.max_score ?? 1) || 1), 0);
+    return Number(total.toFixed(2));
+  }
+
   get answeredCount(): number {
-    return Object.keys(this.answers).length;
+    return this.questions.filter(q => Boolean((this.answers[q.id] || '').trim())).length;
   }
 
   get unansweredCount(): number {
@@ -385,7 +526,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   }
 
   getQuestionState(question: AssessmentQuestion, index: number): string {
-    const isAnswered = !!this.answers[question.id];
+    const isAnswered = Boolean((this.answers[question.id] || '').trim());
     const isReview = this.markedForReview.has(question.id);
     const isVisited = this.visitedQuestions.has(question.id);
 
@@ -401,7 +542,12 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   // ----------------------------------
 
   chooseAnswer(questionId: number, optionId: string): void {
-    if (this.submitting || this.isExpired) return;
+    if (this.submitting || this.isExpired || this.isTerminatedDueToViolation) return;
+
+    if (!optionId || !optionId.trim()) {
+      this.clearAnswer(questionId);
+      return;
+    }
 
     this.answers = { ...this.answers, [questionId]: optionId };
     this.visitedQuestions.add(questionId);
@@ -420,7 +566,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   }
 
   clearAnswer(questionId: number): void {
-    if (this.submitting || this.isExpired) return;
+    if (this.submitting || this.isExpired || this.isTerminatedDueToViolation) return;
 
     const next = { ...this.answers };
     delete next[questionId];
@@ -439,7 +585,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   }
 
   toggleMarkForReview(questionId: number): void {
-    if (this.submitting || this.isExpired) return;
+    if (this.submitting || this.isExpired || this.isTerminatedDueToViolation) return;
 
     if (this.markedForReview.has(questionId)) {
       this.markedForReview.delete(questionId);
@@ -462,7 +608,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   }
 
   previous(): void {
-    if (this.currentIndex > 0 && !this.submitting) {
+    if (this.currentIndex > 0 && !this.submitting && !this.isTerminatedDueToViolation) {
       this.currentIndex--;
       if (this.questions[this.currentIndex]) {
         this.visitedQuestions.add(this.questions[this.currentIndex].id);
@@ -473,7 +619,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   }
 
   saveAndNext(): void {
-    if (this.currentIndex < this.questions.length - 1 && !this.submitting) {
+    if (this.currentIndex < this.questions.length - 1 && !this.submitting && !this.isTerminatedDueToViolation) {
       this.currentIndex++;
       if (this.questions[this.currentIndex]) {
         this.visitedQuestions.add(this.questions[this.currentIndex].id);
@@ -484,7 +630,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   }
 
   goTo(index: number): void {
-    if (index >= 0 && index < this.questions.length && !this.submitting) {
+    if (index >= 0 && index < this.questions.length && !this.submitting && !this.isTerminatedDueToViolation) {
       this.currentIndex = index;
       if (this.questions[index]) {
         this.visitedQuestions.add(this.questions[index].id);
@@ -511,6 +657,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   // ----------------------------------
 
   openSubmitModal(): void {
+    if (this.isTerminatedDueToViolation) return;
     this.showSubmitModal = true;
     this.cdr.detectChanges();
   }
@@ -526,14 +673,19 @@ export class AssessmentTaking implements OnInit, OnDestroy {
     this.submitting = true;
     this.showSubmitModal = false;
     this.stopTimer();
+    this.detachTabSwitchListeners();
 
-    this.errorMessage = automatic
-      ? 'Time is up! Submitting your examination answers...'
-      : '';
+    if (this.isTerminatedDueToViolation) {
+      this.errorMessage = 'Maximum tab switches reached (3/3). Submitting examination due to security violation...';
+    } else if (automatic) {
+      this.errorMessage = 'Time is up! Submitting your examination answers...';
+    } else {
+      this.errorMessage = '';
+    }
     this.cdr.detectChanges();
 
     const payload: AssessmentAnswer[] = this.questions
-      .filter(question => !!this.answers[question.id])
+      .filter(question => Boolean((this.answers[question.id] || '').trim()))
       .map(question => ({
         question_id: question.id,
         answer: this.answers[question.id],
@@ -541,7 +693,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
 
     try {
       const response = await firstValueFrom(
-        this.api.submitAssessment(this.sessionId, payload)
+        this.api.submitAssessment(this.sessionId, payload, this.tabSwitchCount)
       );
 
       if (response.status !== 'completed') {
@@ -550,6 +702,8 @@ export class AssessmentTaking implements OnInit, OnDestroy {
 
       try {
         sessionStorage.removeItem(this.localKey);
+        sessionStorage.removeItem(`lk_tab_switch_${this.sessionId}`);
+        sessionStorage.removeItem(`ase_timer_start_${this.sessionId}`);
       } catch {
         // clean up local cache
       }
@@ -558,8 +712,9 @@ export class AssessmentTaking implements OnInit, OnDestroy {
       console.error('Assessment submission failed:', error);
       this.submitting = false;
 
-      if (!this.isExpired && this.startedAt) {
+      if (!this.isExpired && !this.isTerminatedDueToViolation && this.startedAt) {
         this.startTimer(this.startedAt, this.expiresAt);
+        this.attachTabSwitchListeners();
       }
 
       this.errorMessage =

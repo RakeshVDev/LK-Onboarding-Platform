@@ -645,3 +645,4 @@ def get_default_technical_questions() -> list[dict]:
             "max_score": q["max_score"],
         })
     return formatted
+

@@ -1,5 +1,5 @@
 <div class="report-page">
-  @if (loading) {
+  @if (loading()) {
     <section class="panel loading-state" aria-live="polite">
       <span class="loading-spinner"></span>
       <h3>Preparing your official assessment report</h3>
@@ -7,11 +7,11 @@
     </section>
   }
 
-  @if (!loading && errorMessage) {
+  @if (!loading() && errorMessage()) {
     <section class="panel error-message" role="alert">
       <span class="eyebrow">REPORT UNAVAILABLE</span>
       <h2>Unable to load assessment report</h2>
-      <p>{{ errorMessage }}</p>
+      <p>{{ errorMessage() }}</p>
       <div class="error-actions">
         <button class="print-button" type="button" (click)="loadReport()">Retry</button>
         <button class="btn-back" type="button" (click)="goBack()">Back to Results</button>
@@ -19,7 +19,7 @@
     </section>
   }
 
-  @if (!loading && report) {
+  @if (!loading() && report(); as report) {
     <!-- Top Action Bar -->
     <div class="top-nav-bar no-print">
       <button class="btn-back-link" type="button" (click)="goBack()">
@@ -40,7 +40,7 @@
     <header class="report-header">
       <div class="header-left">
         <div class="badge-row">
-          <span class="eyebrow">L&amp;K · LEARNER DEVELOPMENT &amp; EVALUATION</span>
+          <span class="eyebrow">ASE ASSESSMENT TOOL · LEARNER DEVELOPMENT &amp; EVALUATION</span>
           <span class="type-tag" [attr.data-type]="report.assessment_type">{{ report.assessment_type ? (report.assessment_type.replace('_', ' ') | titlecase) : 'Official' }}</span>
         </div>
         <h1>{{ reportTitle }}</h1>
@@ -122,6 +122,25 @@
             <span class="metric-sub">Examination Duration</span>
           </div>
         }
+
+        <!-- 7. Proctoring & Tab Switch Integrity -->
+        <div
+          class="metric-tile"
+          [class.tile-success]="(report.report_data.tab_switch_count || 0) === 0"
+          [class.tile-warning]="(report.report_data.tab_switch_count || 0) > 0 && (report.report_data.tab_switch_count || 0) < 3"
+          [class.tile-danger]="(report.report_data.tab_switch_count || 0) >= 3">
+          <span class="metric-label">Proctoring &amp; Integrity</span>
+          <strong class="metric-val">
+            @if ((report.report_data.tab_switch_count || 0) === 0) {
+              0 Switches
+            } @else {
+              {{ report.report_data.tab_switch_count }} / 3 Switches
+            }
+          </strong>
+          <span class="metric-sub">
+            {{ report.report_data.proctoring_status || ((report.report_data.tab_switch_count || 0) === 0 ? 'Verified Clean' : 'Violations Logged') }}
+          </span>
+        </div>
       </div>
     </section>
 
@@ -239,14 +258,14 @@
     <!-- Official Report Footer -->
     <footer class="report-footer">
       <div class="footer-brand">
-        <strong>L&amp;K Onboarding Platform</strong>
+        <strong>ASE Assessment Tool</strong>
         <span>Official Evaluation Suite</span>
       </div>
       <p class="footer-disclaimer">
         @if (isPsychometric) {
           Developmental feedback only. This report is not a clinical diagnosis or a standalone employment-suitability decision.
         } @else {
-          This official {{ reportTitle }} certifies candidate proficiency demonstrated during the timed onboarding examination.
+          This official {{ reportTitle }} certifies candidate proficiency demonstrated during the timed ASE Assessment Tool examination.
         }
       </p>
       <small>Evaluation Engine: {{ report.ai_model }} · Session Ref #{{ report.session_id }}</small>

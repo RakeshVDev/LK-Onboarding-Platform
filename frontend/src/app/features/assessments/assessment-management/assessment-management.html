@@ -5,7 +5,7 @@
   <div class="page-header">
     <div>
       <h1>Assessment Management</h1>
-      <p>Manage psychometric assessments and evaluate learner development.</p>
+      <p>Create domain assessments, assign targets to cohorts or students, and manage question banks.</p>
     </div>
 
     <button class="btn-primary" (click)="createAssessment()">
@@ -43,9 +43,9 @@
   </div>
 
   <!-- Error -->
-  @if (errorMessage) {
+  @if (errorMessage()) {
     <div class="error-message">
-      {{ errorMessage }}
+      {{ errorMessage() }}
     </div>
   }
 
@@ -57,13 +57,13 @@
     </div>
   </div>
 
-  @if (loading) {
+  @if (loading()) {
     <div class="loading-state">
       Loading assessment templates...
     </div>
   }
 
-  @if (!loading && templates.length === 0 && !errorMessage) {
+  @if (!loading() && templates.length === 0 && !errorMessage()) {
     <div class="empty-state">
       <div class="empty-icon">▤</div>
       <h3>No assessments created yet</h3>
@@ -75,7 +75,7 @@
     </div>
   }
 
-  @if (!loading && templates.length > 0) {
+  @if (!loading() && templates.length > 0) {
     <div class="template-grid">
 
       @for (template of templates; track template.id) {
@@ -105,6 +105,17 @@
             {{ template.description || 'No description provided.' }}
           </p>
 
+          <div class="assignment-strip">
+            <span class="assign-pill" [attr.data-scope]="template.assignment_scope || 'all'">
+              🎯 {{ template.assignment_summary || 'All Learners' }}
+            </span>
+            @if (template.due_at) {
+              <span class="due-pill">
+                ⏰ Due {{ template.due_at | date:'mediumDate' }}
+              </span>
+            }
+          </div>
+
           <div class="template-meta">
             <div>
               <strong>{{ template.question_count }}</strong>
@@ -117,7 +128,7 @@
             </div>
 
             <div>
-              <strong>{{ template.assessment_type === 'logical_reasoning' ? '30 Min' : '15 Min' }}</strong>
+              <strong>{{ getDurationMinutes(template) }} Min</strong>
               <span>Duration</span>
             </div>
           </div>
@@ -146,7 +157,14 @@
               type="button"
               class="btn-outline btn-questions"
               (click)="manageQuestions(template.id)">
-              📑 Manage Questions
+              📑 Questions
+            </button>
+
+            <button
+              type="button"
+              class="btn-outline btn-preview"
+              (click)="previewAssessment(template.id)">
+              👁 Preview
             </button>
 
             <button
@@ -164,5 +182,11 @@
 
     </div>
   }
+
+  <app-assessment-preview-modal
+    [isOpen]="isPreviewOpen"
+    [templateId]="previewTemplateId"
+    (closed)="closePreview()">
+  </app-assessment-preview-modal>
 
 </div>

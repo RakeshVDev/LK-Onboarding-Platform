@@ -2,7 +2,8 @@ import {
   ChangeDetectorRef,
   Component,
   OnInit,
-  inject
+  inject,
+  signal
 } from '@angular/core';
 
 import { CommonModule } from '@angular/common';
@@ -31,9 +32,9 @@ export class AssessmentReportPage implements OnInit {
   public readonly authService = inject(AuthService);
   private readonly cdr = inject(ChangeDetectorRef);
 
-  report: AssessmentReport | null = null;
-  loading = true;
-  errorMessage = '';
+  readonly report = signal<AssessmentReport | null>(null);
+  readonly loading = signal(true);
+  readonly errorMessage = signal('');
   sessionId = 0;
 
   ngOnInit(): void {
@@ -42,8 +43,8 @@ export class AssessmentReportPage implements OnInit {
     );
 
     if (!Number.isInteger(this.sessionId) || this.sessionId <= 0) {
-      this.errorMessage = 'Invalid assessment session.';
-      this.loading = false;
+      this.errorMessage.set('Invalid assessment session.');
+      this.loading.set(false);
       this.cdr.detectChanges();
       return;
     }
@@ -52,87 +53,105 @@ export class AssessmentReportPage implements OnInit {
   }
 
   loadReport(): void {
-    this.loading = true;
-    this.errorMessage = '';
-    this.cdr.detectChanges();
+    this.loading.set(true);
+    this.errorMessage.set('');
 
     this.api.getReport(this.sessionId).subscribe({
       next: (data: AssessmentReport) => {
-        this.report = data;
-        this.loading = false;
+        this.report.set(data);
+        this.loading.set(false);
         this.cdr.detectChanges();
       },
       error: (error: HttpErrorResponse) => {
-        this.errorMessage =
+        if (error.status === 404) {
+          // If report not yet generated, attempt generation
+          this.api.generateReport(this.sessionId).subscribe({
+            next: (data) => {
+              this.report.set(data);
+              this.loading.set(false);
+              this.cdr.detectChanges();
+            },
+            error: (genErr) => {
+              this.errorMessage.set(genErr.error?.detail || 'Unable to generate assessment report.');
+              this.loading.set(false);
+              this.cdr.detectChanges();
+            }
+          });
+          return;
+        }
+
+        this.errorMessage.set(
           error.error?.detail ||
-          'Unable to load assessment report. Please try again.';
-        this.loading = false;
+          'Unable to load assessment report. Please try again.'
+        );
+        this.loading.set(false);
         this.cdr.detectChanges();
       }
     });
   }
 
   get reportTitle(): string {
-    if (this.report?.report_data?.report_title) {
-      return this.report.report_data.report_title;
+    const rep = this.report();
+    if (rep?.report_data?.report_title) {
+      return rep.report_data.report_title;
     }
-    const type = (this.report?.assessment_type || '').toLowerCase();
+    const type = (rep?.assessment_type || '').toLowerCase();
     if (type === 'english_grammar') return 'English Grammar Assessment Report';
     if (type === 'logical_reasoning') return 'Logical Reasoning Assessment Report';
     if (type === 'technical') return 'Technical Assessment Report';
     if (type === 'programming') return 'Programming Assessment Report';
     if (type === 'psychometric') return 'Psychometric Assessment Report';
-    return this.report?.template_name ? `${this.report.template_name} Report` : 'Assessment Performance Report';
+    return rep?.template_name ? `${rep.template_name} Report` : 'Assessment Performance Report';
   }
 
   get skillLevel(): string {
-    return this.report?.report_data?.skill_level || 'Evaluated';
+    return this.report()?.report_data?.skill_level || 'Evaluated';
   }
 
   get totalQuestions(): number | null {
-    return this.report?.report_data?.total_questions ?? null;
+    return this.report()?.report_data?.total_questions ?? null;
   }
 
   get correctAnswers(): number | null {
-    return this.report?.report_data?.correct_answers ?? null;
+    return this.report()?.report_data?.correct_answers ?? null;
   }
 
   get incorrectAnswers(): number | null {
-    return this.report?.report_data?.incorrect_answers ?? null;
+    return this.report()?.report_data?.incorrect_answers ?? null;
   }
 
   get unattemptedQuestions(): number | null {
-    return this.report?.report_data?.unattempted_questions ?? null;
+    return this.report()?.report_data?.unattempted_questions ?? null;
   }
 
   get timeTakenStr(): string | null {
-    return this.report?.report_data?.time_taken_str ?? null;
+    return this.report()?.report_data?.time_taken_str ?? null;
   }
 
   get isPsychometric(): boolean {
-    return this.report?.assessment_type === 'psychometric';
+    return this.report()?.assessment_type === 'psychometric';
   }
 
   get categoryEntries(): [string, string][] {
     return Object.entries(
-      this.report?.report_data?.category_interpretations ?? {}
+      this.report()?.report_data?.category_interpretations ?? {}
     );
   }
 
   get categoryScores(): CategoryScore[] {
-    return this.report?.report_data?.category_scores ?? [];
+    return this.report()?.report_data?.category_scores ?? [];
   }
 
   get strengths(): string[] {
-    return this.report?.report_data?.strengths ?? [];
+    return this.report()?.report_data?.strengths ?? [];
   }
 
   get developmentAreas(): string[] {
-    return this.report?.report_data?.development_areas ?? [];
+    return this.report()?.report_data?.development_areas ?? [];
   }
 
   get recommendations(): string[] {
-    return this.report?.report_data?.recommendations ?? [];
+    return this.report()?.report_data?.recommendations ?? [];
   }
 
   categoryLabel(category: string): string {

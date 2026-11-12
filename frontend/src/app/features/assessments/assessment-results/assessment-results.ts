@@ -2,7 +2,8 @@ import {
   ChangeDetectorRef,
   Component,
   OnInit,
-  inject
+  inject,
+  signal
 } from '@angular/core';
 
 import { CommonModule } from '@angular/common';
@@ -32,12 +33,12 @@ export class AssessmentResults implements OnInit {
   private readonly cdr = inject(ChangeDetectorRef);
 
   sessionId = 0;
-  results: AssessmentScoresResponse | null = null;
-  report: AssessmentReport | null = null;
+  readonly results = signal<AssessmentScoresResponse | null>(null);
+  readonly report = signal<AssessmentReport | null>(null);
 
-  loading = true;
-  reportLoading = false;
-  errorMessage = '';
+  readonly loading = signal(true);
+  readonly reportLoading = signal(false);
+  readonly errorMessage = signal('');
 
   ngOnInit(): void {
     this.sessionId = Number(
@@ -45,8 +46,8 @@ export class AssessmentResults implements OnInit {
     );
 
     if (!Number.isInteger(this.sessionId) || this.sessionId <= 0) {
-      this.errorMessage = 'Invalid assessment session.';
-      this.loading = false;
+      this.errorMessage.set('Invalid assessment session.');
+      this.loading.set(false);
       this.cdr.detectChanges();
       return;
     }
@@ -55,24 +56,22 @@ export class AssessmentResults implements OnInit {
   }
 
   loadResults(): void {
-    this.loading = true;
-    this.errorMessage = '';
-    this.cdr.detectChanges();
+    this.loading.set(true);
+    this.errorMessage.set('');
 
     this.api.getResults(this.sessionId).subscribe({
       next: (data: AssessmentScoresResponse) => {
-        this.results = data;
-        this.loading = false;
+        this.results.set(data);
+        this.loading.set(false);
         this.cdr.detectChanges();
 
         // If report already exists, retrieve it without forcing regeneration.
         this.api.getReport(this.sessionId).subscribe({
           next: report => {
-            this.report = report;
+            this.report.set(report);
             this.cdr.detectChanges();
           },
           error: (error: HttpErrorResponse) => {
-            // A 404 simply means the learner has not generated the report yet.
             if (error.status !== 404) {
               console.warn('Existing report lookup failed:', error);
             }
@@ -80,31 +79,32 @@ export class AssessmentResults implements OnInit {
         });
       },
       error: (error: HttpErrorResponse) => {
-        this.errorMessage =
-          error.error?.detail || 'Unable to load assessment results.';
-        this.loading = false;
+        this.errorMessage.set(
+          error.error?.detail || 'Unable to load assessment results.'
+        );
+        this.loading.set(false);
         this.cdr.detectChanges();
       }
     });
   }
 
   generateReport(): void {
-    if (this.reportLoading || !this.results) return;
+    if (this.reportLoading() || !this.results()) return;
 
-    this.reportLoading = true;
-    this.errorMessage = '';
-    this.cdr.detectChanges();
+    this.reportLoading.set(true);
+    this.errorMessage.set('');
 
     this.api.generateReport(this.sessionId).subscribe({
       next: (report: AssessmentReport) => {
-        this.report = report;
-        this.reportLoading = false;
+        this.report.set(report);
+        this.reportLoading.set(false);
         this.cdr.detectChanges();
       },
       error: (error: HttpErrorResponse) => {
-        this.reportLoading = false;
-        this.errorMessage =
-          error.error?.detail || 'Unable to generate report.';
+        this.reportLoading.set(false);
+        this.errorMessage.set(
+          error.error?.detail || 'Unable to generate report.'
+        );
         this.cdr.detectChanges();
       }
     });
@@ -124,18 +124,21 @@ export class AssessmentResults implements OnInit {
   }
 
   get totalScore(): number {
-    return this.results?.total_score ??
-      this.results?.categories.reduce((sum, item) => sum + item.score, 0) ?? 0;
+    const res = this.results();
+    return res?.total_score ??
+      res?.categories.reduce((sum, item) => sum + item.score, 0) ?? 0;
   }
 
   get maxScore(): number {
-    return this.results?.max_score ??
-      this.results?.categories.reduce((sum, item) => sum + item.max_score, 0) ?? 0;
+    const res = this.results();
+    return res?.max_score ??
+      res?.categories.reduce((sum, item) => sum + item.max_score, 0) ?? 0;
   }
 
   get overallPercentage(): number {
-    if (this.results?.overall_percentage !== undefined) {
-      return this.results.overall_percentage;
+    const res = this.results();
+    if (res?.overall_percentage !== undefined) {
+      return res.overall_percentage;
     }
     return this.maxScore > 0 ? (this.totalScore / this.maxScore) * 100 : 0;
   }
@@ -145,16 +148,16 @@ export class AssessmentResults implements OnInit {
   }
 
   get incorrectAnswers(): number {
-    const answered = this.results?.answered_count || 0;
+    const answered = this.results()?.answered_count || 0;
     return Math.max(0, answered - this.correctAnswers);
   }
 
   get unansweredCount(): number {
-    return this.results?.unanswered_count || 0;
+    return this.results()?.unanswered_count || 0;
   }
 
   get accuracyPercentage(): number {
-    const answered = this.results?.answered_count || 0;
+    const answered = this.results()?.answered_count || 0;
     if (answered <= 0) return 0;
     return Math.round((this.correctAnswers / answered) * 100);
   }

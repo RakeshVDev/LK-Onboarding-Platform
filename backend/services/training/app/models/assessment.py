@@ -101,6 +101,10 @@ class AssessmentSession(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    tab_switch_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+
     # Keep model and prompt versions for reproducibility.
     ai_model: Mapped[str | None] = mapped_column(
         String(100), nullable=True
@@ -155,6 +159,10 @@ class AssessmentQuestion(Base):
         Text, nullable=False
     )
 
+    instructions: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+
     # Public question choices. The API may expose these.
     options: Mapped[list] = mapped_column(
         JSON, nullable=False
@@ -172,6 +180,10 @@ class AssessmentQuestion(Base):
 
     max_score: Mapped[float] = mapped_column(
         Float, default=1.0, nullable=False
+    )
+
+    negative_marks: Mapped[float] = mapped_column(
+        Float, default=0.0, nullable=False
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -341,9 +353,14 @@ class AssessmentQuestionBank(Base):
     difficulty: Mapped[str] = mapped_column(String(20), default="Medium", nullable=False)
     question_type: Mapped[str] = mapped_column(String(50), default="multiple_choice", nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     options: Mapped[list] = mapped_column(JSON, nullable=False)
     scoring_key: Mapped[dict] = mapped_column(JSON, nullable=False)
     max_score: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    negative_marks: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    display_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    in_assessment: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_by_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -351,4 +368,67 @@ class AssessmentQuestionBank(Base):
 
     __table_args__ = (
         CheckConstraint("max_score > 0", name="ck_assessment_bank_max_score"),
+        CheckConstraint("negative_marks >= 0", name="ck_assessment_bank_negative_marks"),
+        CheckConstraint("display_order IS NULL OR display_order > 0", name="ck_assessment_bank_order_positive"),
+        UniqueConstraint("template_id", "display_order", name="uq_assessment_bank_template_order"),
+    )
+
+
+class AssessmentAssignment(Base):
+    """Tracks assessment assignments to all learners, specific cohorts, or individual students."""
+    __tablename__ = "assessment_assignments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    template_id: Mapped[int] = mapped_column(
+        ForeignKey("assessment_templates.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Target scope: 'all', 'cohort', or 'learner'
+    target_type: Mapped[str] = mapped_column(
+        String(20), default="all", nullable=False, index=True
+    )
+
+    # Uniqueness key per template: 'all', 'cohort:<id>', or 'learner:<id>'
+    assignment_key: Mapped[str] = mapped_column(
+        String(80), nullable=False
+    )
+
+    learner_user_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, index=True
+    )
+
+    cohort_id: Mapped[int | None] = mapped_column(
+        ForeignKey("cohorts.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    assigned_by_user_id: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )
+
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "template_id",
+            "assignment_key",
+            name="uq_assessment_assignment_target",
+        ),
     )

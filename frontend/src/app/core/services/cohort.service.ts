@@ -1,6 +1,7 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Optional } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
+import { AuthService } from './auth.service';
 
 export interface LeadTrainer {
   name: string;
@@ -325,7 +326,10 @@ export class CohortService {
   private dataSubject!: BehaviorSubject<CohortFullData>;
   readonly data$!: Observable<CohortFullData>;
 
-  constructor(private readonly http: HttpClient) {
+  constructor(
+    private readonly http: HttpClient,
+    @Optional() private readonly authService?: AuthService
+  ) {
     let initial: CohortFullData;
     try {
       initial = this.getInitialData();
@@ -345,15 +349,31 @@ export class CohortService {
   }
 
   private getHeaders(): HttpHeaders {
-    const token = sessionStorage.getItem('lk_access_token');
+    const token =
+      this.authService?.getToken() ??
+      (typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem('lk_access_token')
+        : null);
     return new HttpHeaders({
-      Authorization: `Bearer ${token}`
+      Authorization: `Bearer ${token || ''}`
     });
   }
 
   getCurrentUser(): { id?: string | number; full_name: string; email: string; role: string } {
+    const authUser = this.authService?.getCurrentUserSnapshot();
+    if (authUser?.full_name && authUser.full_name !== 'Current User') {
+      return {
+        id: authUser.id,
+        full_name: authUser.full_name,
+        email: authUser.email,
+        role: authUser.role
+      };
+    }
+
     try {
-      const raw = sessionStorage.getItem('lk_current_user') || localStorage.getItem('lk_current_user');
+      const raw =
+        (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('lk_current_user') : null) ||
+        (typeof localStorage !== 'undefined' ? localStorage.getItem('lk_current_user') : null);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.full_name && parsed.full_name !== 'Current User') {
@@ -363,7 +383,7 @@ export class CohortService {
     } catch {}
 
     try {
-      const stored = localStorage.getItem('ase_managed_users');
+      const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('ase_managed_users') : null;
       if (stored) {
         const users = JSON.parse(stored);
         const teacher = users.find((u: any) => (u.role === 'teacher' || u.role === 'admin') && u.is_active && u.full_name !== 'Current User');
@@ -1745,7 +1765,25 @@ export class CohortService {
         }
       }
 
-      // Check logged in user in sessionStorage
+      // Check active logged in user snapshot & sessionStorage
+      const activeUser = this.authService?.getCurrentUserSnapshot();
+      if (
+        activeUser &&
+        activeUser.role === 'learner' &&
+        activeUser.email &&
+        !existingEmails.has(activeUser.email.toLowerCase().trim())
+      ) {
+        managedUsers.push({
+          id: activeUser.id || Date.now(),
+          full_name: activeUser.full_name || 'Current Learner',
+          email: activeUser.email,
+          role: 'learner',
+          is_active: true,
+          created_at: activeUser.created_at || new Date().toISOString()
+        });
+        existingEmails.add(activeUser.email.toLowerCase().trim());
+      }
+
       if (typeof sessionStorage !== 'undefined') {
         try {
           const cur = sessionStorage.getItem('lk_current_user');
@@ -1775,8 +1813,8 @@ export class CohortService {
 
       // Map each platform learner to AttendanceStudentRow
       const updatedStudents: AttendanceStudentRow[] = platformLearners.map((learner: any, index: number) => {
-        const email = learner.email?.toLowerCase().trim();
-        const name = learner.full_name?.trim();
+        const email = learner.email?.toLowerCase().trim() || '';
+        const name = learner.full_name?.trim() || 'Platform Learner';
         const canon = CohortService.CANONICAL_LEARNERS.find(c => c.email.toLowerCase() === email || c.name.toLowerCase() === name.toLowerCase());
 
         // Look for existing row in current matrix
@@ -2585,7 +2623,9 @@ export class CohortService {
   sanitizeTrainerNames(): void {
     const current = this.getCohortData();
     let changed = false;
-    const defaultTrainer = this.getCurrentUser().full_name || current.details.leadTrainer?.name || 'Priya Sharma';
+    const user = this.getCurrentUser();
+    const isInstructorUser = user.role === 'teacher' || user.role === 'admin' || user.role === 'superadmin';
+    const defaultTrainer = (isInstructorUser ? user.full_name : '') || current.details.leadTrainer?.name || 'Priya Sharma';
 
     const updatedSessions = current.sessions.map(s => {
       if (!s.trainer || s.trainer === 'Current User') {
