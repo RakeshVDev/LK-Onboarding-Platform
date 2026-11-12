@@ -56,6 +56,24 @@ export class UserManagementService {
     );
   }
 
+  async listTeachers(): Promise<ManagedUser[]> {
+    const users = await this.listUsers();
+    return users.filter(u => u.role === 'teacher');
+  }
+
+  async listLearners(): Promise<ManagedUser[]> {
+    const users = await this.listUsers();
+    return users.filter(u => u.role === 'learner');
+  }
+
+  getTeachers(): ManagedUser[] {
+    return [];
+  }
+
+  getLearners(): ManagedUser[] {
+    return [];
+  }
+
   async createUser(payload: CreateUserRequest): Promise<ManagedUser> {
     return firstValueFrom(
       this.http.post<ManagedUser>(
