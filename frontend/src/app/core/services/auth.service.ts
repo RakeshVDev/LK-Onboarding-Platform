@@ -31,6 +31,7 @@ export class AuthService {
 
   private readonly currentUserState = signal<CurrentUser | null>(null);
   readonly currentUser = this.currentUserState.asReadonly();
+  private currentUserPromise: Promise<CurrentUser> | null = null;
 
   constructor(private readonly http: HttpClient) {}
 
@@ -67,9 +68,11 @@ export class AuthService {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(this.tokenKey, response.access_token);
     }
+    this.setCurrentUser(null);
+    this.currentUserPromise = null;
 
     try {
-      const user = await this.getCurrentUser();
+      const user = await this.getCurrentUser(true);
       this.setCurrentUser(user);
       return user;
     } catch (error) {
@@ -78,32 +81,48 @@ export class AuthService {
     }
   }
 
-  async getCurrentUser(): Promise<CurrentUser> {
+  async getCurrentUser(force = false): Promise<CurrentUser> {
     const token = this.getToken();
 
     if (!token) {
       this.setCurrentUser(null);
+      this.currentUserPromise = null;
       throw new Error('Please log in to continue.');
     }
 
-    try {
-      const user = await firstValueFrom(
-        this.http.get<CurrentUser>(`${this.apiUrl}/me`, {
-          headers: new HttpHeaders({
-            Authorization: `Bearer ${token}`
-          })
-        })
-      );
-
-      this.setCurrentUser(user);
-      return user;
-    } catch (error) {
-      if (error instanceof HttpErrorResponse && error.status === 401) {
-        this.logout();
-      }
-
-      throw error;
+    const existingUser = this.currentUserState();
+    if (!force && existingUser) {
+      return existingUser;
     }
+
+    if (!force && this.currentUserPromise) {
+      return this.currentUserPromise;
+    }
+
+    this.currentUserPromise = (async () => {
+      try {
+        const user = await firstValueFrom(
+          this.http.get<CurrentUser>(`${this.apiUrl}/me`, {
+            headers: new HttpHeaders({
+              Authorization: `Bearer ${token}`
+            })
+          })
+        );
+
+        this.setCurrentUser(user);
+        return user;
+      } catch (error) {
+        if (error instanceof HttpErrorResponse && error.status === 401) {
+          this.logout();
+        }
+
+        throw error;
+      } finally {
+        this.currentUserPromise = null;
+      }
+    })();
+
+    return this.currentUserPromise;
   }
 
   hasRole(...roles: UserRole[]): boolean {
@@ -122,6 +141,7 @@ export class AuthService {
       sessionStorage.removeItem(this.tokenKey);
     }
     this.setCurrentUser(null);
+    this.currentUserPromise = null;
   }
 
   getToken(): string | null {

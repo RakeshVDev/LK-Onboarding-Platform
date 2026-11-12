@@ -43,6 +43,7 @@ export const routes: Routes = [
       // Dashboard
       {
         path: 'dashboard',
+        data: { allowIncompleteAssessment: true },
         component: Dashboard
       },
 
@@ -101,7 +102,7 @@ export const routes: Routes = [
       {
         path: 'assessments',
         canActivate: [
-          roleGuard(['admin', 'teacher'])
+          roleGuard(['superadmin', 'admin', 'teacher'])
         ],
         loadComponent: () =>
           import('./features/assessments/assessment-management/assessment-management')
@@ -112,7 +113,7 @@ export const routes: Routes = [
       {
         path: 'assessments/create',
         canActivate: [
-          roleGuard(['admin', 'teacher'])
+          roleGuard(['superadmin', 'admin', 'teacher'])
         ],
         loadComponent: () =>
           import('./features/assessments/assessment-form/assessment-form')
@@ -123,7 +124,7 @@ export const routes: Routes = [
       {
         path: 'assessments/edit/:id',
         canActivate: [
-          roleGuard(['admin', 'teacher'])
+          roleGuard(['superadmin', 'admin', 'teacher'])
         ],
         loadComponent: () =>
           import('./features/assessments/assessment-form/assessment-form')

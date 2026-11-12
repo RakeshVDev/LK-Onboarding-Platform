@@ -2,7 +2,8 @@ import {
   ChangeDetectorRef,
   Component,
   OnInit,
-  inject
+  inject,
+  signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
@@ -25,40 +26,40 @@ export class LearnerResults implements OnInit {
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
-  results: UserAssessmentResultItem[] = [];
-  loading = true;
-  errorMessage = '';
+  readonly results = signal<UserAssessmentResultItem[]>([]);
+  readonly loading = signal(true);
+  readonly errorMessage = signal('');
 
   ngOnInit(): void {
     this.loadResults();
   }
 
   loadResults(): void {
-    this.loading = true;
-    this.errorMessage = '';
-    this.cdr.detectChanges();
+    this.loading.set(true);
+    this.errorMessage.set('');
 
     this.api.getMyResults().subscribe({
       next: (data) => {
-        this.results = Array.isArray(data) ? data : [];
-        this.loading = false;
+        this.results.set(Array.isArray(data) ? data : []);
+        this.loading.set(false);
         this.cdr.detectChanges();
       },
       error: (error: HttpErrorResponse) => {
-        this.errorMessage =
-          error.error?.detail || 'Unable to load your assessment results.';
-        this.loading = false;
+        this.errorMessage.set(
+          error.error?.detail || 'Unable to load your assessment results.'
+        );
+        this.loading.set(false);
         this.cdr.detectChanges();
       }
     });
   }
 
   get completedResults(): UserAssessmentResultItem[] {
-    return this.results.filter(r => r.status === 'completed');
+    return this.results().filter(r => r.status === 'completed');
   }
 
   get inProgressResults(): UserAssessmentResultItem[] {
-    return this.results.filter(r => r.status === 'in_progress');
+    return this.results().filter(r => r.status === 'in_progress');
   }
 
   get totalCompleted(): number {
@@ -103,6 +104,8 @@ export class LearnerResults implements OnInit {
       case 'psychometric': return 'Psychometric';
       case 'technical': return 'Technical';
       case 'english_grammar': return 'English Grammar';
+      case 'logical_reasoning': return 'Logical Reasoning';
+      case 'programming': return 'Programming';
       default: return type.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
     }
   }

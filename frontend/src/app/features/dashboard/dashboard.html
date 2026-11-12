@@ -27,7 +27,7 @@
       <h1 class="hero-greeting">{{ greeting() }}, {{ user()?.full_name }}! 👋</h1>
       <p class="hero-subtitle">
         @if (user()?.role === 'learner') {
-          Welcome to your ASE onboarding workspace. Complete your mandatory skill assessments and begin your induction journey.
+          Welcome to your ASE Assessment Tool workspace. Complete your assigned skill assessments and track your induction progress in real time.
         } @else if (user()?.role === 'teacher') {
           Welcome to your Academic Faculty Suite. Oversee cohort progress, evaluate assessment submissions, and curate question banks.
         } @else {
@@ -51,10 +51,116 @@
   </header>
 
   <!-- ========================================================= -->
-  <!-- 1. LEARNER / NEW JOINEE DASHBOARD ("user new joine")     -->
+  <!-- 1. LEARNER / NEW JOINEE DASHBOARD                         -->
   <!-- ========================================================= -->
   @if (user()?.role === 'learner') {
   <div class="role-dashboard learner-layout">
+
+    <!-- LIVE ASSESSMENT NOTIFICATIONS PANEL (Incomplete / Assigned / In Progress / Expired) -->
+    @if (notifications().length > 0) {
+    <section class="notifications-panel" aria-live="polite">
+      <div class="notifications-header">
+        <div class="notif-title-group">
+          <span class="notif-pulse-badge">
+            <span class="live-pulse-dot"></span>
+            LIVE ASSESSMENT ALERTS ({{ notifications().length }})
+          </span>
+          <h2>Assessment Notifications</h2>
+          <p>Action required on your currently assigned assessments. Updates automatically.</p>
+        </div>
+        <div class="notif-sync-controls">
+          @if (lastSyncedAt()) {
+            <span class="last-sync-label">Synced {{ lastSyncedAt() | date:'shortTime' }}</span>
+          }
+          <button
+            type="button"
+            class="btn-sync-now"
+            [disabled]="syncingAssessments()"
+            (click)="refreshLearnerAssessments()">
+            <span>{{ syncingAssessments() ? 'Syncing...' : '↻ Sync Status' }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="notifications-list">
+        @for (item of notifications(); track item.template_id) {
+          <article class="notification-card" [attr.data-status]="item.status">
+            <div class="notif-left">
+              <div class="notif-icon-box" [attr.data-type]="item.assessment_type">
+                {{ getAssessmentIcon(item.assessment_type) }}
+              </div>
+              <div class="notif-content">
+                <div class="notif-top-line">
+                  <strong class="notif-headline">
+                    @if (item.status === 'IN_PROGRESS') {
+                      {{ item.notification_title || 'Assessment In Progress' }}
+                    } @else if (item.status === 'EXPIRED') {
+                      {{ item.notification_title || 'Assessment Expired' }}
+                    } @else {
+                      {{ item.notification_title || 'New Assessment Assigned' }}
+                    }
+                  </strong>
+
+                  <span class="notif-status-pill" [attr.data-status]="item.status">
+                    @if (item.status === 'IN_PROGRESS') {
+                      <span class="pill-dot blue"></span> In Progress
+                    } @else if (item.status === 'EXPIRED') {
+                      <span class="pill-dot red"></span> Expired
+                    } @else {
+                      <span class="pill-dot amber"></span> Pending
+                    }
+                  </span>
+
+                  <span class="notif-category-chip">{{ item.category_label }}</span>
+
+                  @if (item.cohort_name) {
+                    <span class="notif-cohort-chip">Cohort: {{ item.cohort_name }}</span>
+                  }
+                </div>
+
+                <h3 class="notif-assessment-name">{{ item.name }}</h3>
+
+                <div class="notif-meta-row">
+                  <span><strong>{{ item.question_count }}</strong> Questions</span>
+                  <span>·</span>
+                  <span><strong>{{ item.duration_minutes }}</strong> Minutes</span>
+                  <span>·</span>
+                  <span>Assigned {{ item.assigned_at | date:'mediumDate' }}</span>
+                  @if (item.due_at) {
+                    <span>·</span>
+                    <span class="due-tag">Due {{ item.due_at | date:'medium' }}</span>
+                  }
+                  @if (item.status === 'IN_PROGRESS') {
+                    <span>·</span>
+                    <span class="timer-tag">
+                      ⏱ Remaining: <strong>{{ formatRemainingTime(getLiveRemainingSeconds(item)) }}</strong>
+                    </span>
+                  }
+                </div>
+              </div>
+            </div>
+
+            <div class="notif-actions">
+              @if (item.status === 'IN_PROGRESS' && item.can_continue && item.session_id) {
+                <a [routerLink]="['/assessments/take', item.session_id]" class="btn-notif btn-continue">
+                  <span>Continue Assessment &rarr;</span>
+                </a>
+              } @else if (item.status === 'NOT_STARTED' && item.can_start) {
+                <a
+                  routerLink="/my-assessments"
+                  [queryParams]="{ startTemplateId: item.template_id }"
+                  class="btn-notif btn-start-notif">
+                  <span>Start Assessment &rarr;</span>
+                </a>
+              } @else {
+                <span class="expired-readonly-note">Submission Window Closed</span>
+              }
+            </div>
+          </article>
+        }
+      </div>
+    </section>
+    }
 
     <!-- Onboarding Journey Card -->
     <section class="onboarding-journey-card">
@@ -62,7 +168,7 @@
         <div class="journey-title-group">
           <span class="journey-tag">ONBOARDING PATHWAY</span>
           <h2>Your New Joinee Milestones</h2>
-          <p>Complete each essential induction milestone to finalize your ASE onboarding.</p>
+          <p>Complete each essential induction milestone to finalize your ASE Assessment Tool journey.</p>
         </div>
         <div class="journey-progress-dial">
           <div class="progress-ring-container">
@@ -83,25 +189,31 @@
           </div>
         </div>
 
-        <div class="milestone-step" [class.step-completed]="completedLearnerResults().length >= 1" [class.step-active]="completedLearnerResults().length === 0">
+        <div
+          class="milestone-step"
+          [class.step-completed]="totalAssignedCount() > 0 && completedAssignedCount() >= totalAssignedCount()"
+          [class.step-active]="totalAssignedCount() === 0 || completedAssignedCount() < totalAssignedCount()">
           <div class="step-icon">
-            {{ completedLearnerResults().length >= 1 ? '✓' : '⚡' }}
+            {{ (totalAssignedCount() > 0 && completedAssignedCount() >= totalAssignedCount()) ? '✓' : '⚡' }}
           </div>
           <div class="step-info">
             <span class="step-num">Step 2</span>
             <strong>Skill Assessments</strong>
             <span class="step-status">
-              {{ completedLearnerResults().length }}/4 Completed
+              {{ completedAssignedCount() }}/{{ totalAssignedCount() }} Completed
             </span>
           </div>
         </div>
 
-        <div class="milestone-step" [class.step-completed]="completedLearnerResults().length >= 4" [class.step-active]="completedLearnerResults().length >= 1 && completedLearnerResults().length < 4">
+        <div
+          class="milestone-step"
+          [class.step-completed]="coursesCount() > 0 && totalAssignedCount() > 0 && completedAssignedCount() >= totalAssignedCount()"
+          [class.step-active]="completedAssignedCount() >= 1 && completedAssignedCount() < totalAssignedCount()">
           <div class="step-icon">▣</div>
           <div class="step-info">
             <span class="step-num">Step 3</span>
             <strong>Course Curriculum</strong>
-            <span class="step-status">Active Track</span>
+            <span class="step-status">{{ coursesCount() }} Assigned Courses</span>
           </div>
         </div>
 
@@ -110,7 +222,7 @@
           <div class="step-info">
             <span class="step-num">Step 4</span>
             <strong>Cohort Induction</strong>
-            <span class="step-status">Batch 2026-A</span>
+            <span class="step-status">{{ assignedCohortLabel() }}</span>
           </div>
         </div>
       </div>
@@ -124,8 +236,16 @@
         </div>
         <div class="stat-meta">
           <span class="stat-label">Assessments Completed</span>
-          <strong class="stat-value">{{ completedLearnerResults().length }} of 4</strong>
-          <span class="stat-trend positive">Mandatory Onboarding</span>
+          <strong class="stat-value">{{ completedAssignedCount() }} of {{ totalAssignedCount() }}</strong>
+          <span class="stat-trend positive">
+            @if (assignedStats().in_progress_count > 0 || assignedStats().not_started_count > 0) {
+              {{ assignedStats().not_started_count + assignedStats().in_progress_count }} Action Pending
+            } @else if (totalAssignedCount() > 0) {
+              All Assigned Completed
+            } @else {
+              Awaiting Assignment
+            }
+          </span>
         </div>
       </div>
 
@@ -136,7 +256,7 @@
         <div class="stat-meta">
           <span class="stat-label">Performance Average</span>
           <strong class="stat-value">
-            @if (completedLearnerResults().length > 0) {
+            @if (completedAssignedCount() > 0) {
               {{ learnerAverageScore() }}%
             } @else {
               Pending
@@ -153,7 +273,7 @@
         <div class="stat-meta">
           <span class="stat-label">Training Courses</span>
           <strong class="stat-value">{{ coursesCount() }} Courses</strong>
-          <span class="stat-trend neutral">Enrolled in Cohort</span>
+          <span class="stat-trend neutral">Enrolled Curriculum</span>
         </div>
       </div>
 
@@ -163,176 +283,124 @@
         </div>
         <div class="stat-meta">
           <span class="stat-label">Assigned Cohort</span>
-          <strong class="stat-value">Batch 2026-A</strong>
-          <span class="stat-trend neutral">Active Session</span>
+          <strong class="stat-value stat-value-compact">{{ assignedCohortLabel() }}</strong>
+          <span class="stat-trend neutral">Active Induction</span>
         </div>
       </div>
     </section>
 
-    <!-- Assessment Launcher Center -->
+    <!-- Dynamic Assigned Assessments Launcher Center -->
     <section class="section-container">
       <div class="section-topbar">
         <div>
           <span class="sub-eyebrow">EXAMINATION SUITE</span>
-          <h2>Mandatory Skill Assessments</h2>
-          <p>All newly joined personnel must attempt these examinations as part of the onboarding process.</p>
+          <h2>Assigned Skill Assessments ({{ totalAssignedCount() }})</h2>
+          <p>Every assessment currently assigned to your account or cohort appears below with its live status.</p>
         </div>
-        <a routerLink="/my-results" class="btn-secondary-link">
-          <span>View All Results &amp; Reports &rarr;</span>
-        </a>
+        <div class="topbar-actions">
+          <button
+            type="button"
+            class="btn-sync-subtle"
+            [disabled]="syncingAssessments()"
+            (click)="refreshLearnerAssessments()">
+            {{ syncingAssessments() ? 'Refreshing...' : '↻ Refresh List' }}
+          </button>
+          <a routerLink="/my-assessments" class="btn-secondary-link">
+            <span>Open Assessments Page &rarr;</span>
+          </a>
+          <a routerLink="/my-results" class="btn-secondary-link">
+            <span>View All Results &amp; Reports &rarr;</span>
+          </a>
+        </div>
       </div>
 
-      <div class="tests-grid">
-
-        <!-- 1. Logical Reasoning Assessment -->
-        <article class="test-launch-card" data-type="logical_reasoning">
-          <div class="card-top-tag" data-type="logical_reasoning"></div>
-          <div class="test-card-body">
-            <div class="test-header">
-              <span class="test-symbol">⚡</span>
-              <span class="test-badge">Fixed 30 Mins · 25 Marks</span>
-            </div>
-
-            <h3>ASE Logical Reasoning Assessment</h3>
-            <p>25 multiple-choice questions covering Number Series, Coding-Decoding, Blood Relations &amp; Patterns.</p>
-
-            <div class="test-details-strip">
-              <span><strong>25</strong> Questions</span>
-              <span><strong>30</strong> Minutes</span>
-              <span><strong>No</strong> Negative Marks</span>
-            </div>
-
-            <div class="test-action-wrap">
-              @if (getCompletedTest('logical_reasoning'); as completed) {
-                <div class="completed-actions-row">
-                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
-                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
-                  </a>
-                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
-                    <span>Breakdown &rarr;</span>
-                  </a>
+      @if (assignedAssessments().length === 0) {
+        <div class="empty-assigned-card">
+          <div class="empty-icon">▤</div>
+          <h3>No assessments assigned right now</h3>
+          <p>When an administrator or instructor assigns an assessment to you or your cohort, it will appear here automatically.</p>
+        </div>
+      } @else {
+        <div class="tests-grid">
+          @for (item of assignedAssessments(); track item.template_id) {
+            <article
+              class="test-launch-card"
+              [attr.data-type]="item.assessment_type"
+              [attr.data-status]="item.status">
+              <div class="card-top-tag" [attr.data-type]="item.assessment_type"></div>
+              <div class="test-card-body">
+                <div class="test-header">
+                  <span class="test-symbol">{{ getAssessmentIcon(item.assessment_type) }}</span>
+                  <div class="card-badges-right">
+                    <span class="test-badge">{{ item.category_label }}</span>
+                    <span class="lifecycle-badge" [attr.data-status]="item.status">
+                      {{ getStatusBadgeLabel(item.status) }}
+                    </span>
+                  </div>
                 </div>
-              } @else {
-                <a routerLink="/my-assessments" class="btn-test-action btn-start">
-                  <span>Start Assessment &rarr;</span>
-                </a>
-              }
-            </div>
-          </div>
-        </article>
 
-        <!-- 2. Technical Assessment -->
-        <article class="test-launch-card" data-type="technical">
-          <div class="card-top-tag" data-type="technical"></div>
-          <div class="test-card-body">
-            <div class="test-header">
-              <span class="test-symbol">💻</span>
-              <span class="test-badge">Technical Knowledge</span>
-            </div>
+                <h3>{{ item.name }}</h3>
+                <p>
+                  {{
+                    item.description ||
+                    'Complete this assessment within your allotted duration to receive an official report card.'
+                  }}
+                </p>
 
-            <h3>ASE Technical Assessment</h3>
-            <p>20 questions on core engineering fundamentals, architecture, and technology best practices.</p>
-
-            <div class="test-details-strip">
-              <span><strong>20</strong> Questions</span>
-              <span><strong>15</strong> Minutes</span>
-              <span><strong>+1.0</strong> Mark each</span>
-            </div>
-
-            <div class="test-action-wrap">
-              @if (getCompletedTest('technical'); as completed) {
-                <div class="completed-actions-row">
-                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
-                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
-                  </a>
-                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
-                    <span>Breakdown &rarr;</span>
-                  </a>
+                <div class="test-details-strip">
+                  <span><strong>{{ item.question_count }}</strong> Questions</span>
+                  <span><strong>{{ item.duration_minutes }}</strong> Minutes</span>
+                  @if (item.status === 'IN_PROGRESS') {
+                    <span class="strip-live-time">
+                      <strong>{{ formatRemainingTime(getLiveRemainingSeconds(item)) }}</strong> Left
+                    </span>
+                  } @else if (item.due_at) {
+                    <span>Due <strong>{{ item.due_at | date:'MMM d' }}</strong></span>
+                  } @else {
+                    <span><strong>One</strong> Attempt</span>
+                  }
                 </div>
-              } @else {
-                <a routerLink="/my-assessments" class="btn-test-action btn-start">
-                  <span>Start Assessment &rarr;</span>
-                </a>
-              }
-            </div>
-          </div>
-        </article>
 
-        <!-- 3. English Grammar Assessment -->
-        <article class="test-launch-card" data-type="english_grammar">
-          <div class="card-top-tag" data-type="english_grammar"></div>
-          <div class="test-card-body">
-            <div class="test-header">
-              <span class="test-symbol">✍</span>
-              <span class="test-badge">Verbal &amp; Grammar</span>
-            </div>
-
-            <h3>ASE English Grammar Assessment</h3>
-            <p>20 questions on corporate communications, syntax correctness, vocabulary, and sentence usage.</p>
-
-            <div class="test-details-strip">
-              <span><strong>20</strong> Questions</span>
-              <span><strong>15</strong> Minutes</span>
-              <span><strong>+1.0</strong> Mark each</span>
-            </div>
-
-            <div class="test-action-wrap">
-              @if (getCompletedTest('english_grammar'); as completed) {
-                <div class="completed-actions-row">
-                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
-                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
-                  </a>
-                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
-                    <span>Breakdown &rarr;</span>
-                  </a>
+                <div class="test-action-wrap">
+                  @if (item.status === 'COMPLETED' && item.session_id) {
+                    <div class="completed-actions-row">
+                      <a
+                        [routerLink]="['/assessments/report', item.session_id]"
+                        class="btn-test-action btn-completed"
+                        title="View Official Report Card">
+                        <span>✓ Report ({{ item.overall_percentage ?? 0 }}%)</span>
+                      </a>
+                      <a
+                        [routerLink]="['/assessments/results', item.session_id]"
+                        class="btn-breakdown-link"
+                        title="Question Breakdown">
+                        <span>Breakdown &rarr;</span>
+                      </a>
+                    </div>
+                  } @else if (item.status === 'IN_PROGRESS' && item.can_continue && item.session_id) {
+                    <a
+                      [routerLink]="['/assessments/take', item.session_id]"
+                      class="btn-test-action btn-continue-card">
+                      <span>Continue Assessment ({{ formatRemainingTime(getLiveRemainingSeconds(item)) }}) &rarr;</span>
+                    </a>
+                  } @else if (item.status === 'NOT_STARTED' && item.can_start) {
+                    <a
+                      routerLink="/my-assessments"
+                      [queryParams]="{ startTemplateId: item.template_id }"
+                      class="btn-test-action btn-start">
+                      <span>Start Assessment &rarr;</span>
+                    </a>
+                  } @else {
+                    <button type="button" class="btn-test-action btn-expired" disabled>
+                      <span>Deadline Expired</span>
+                    </button>
+                  }
                 </div>
-              } @else {
-                <a routerLink="/my-assessments" class="btn-test-action btn-start">
-                  <span>Start Assessment &rarr;</span>
-                </a>
-              }
-            </div>
-          </div>
-        </article>
-
-        <!-- 4. Psychometric Assessment -->
-        <article class="test-launch-card" data-type="psychometric">
-          <div class="card-top-tag" data-type="psychometric"></div>
-          <div class="test-card-body">
-            <div class="test-header">
-              <span class="test-symbol">✦</span>
-              <span class="test-badge">Behavioral Profile</span>
-            </div>
-
-            <h3>ASE Psychometric Assessment</h3>
-            <p>20 evaluation scenarios measuring emotional intelligence, adaptability, teamwork, and ethics.</p>
-
-            <div class="test-details-strip">
-              <span><strong>20</strong> Questions</span>
-              <span><strong>15</strong> Minutes</span>
-              <span><strong>AI</strong> Report Card</span>
-            </div>
-
-            <div class="test-action-wrap">
-              @if (getCompletedTest('psychometric'); as completed) {
-                <div class="completed-actions-row">
-                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
-                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
-                  </a>
-                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
-                    <span>Breakdown &rarr;</span>
-                  </a>
-                </div>
-              } @else {
-                <a routerLink="/my-assessments" class="btn-test-action btn-start">
-                  <span>Start Assessment &rarr;</span>
-                </a>
-              }
-            </div>
-          </div>
-        </article>
-
-      </div>
+              </div>
+            </article>
+          }
+        </div>
+      }
     </section>
 
     <!-- Learner Quick Shortcuts & Training Center -->
@@ -360,7 +428,7 @@
           <div class="shortcut-icon">▥</div>
           <div>
             <h4>Results &amp; Report Cards</h4>
-            <p>Inspect your test scores, category breakdowns, and AI developmental feedback.</p>
+            <p>Inspect your test scores, category breakdowns, and developmental feedback.</p>
           </div>
           <span class="shortcut-arrow">&rarr;</span>
         </a>
@@ -449,7 +517,7 @@
             <span class="module-badge">Live Scores</span>
           </div>
           <h3>Learner Results &amp; Reports</h3>
-          <p>Review comprehensive scorecards, category breakdowns, and AI developmental insights for all learners.</p>
+          <p>Review comprehensive scorecards, category breakdowns, and developmental insights for all learners.</p>
           <a routerLink="/assessment-results" class="btn-module-action">
             <span>Open Results Panel &rarr;</span>
           </a>
@@ -461,7 +529,7 @@
             <span class="module-badge">Question Bank</span>
           </div>
           <h3>Assessment Management</h3>
-          <p>Manage test templates and author domain questions with customizable scoring keys.</p>
+          <p>Manage test templates, assign assessments to cohorts or students, and curate domain questions.</p>
           <a routerLink="/assessments" class="btn-module-action">
             <span>Manage Question Bank &rarr;</span>
           </a>
@@ -497,7 +565,7 @@
   }
 
   <!-- ========================================================= -->
-  <!-- 3. ADMIN & SUPER ADMIN DASHBOARD ("more advnaced")        -->
+  <!-- 3. ADMIN & SUPER ADMIN DASHBOARD                          -->
   <!-- ========================================================= -->
   @if (user()?.role === 'admin' || user()?.role === 'superadmin') {
   <div class="role-dashboard admin-layout">
@@ -506,7 +574,7 @@
     <div class="telemetry-banner">
       <div class="telemetry-left">
         <span class="pulse-green-dot"></span>
-        <strong>ASE Enterprise Platform Telemetry</strong>
+        <strong>ASE Assessment Tool Telemetry</strong>
         <span class="telemetry-tag">Identity &amp; Training APIs Live</span>
       </div>
       <div class="telemetry-right">
@@ -598,7 +666,7 @@
             <span class="module-badge">Exam Studio</span>
           </div>
           <h3>Assessment &amp; Question Banks</h3>
-          <p>Configure fixed 25-question Logical Reasoning tests, Technical question banks, and custom scoring keys.</p>
+          <p>Create assessments, assign targets to cohorts or students, and manage domain question banks.</p>
           <div class="card-footer-action">
             <a routerLink="/assessments" class="btn-module-action">
               <span>Manage Assessments &rarr;</span>
@@ -613,7 +681,7 @@
             <span class="module-badge">Audit &amp; Reports</span>
           </div>
           <h3>Global Results &amp; Scorecards</h3>
-          <p>Inspect all submitted tests, filter by assessment template, and review AI psychometric report cards.</p>
+          <p>Inspect all submitted tests, filter by assessment template, and review domain assessment report cards.</p>
           <div class="card-footer-action">
             <a routerLink="/assessment-results" class="btn-module-action">
               <span>Review All Results &rarr;</span>
@@ -664,7 +732,7 @@
           <div class="shortcut-icon">✦</div>
           <div>
             <h4>Create Assessment</h4>
-            <p>Add new examination templates with custom category configs.</p>
+            <p>Add new examination templates with custom category configs and assignments.</p>
           </div>
           <span class="shortcut-arrow">&rarr;</span>
         </a>

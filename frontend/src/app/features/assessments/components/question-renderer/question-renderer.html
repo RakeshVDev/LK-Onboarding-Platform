@@ -1,0 +1,100 @@
+@if (question) {
+  <!-- Question Meta Toolbar -->
+  <div class="question-topbar">
+    <div class="topbar-left">
+      <span class="q-badge">Question {{ questionNumber }} of {{ totalQuestions }}</span>
+      <span class="topic-badge">{{ categoryLabel(question.category) }}</span>
+      <span class="type-pill">{{ typeBadgeLabel }}</span>
+      <span class="difficulty-badge" [attr.data-diff]="question.difficulty || 'Medium'">
+        {{ question.difficulty || 'Medium' }}
+      </span>
+    </div>
+
+    <div class="topbar-right">
+      <span class="marks-pill">{{ formattedMarks }}</span>
+      <span class="neg-pill" [class.has-negative]="negativeMarksValue > 0">
+        {{ formattedNegativeMarks }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Question Body -->
+  <div class="question-content">
+    @if (question.instructions && question.instructions.trim()) {
+      <div class="instructions-callout">
+        <span class="inst-label">INSTRUCTIONS</span>
+        <p>{{ question.instructions }}</p>
+      </div>
+    }
+
+    <h2 class="question-statement">{{ question.question_text || 'Question text will appear here as you type...' }}</h2>
+    <p class="question-instruction">{{ helperInstruction }}</p>
+
+    <!-- Dynamic Options Grid (2..10 options, Radio or Checkbox) -->
+    @if (optionsList.length > 0) {
+      <div class="options-container">
+        @for (option of optionsList; track option.id; let optIdx = $index) {
+          <button
+            type="button"
+            class="option-card"
+            [class.selected]="isSelected(option.id)"
+            [class.admin-correct]="isCorrectOption(option.id)"
+            [disabled]="disabled"
+            (click)="onSelectOption(option.id)">
+
+            <span class="option-key">{{ option.id }}</span>
+            <span class="option-label">{{ option.text || ('Option ' + option.id) }}</span>
+
+            @if (isCorrectOption(option.id)) {
+              <span class="admin-correct-badge">✓ Correct Answer</span>
+            }
+
+            @if (isMultiSelect) {
+              <span class="option-checkbox" [class.checked]="isSelected(option.id)">
+                @if (isSelected(option.id)) {
+                  <span class="check-mark">✓</span>
+                }
+              </span>
+            } @else {
+              <span class="option-radio">
+                <span class="radio-inner"></span>
+              </span>
+            }
+          </button>
+        }
+      </div>
+    } @else {
+      <div class="empty-options-note">
+        No answer options configured yet.
+      </div>
+    }
+
+    @if (showClear && hasSelection && !disabled) {
+      <div class="clear-action">
+        <button type="button" class="btn-clear" (click)="onClearClick()">
+          ✕ Clear Selection
+        </button>
+      </div>
+    }
+
+    <!-- Admin Answer Key & Explanation Callout (Strictly hidden in Exam and Student Preview modes) -->
+    @if (isAdminPreview) {
+      <div class="admin-solution-panel">
+        <div class="solution-row">
+          <span class="sol-badge">ADMIN ANSWER KEY</span>
+          @if (correctAnswerSet.size > 0) {
+            <strong>Correct Option(s): {{ correctAnswerDisplay }}</strong>
+          } @else {
+            <strong class="sol-missing">No correct answer selected yet</strong>
+          }
+        </div>
+        @if (question.explanation && question.explanation.trim()) {
+          <div class="solution-explanation">
+            <span class="exp-label">Explanation:</span>
+            <p>{{ question.explanation }}</p>
+          </div>
+        }
+      </div>
+    }
+  </div>
+}

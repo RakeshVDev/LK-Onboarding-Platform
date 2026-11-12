@@ -1,4 +1,5 @@
 
+import json
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
@@ -16,6 +17,7 @@ from services.identity.app.models.user import User as IdentityUser
 from services.training.app.db.session import SessionLocal
 
 from services.training.app.models.assessment import (
+    AssessmentAssignment,
     AssessmentTemplate,
     AssessmentSession,
     AssessmentQuestion,
@@ -24,16 +26,26 @@ from services.training.app.models.assessment import (
     AssessmentReport,
     AssessmentQuestionBank,
 )
+from services.training.app.models.entities import Cohort, CohortMember
 
 from services.training.app.schemas.assessment import (
     AssessmentTemplateCreate,
     AssessmentTemplateUpdate,
     AssessmentTemplateResponse,
+    AssessmentAssignmentPayload,
+    AssessmentAssignmentTargetSummary,
+    AssignableCohortItem,
+    AssignableLearnerItem,
+    AssignableTargetsResponse,
+    StudentAssignedAssessmentItem,
+    StudentAssignedStats,
+    StudentAssignedAssessmentsResponse,
     AssessmentQuestionResponse,
     AssessmentStartRequest,
     AssessmentStartResponse,
     AssessmentSubmitRequest,
     AssessmentSubmitResponse,
+    AssessmentTabSwitchRequest,
     AssessmentScoresResponse,
     AssessmentReportResponse,
     LearnerAssessmentStatusResponse,
@@ -41,7 +53,11 @@ from services.training.app.schemas.assessment import (
     AssessmentAnswerSaveRequest,
     AssessmentAnswerSaveResponse,
     AssessmentBankQuestionCreate,
+    AssessmentBankQuestionUpdate,
     AssessmentBankQuestionResponse,
+    AssessmentBankReorderRequest,
+    AssessmentPreviewQuestionItem,
+    AssessmentTemplatePreviewResponse,
     AssessmentCategoryScoreResponse,
     UserAssessmentResultItem,
     AdminAssessmentResultsResponse,
@@ -133,6 +149,10 @@ VALID_CATEGORIES_BY_TYPE = {
         "debugging",
         "time_complexity",
         "data_structures",
+        "algorithms",
+        "python_programming",
+        "javascript_web",
+        "databases_sql",
     },
     "psychometric": {
         "psychometric",
@@ -217,8 +237,17 @@ def validate_category_config(config: dict):
             )
 
 
+ASSESSMENT_TYPE_LABELS = {
+    "psychometric": "Behavioral & Psychometric",
+    "logical_reasoning": "Logical Reasoning & Aptitude",
+    "english_grammar": "Verbal & English Grammar",
+    "technical": "Technical Engineering",
+    "programming": "Programming & Coding",
+}
+
+
 def get_duration_minutes_for_template(template: AssessmentTemplate | None) -> int:
-    if template and getattr(template, "assessment_type", None) == "logical_reasoning":
+    if template and getattr(template, "assessment_type", None) in {"logical_reasoning", "programming"}:
         return 30
     return 15
 
@@ -235,6 +264,728 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def resolve_effective_assessment_type(template: AssessmentTemplate) -> str:
+    name_lower = (template.name or "").lower()
+    type_lower = (template.assessment_type or "").lower().strip()
+    explicit_non_psy = {"english_grammar", "technical", "logical_reasoning", "programming"}
+    if type_lower in explicit_non_psy:
+        return type_lower
+
+    if "psychometric" not in name_lower:
+        if "grammar" in name_lower or "english" in name_lower:
+            return "english_grammar"
+        if "logical" in name_lower:
+            return "logical_reasoning"
+        if "programming" in name_lower or "coding" in name_lower:
+            return "programming"
+        if "technical" in name_lower:
+            return "technical"
+    return type_lower or "psychometric"
+
+
+SUPPORTED_BANK_QUESTION_TYPES = {
+    "multiple_choice",
+    "single_choice",
+    "multiple_select",
+    "true_false",
+}
+
+
+def _parse_json_list(raw_val) -> list:
+    if isinstance(raw_val, list):
+        return raw_val
+    if isinstance(raw_val, str):
+        try:
+            parsed = json.loads(raw_val)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return []
+
+
+def _parse_json_dict(raw_val) -> dict:
+    if isinstance(raw_val, dict):
+        return raw_val
+    if isinstance(raw_val, str):
+        try:
+            parsed = json.loads(raw_val)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _extract_correct_option_ids(scoring_key: dict, options: list | None = None) -> list[str]:
+    clean_sk = {str(k).strip().upper(): float(v or 0.0) for k, v in (scoring_key or {}).items()}
+    correct_set = {k for k, v in clean_sk.items() if v > 0}
+    if options:
+        ordered = [
+            str(opt.get("id", "")).strip().upper()
+            for opt in options
+            if str(opt.get("id", "")).strip().upper() in correct_set
+        ]
+        if ordered:
+            return ordered
+    return sorted(correct_set)
+
+
+def _normalize_answer_value(raw_answer, question_type: str | None = None) -> str | None:
+    if raw_answer is None:
+        return None
+    q_type = (question_type or "multiple_choice").strip().lower()
+    if isinstance(raw_answer, list):
+        tokens = sorted({str(part).strip().upper() for part in raw_answer if str(part).strip()})
+        return ",".join(tokens) if tokens else None
+    if isinstance(raw_answer, str):
+        stripped = raw_answer.strip()
+        if not stripped:
+            return None
+        if q_type == "multiple_select":
+            tokens = sorted({part.strip().upper() for part in stripped.split(",") if part.strip()})
+            return ",".join(tokens) if tokens else None
+        return stripped
+    return str(raw_answer).strip() or None
+
+
+def _is_response_correct(question: AssessmentQuestion, response: AssessmentResponse) -> bool:
+    if response.points_awarded is not None:
+        max_s = float(question.max_score or 1.0)
+        if (question.question_type or "").lower() == "multiple_select":
+            return max_s > 0 and float(response.points_awarded) >= max_s
+        return float(response.points_awarded) > 0
+    sk = _parse_json_dict(question.scoring_key)
+    correct_keys = {str(k).strip().upper() for k, v in sk.items() if v is not None and float(v) > 0}
+    ans_str = str(response.answer or "").strip().upper()
+    ans_set = {p.strip() for p in ans_str.split(",") if p.strip()}
+    return bool(correct_keys) and ans_set == correct_keys
+
+
+def _build_bank_question_response(q: AssessmentQuestionBank) -> AssessmentBankQuestionResponse:
+    options = _parse_json_list(q.options)
+    scoring_key = _parse_json_dict(q.scoring_key)
+    correct_ids = _extract_correct_option_ids(scoring_key, options)
+    return AssessmentBankQuestionResponse(
+        id=q.id,
+        template_id=q.template_id,
+        category=q.category,
+        difficulty=getattr(q, "difficulty", "Medium") or "Medium",
+        question_type=q.question_type or "multiple_choice",
+        question_text=q.question_text,
+        instructions=getattr(q, "instructions", None),
+        explanation=getattr(q, "explanation", None),
+        options=options,
+        max_score=float(q.max_score),
+        negative_marks=float(getattr(q, "negative_marks", 0.0) or 0.0),
+        display_order=getattr(q, "display_order", None),
+        in_assessment=bool(getattr(q, "in_assessment", True)),
+        is_active=bool(q.is_active),
+        correct_option_id=correct_ids[0] if correct_ids else None,
+        correct_option_ids=correct_ids,
+    )
+
+
+def _normalize_template_sequence(db: Session, template_id: int) -> list[AssessmentQuestionBank]:
+    """Maintain consecutive 1..N display_order for assigned questions in a single template."""
+    all_rows = db.scalars(
+        select(AssessmentQuestionBank)
+        .where(AssessmentQuestionBank.template_id == template_id)
+        .order_by(
+            AssessmentQuestionBank.display_order.is_(None).asc(),
+            AssessmentQuestionBank.display_order.asc(),
+            AssessmentQuestionBank.id.asc(),
+        )
+    ).all()
+
+    assigned_active = [r for r in all_rows if r.is_active and getattr(r, "in_assessment", True)]
+
+    for r in all_rows:
+        r.display_order = None
+    db.flush()
+
+    for idx, r in enumerate(assigned_active, start=1):
+        r.display_order = idx
+    db.flush()
+    return assigned_active
+
+
+def _validate_and_normalize_bank_payload(
+    *,
+    category: str,
+    difficulty: str,
+    question_type: str,
+    question_text: str,
+    instructions: str | None,
+    explanation: str | None,
+    options: list,
+    correct_option_id: str | None,
+    correct_option_ids: list[str] | None,
+    max_score: float,
+    negative_marks: float,
+    fallback_category: str,
+) -> dict:
+    clean_type = (question_type or "multiple_choice").strip().lower()
+    if clean_type not in SUPPORTED_BANK_QUESTION_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported question type '{question_type}'. Supported types: multiple_choice, multiple_select, true_false.",
+        )
+
+    clean_text = (question_text or "").strip()
+    if len(clean_text) < 5:
+        raise HTTPException(status_code=422, detail="Question statement must be at least 5 characters long.")
+
+    if not options or len(options) < 2:
+        raise HTTPException(status_code=422, detail="At least 2 answer options are required.")
+    if len(options) > 10:
+        raise HTTPException(status_code=422, detail="A maximum of 10 answer options is supported.")
+    if clean_type == "true_false" and len(options) != 2:
+        raise HTTPException(status_code=422, detail="True / False questions must have exactly 2 options.")
+
+    clean_options = []
+    seen_ids = set()
+    for idx, opt in enumerate(options):
+        raw_id = opt.get("id") if isinstance(opt, dict) else getattr(opt, "id", None)
+        raw_text = opt.get("text") if isinstance(opt, dict) else getattr(opt, "text", None)
+        opt_id = str(raw_id or chr(65 + idx)).strip().upper()
+        opt_text = str(raw_text or "").strip()
+        if not opt_id:
+            raise HTTPException(status_code=422, detail="Each option must have a valid option label ID (A, B, C...).")
+        if not opt_text:
+            raise HTTPException(status_code=422, detail=f"Option {opt_id} cannot be empty.")
+        if opt_id in seen_ids:
+            raise HTTPException(status_code=422, detail=f"Duplicate option label '{opt_id}' is not allowed.")
+        seen_ids.add(opt_id)
+        clean_options.append({"id": opt_id, "text": opt_text})
+
+    option_id_order = [o["id"] for o in clean_options]
+    merged_correct: list[str] = []
+    if correct_option_ids:
+        for cid in correct_option_ids:
+            norm = str(cid).strip().upper()
+            if norm and norm not in merged_correct:
+                merged_correct.append(norm)
+    if correct_option_id and str(correct_option_id).strip():
+        norm_single = str(correct_option_id).strip().upper()
+        if clean_type != "multiple_select" or not merged_correct:
+            merged_correct = [norm_single] if norm_single not in merged_correct else merged_correct
+
+    if not merged_correct:
+        raise HTTPException(status_code=422, detail="Please select at least one correct answer.")
+
+    invalid_correct = [cid for cid in merged_correct if cid not in seen_ids]
+    if invalid_correct:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Selected correct answer ({', '.join(invalid_correct)}) does not match available options.",
+        )
+
+    if clean_type in {"multiple_choice", "single_choice", "true_false"} and len(merged_correct) != 1:
+        raise HTTPException(
+            status_code=422,
+            detail="Single-choice questions must have exactly one correct answer selected.",
+        )
+
+    ordered_correct = [oid for oid in option_id_order if oid in set(merged_correct)]
+    score_val = float(max_score) if max_score and float(max_score) > 0 else 1.0
+    neg_val = float(negative_marks) if negative_marks is not None else 0.0
+    if neg_val < 0 or neg_val > 50:
+        raise HTTPException(status_code=422, detail="Negative marks must be between 0 and 50.")
+
+    clean_scoring_key = {
+        oid: (score_val if oid in ordered_correct else 0.0)
+        for oid in option_id_order
+    }
+
+    cat = (category or "").strip() or (fallback_category or "general")
+    diff = (difficulty or "Medium").strip()
+    if diff not in {"Easy", "Medium", "Hard"}:
+        diff = "Medium"
+
+    return {
+        "category": cat,
+        "difficulty": diff,
+        "question_type": clean_type,
+        "question_text": clean_text,
+        "instructions": instructions.strip() if isinstance(instructions, str) and instructions.strip() else None,
+        "explanation": explanation.strip() if isinstance(explanation, str) and explanation.strip() else None,
+        "options": clean_options,
+        "scoring_key": clean_scoring_key,
+        "max_score": score_val,
+        "negative_marks": round(neg_val, 2),
+        "correct_option_ids": ordered_correct,
+    }
+
+
+def _default_candidate_instructions(
+    template: AssessmentTemplate,
+    effective_type: str,
+    duration_minutes: int,
+    total_questions: int,
+    total_marks: float,
+) -> str:
+    type_name = ASSESSMENT_TYPE_LABELS.get(effective_type, effective_type.replace("_", " ").title())
+    parts = [
+        f"This {type_name} assessment contains {total_questions} question(s) worth {total_marks:g} total mark(s), with a strict time limit of {duration_minutes} minutes.",
+        "Read each question carefully and select the best answer(s) before proceeding.",
+        "You may mark questions for review and switch between questions using the Question Palette prior to final submission.",
+    ]
+    if template.description and template.description.strip():
+        return f"{template.description.strip()}\n\n" + " ".join(parts)
+    return " ".join(parts)
+
+
+def _assemble_template_questions(
+    db: Session,
+    template: AssessmentTemplate,
+    include_solutions: bool = False,
+    custom_only: bool = False,
+) -> tuple[list[dict], int, int]:
+    """Assemble assessment questions honoring per-template manual sequence and category rules."""
+    effective_type = resolve_effective_assessment_type(template)
+    valid_categories = VALID_CATEGORIES_BY_TYPE.get(effective_type, set())
+
+    bank_questions = db.scalars(
+        select(AssessmentQuestionBank)
+        .where(
+            AssessmentQuestionBank.template_id == template.id,
+            AssessmentQuestionBank.is_active.is_(True),
+            AssessmentQuestionBank.in_assessment.is_(True),
+        )
+        .order_by(
+            AssessmentQuestionBank.display_order.is_(None).asc(),
+            AssessmentQuestionBank.display_order.asc(),
+            AssessmentQuestionBank.id.asc(),
+        )
+    ).all()
+
+    invalid_categories = set()
+    for domain, cats in VALID_CATEGORIES_BY_TYPE.items():
+        if domain != effective_type:
+            invalid_categories.update(cats)
+
+    valid_bank = [
+        q for q in bank_questions
+        if q.category not in invalid_categories or q.category in valid_categories or effective_type in q.category
+    ]
+
+    target_count = (
+        template.question_count
+        if template.question_count and template.question_count > 0
+        else (25 if effective_type == "logical_reasoning" else 20)
+    )
+
+    if effective_type == "logical_reasoning":
+        default_pool = get_default_logical_reasoning_questions()
+    elif effective_type == "english_grammar":
+        default_pool = get_default_english_grammar_questions()
+    elif effective_type in {"technical", "programming"}:
+        default_pool = get_default_technical_questions()
+    else:
+        default_pool = generate_mock_questions()
+
+    questions: list[dict] = []
+    seen_texts: set[str] = set()
+    custom_count = 0
+    builtin_count = 0
+
+    for idx, q in enumerate(valid_bank, start=1):
+        options = _parse_json_list(q.options)
+        scoring_key = _parse_json_dict(q.scoring_key)
+        correct_ids = _extract_correct_option_ids(scoring_key, options) if include_solutions else []
+
+        item = {
+            "id": q.id,
+            "source": "bank",
+            "category": q.category,
+            "difficulty": getattr(q, "difficulty", "Medium") or "Medium",
+            "question_type": q.question_type or "multiple_choice",
+            "question_text": q.question_text,
+            "instructions": getattr(q, "instructions", None),
+            "options": options,
+            "scoring_key": scoring_key,
+            "max_score": float(q.max_score),
+            "negative_marks": float(getattr(q, "negative_marks", 0.0) or 0.0),
+            "display_order": int(getattr(q, "display_order", None) or idx),
+        }
+        if include_solutions:
+            item["correct_option_id"] = correct_ids[0] if correct_ids else None
+            item["correct_option_ids"] = correct_ids
+            item["explanation"] = getattr(q, "explanation", None)
+
+        questions.append(item)
+        custom_count += 1
+        seen_texts.add(q.question_text.strip().lower())
+        if not custom_only and len(questions) >= target_count:
+            break
+
+    if not custom_only and len(questions) < target_count:
+        next_synthetic_id = -1
+        for def_q in default_pool:
+            if def_q["question_text"].strip().lower() not in seen_texts:
+                scoring_key = _parse_json_dict(def_q.get("scoring_key"))
+                options = _parse_json_list(def_q.get("options"))
+                correct_ids = _extract_correct_option_ids(scoring_key, options) if include_solutions else []
+                item = {
+                    "id": next_synthetic_id,
+                    "source": "builtin",
+                    "category": def_q["category"],
+                    "difficulty": def_q.get("difficulty", "Medium") or "Medium",
+                    "question_type": def_q.get("question_type", "multiple_choice"),
+                    "question_text": def_q["question_text"],
+                    "instructions": def_q.get("instructions"),
+                    "options": options,
+                    "scoring_key": scoring_key,
+                    "max_score": float(def_q.get("max_score", 1.0)),
+                    "negative_marks": float(def_q.get("negative_marks", 0.0) or 0.0),
+                    "display_order": len(questions) + 1,
+                }
+                if include_solutions:
+                    item["correct_option_id"] = correct_ids[0] if correct_ids else None
+                    item["correct_option_ids"] = correct_ids
+                    item["explanation"] = def_q.get("explanation")
+                next_synthetic_id -= 1
+                questions.append(item)
+                builtin_count += 1
+                seen_texts.add(def_q["question_text"].strip().lower())
+                if len(questions) >= target_count:
+                    break
+
+    for idx, q in enumerate(questions, start=1):
+        if valid_categories and q["category"] not in valid_categories:
+            q["category"] = effective_type
+        q["display_order"] = idx
+
+    return questions, custom_count, builtin_count
+
+
+def get_learner_cohort_context(db: Session, user_id: int) -> tuple[list[int], dict[int, str], list[str]]:
+    rows = (
+        db.query(CohortMember.cohort_id, Cohort.name)
+        .join(Cohort, CohortMember.cohort_id == Cohort.id)
+        .filter(
+            CohortMember.user_id == user_id,
+            func.lower(CohortMember.status) == "active",
+        )
+        .order_by(Cohort.id)
+        .all()
+    )
+    cohort_ids = [r[0] for r in rows]
+    cohort_names_by_id = {r[0]: r[1] for r in rows}
+    cohort_names = [r[1] for r in rows]
+    return cohort_ids, cohort_names_by_id, cohort_names
+
+
+def ensure_default_assignment_if_empty(
+    db: Session,
+    template: AssessmentTemplate,
+    existing_rows: list[AssessmentAssignment] | None = None,
+) -> list[AssessmentAssignment]:
+    """Treat legacy/unconfigured templates as assigned to 'all' and backfill idempotently."""
+    rows = (
+        existing_rows
+        if existing_rows is not None
+        else db.scalars(
+            select(AssessmentAssignment).where(AssessmentAssignment.template_id == template.id)
+        ).all()
+    )
+    if rows:
+        return rows
+
+    default_row = AssessmentAssignment(
+        template_id=template.id,
+        target_type="all",
+        assignment_key="all",
+        learner_user_id=None,
+        cohort_id=None,
+        assigned_by_user_id=template.created_by_user_id or 1,
+        assigned_at=template.created_at or now_utc(),
+        due_at=None,
+        is_active=True,
+    )
+    try:
+        with db.begin_nested():
+            db.add(default_row)
+            db.flush()
+        db.commit()
+        db.refresh(default_row)
+        return [default_row]
+    except IntegrityError:
+        return db.scalars(
+            select(AssessmentAssignment).where(AssessmentAssignment.template_id == template.id)
+        ).all()
+
+
+def sync_template_assignments(
+    db: Session,
+    template_id: int,
+    actor_user_id: int,
+    scope: str = "all",
+    cohort_ids: list[int] | None = None,
+    learner_ids: list[int] | None = None,
+    due_at: datetime | None = None,
+    update_due_at: bool = True,
+) -> list[AssessmentAssignment]:
+    clean_scope = (scope or "all").strip().lower()
+    if clean_scope not in {"all", "cohort", "learner"}:
+        raise HTTPException(status_code=422, detail="Invalid assignment scope. Must be 'all', 'cohort', or 'learner'.")
+
+    desired: dict[str, dict] = {}
+    if clean_scope == "all":
+        desired["all"] = {
+            "target_type": "all",
+            "cohort_id": None,
+            "learner_user_id": None,
+        }
+    elif clean_scope == "cohort":
+        unique_cohorts = sorted({int(cid) for cid in (cohort_ids or []) if int(cid) > 0})
+        if unique_cohorts:
+            existing_cohorts = set(
+                db.scalars(select(Cohort.id).where(Cohort.id.in_(unique_cohorts))).all()
+            )
+            missing = [cid for cid in unique_cohorts if cid not in existing_cohorts]
+            if missing:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Unknown cohort ID(s): {', '.join(map(str, missing))}",
+                )
+        for cid in unique_cohorts:
+            desired[f"cohort:{cid}"] = {
+                "target_type": "cohort",
+                "cohort_id": cid,
+                "learner_user_id": None,
+            }
+    elif clean_scope == "learner":
+        unique_learners = sorted({int(uid) for uid in (learner_ids or []) if int(uid) > 0})
+        for uid in unique_learners:
+            desired[f"learner:{uid}"] = {
+                "target_type": "learner",
+                "cohort_id": None,
+                "learner_user_id": uid,
+            }
+
+    existing_rows = db.scalars(
+        select(AssessmentAssignment).where(AssessmentAssignment.template_id == template_id)
+    ).all()
+    existing_by_key = {row.assignment_key: row for row in existing_rows}
+
+    if update_due_at:
+        effective_due_at = to_utc(due_at)
+    else:
+        active_due_dates = [to_utc(r.due_at) for r in existing_rows if r.is_active and r.due_at is not None]
+        effective_due_at = active_due_dates[0] if active_due_dates else None
+
+    now = now_utc()
+    for key, row in existing_by_key.items():
+        if key in desired:
+            if not row.is_active:
+                row.is_active = True
+                row.assigned_at = now
+            row.assigned_by_user_id = actor_user_id
+            row.due_at = effective_due_at
+        else:
+            row.is_active = False
+
+    for key, spec in desired.items():
+        if key not in existing_by_key:
+            db.add(
+                AssessmentAssignment(
+                    template_id=template_id,
+                    target_type=spec["target_type"],
+                    assignment_key=key,
+                    cohort_id=spec["cohort_id"],
+                    learner_user_id=spec["learner_user_id"],
+                    assigned_by_user_id=actor_user_id,
+                    assigned_at=now,
+                    due_at=effective_due_at,
+                    is_active=True,
+                )
+            )
+
+    # Preserve an inactive marker if manager intentionally cleared all targets so it won't revert to 'all'
+    if not desired and "none" not in existing_by_key:
+        db.add(
+            AssessmentAssignment(
+                template_id=template_id,
+                target_type=clean_scope,
+                assignment_key="none",
+                cohort_id=None,
+                learner_user_id=None,
+                assigned_by_user_id=actor_user_id,
+                assigned_at=now,
+                due_at=effective_due_at,
+                is_active=False,
+            )
+        )
+
+    db.flush()
+    return db.scalars(
+        select(AssessmentAssignment).where(AssessmentAssignment.template_id == template_id)
+    ).all()
+
+
+def summarize_template_assignments(
+    template: AssessmentTemplate,
+    rows: list[AssessmentAssignment],
+) -> dict:
+    active_rows = [r for r in rows if r.is_active]
+    cohort_ids = sorted({int(r.cohort_id) for r in active_rows if r.target_type == "cohort" and r.cohort_id is not None})
+    learner_ids = sorted({int(r.learner_user_id) for r in active_rows if r.target_type == "learner" and r.learner_user_id is not None})
+    due_dates = [r.due_at for r in active_rows if r.due_at is not None]
+    due_at = due_dates[0] if due_dates else None
+
+    if not rows:
+        scope = "all"
+        summary = "All Learners"
+        assigned_count = 0
+    elif any(r.target_type == "all" for r in active_rows):
+        scope = "all"
+        summary = "All Learners"
+        assigned_count = 0
+    elif cohort_ids:
+        scope = "cohort"
+        assigned_count = len(cohort_ids)
+        summary = f"{assigned_count} Cohort{'s' if assigned_count != 1 else ''}"
+    elif learner_ids:
+        scope = "learner"
+        assigned_count = len(learner_ids)
+        summary = f"{assigned_count} Student{'s' if assigned_count != 1 else ''}"
+    else:
+        inactive_types = [r.target_type for r in rows if r.target_type in {"all", "cohort", "learner"}]
+        scope = inactive_types[0] if inactive_types else "cohort"
+        assigned_count = 0
+        summary = "Unassigned (0 targets)"
+
+    return {
+        "scope": scope,
+        "cohort_ids": cohort_ids,
+        "learner_ids": learner_ids,
+        "assigned_count": assigned_count,
+        "assignment_summary": summary,
+        "due_at": due_at,
+    }
+
+
+def build_template_response(
+    template: AssessmentTemplate,
+    rows: list[AssessmentAssignment],
+) -> AssessmentTemplateResponse:
+    summary = summarize_template_assignments(template, rows)
+    return AssessmentTemplateResponse(
+        id=template.id,
+        name=template.name,
+        assessment_type=template.assessment_type,
+        description=template.description,
+        question_count=template.question_count,
+        category_config=template.category_config,
+        is_active=template.is_active,
+        created_by_user_id=template.created_by_user_id,
+        created_at=template.created_at,
+        duration_minutes=get_duration_minutes_for_template(template),
+        assignment_scope=summary["scope"],
+        assigned_cohort_ids=summary["cohort_ids"],
+        assigned_learner_ids=summary["learner_ids"],
+        assigned_count=summary["assigned_count"],
+        assignment_summary=summary["assignment_summary"],
+        due_at=summary["due_at"],
+    )
+
+
+def get_assigned_rows_for_learner(
+    db: Session,
+    user_id: int,
+    only_active_templates: bool = True,
+) -> tuple[list[dict], list[str]]:
+    """Return deduplicated assigned templates for a specific learner with matched assignment metadata."""
+    learner_cohort_ids, cohort_names_by_id, cohort_names = get_learner_cohort_context(db, user_id)
+    learner_cohort_set = set(learner_cohort_ids)
+
+    template_query = select(AssessmentTemplate).order_by(AssessmentTemplate.id.asc())
+    if only_active_templates:
+        template_query = template_query.where(AssessmentTemplate.is_active.is_(True))
+    templates = db.scalars(template_query).all()
+    if not templates:
+        return [], cohort_names
+
+    template_ids = [t.id for t in templates]
+    assignment_rows = db.scalars(
+        select(AssessmentAssignment).where(
+            AssessmentAssignment.template_id.in_(template_ids)
+        )
+    ).all()
+
+    all_rows_by_tid: dict[int, list[AssessmentAssignment]] = defaultdict(list)
+    active_rows_by_tid: dict[int, list[AssessmentAssignment]] = defaultdict(list)
+    for row in assignment_rows:
+        all_rows_by_tid[row.template_id].append(row)
+        if row.is_active:
+            active_rows_by_tid[row.template_id].append(row)
+
+    matched: list[dict] = []
+    seen_template_ids: set[int] = set()
+
+    for template in templates:
+        if template.id in seen_template_ids:
+            continue
+
+        all_rows = all_rows_by_tid.get(template.id, [])
+        if not all_rows:
+            # Backfill legacy/seeded unconfigured template lazily to 'all'
+            all_rows = ensure_default_assignment_if_empty(db, template, existing_rows=[])
+            active_rows = [r for r in all_rows if r.is_active]
+        else:
+            active_rows = active_rows_by_tid.get(template.id, [])
+
+        if not active_rows:
+            continue
+
+        direct_matches = [
+            r for r in active_rows
+            if r.target_type == "learner" and r.learner_user_id == user_id
+        ]
+        cohort_matches = [
+            r for r in active_rows
+            if r.target_type == "cohort" and r.cohort_id in learner_cohort_set
+        ]
+        all_matches = [
+            r for r in active_rows
+            if r.target_type == "all"
+        ]
+
+        chosen_row: AssessmentAssignment | None = None
+        matched_cohort_name: str | None = None
+        scope = "all"
+
+        if direct_matches:
+            chosen_row = direct_matches[0]
+            scope = "learner"
+        elif cohort_matches:
+            cohort_matches_sorted = sorted(cohort_matches, key=lambda r: r.id)
+            chosen_row = cohort_matches_sorted[0]
+            scope = "cohort"
+            names = [
+                cohort_names_by_id[r.cohort_id]
+                for r in cohort_matches_sorted
+                if r.cohort_id in cohort_names_by_id
+            ]
+            matched_cohort_name = ", ".join(dict.fromkeys(names)) if names else None
+        elif all_matches:
+            chosen_row = all_matches[0]
+            scope = "all"
+
+        if chosen_row is None:
+            continue
+
+        seen_template_ids.add(template.id)
+        matched.append({
+            "template": template,
+            "assignment": chosen_row,
+            "assignment_scope": scope,
+            "cohort_name": matched_cohort_name,
+        })
+
+    return matched, cohort_names
+
+
 def validate_template_settings(question_count: int, config: dict, assessment_type: str = "psychometric"):
     if assessment_type == "logical_reasoning":
         if question_count != 25:
@@ -248,6 +999,274 @@ def validate_template_settings(question_count: int, config: dict, assessment_typ
 
     if not isinstance(config, dict):
         raise HTTPException(status_code=422, detail="Invalid category configuration")
+
+
+# --------------------------------------------------
+# Learner: Live assigned assessments, statuses & notifications
+# --------------------------------------------------
+
+@router.get(
+    "/my/assigned",
+    response_model=StudentAssignedAssessmentsResponse,
+)
+def get_my_assigned_assessments(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    role = role_of(current_user)
+    if role != Role.LEARNER.value:
+        raise HTTPException(
+            status_code=403,
+            detail="Only learners can access their assigned assessments",
+        )
+
+    matched_items, cohort_names = get_assigned_rows_for_learner(
+        db, current_user.id, only_active_templates=True
+    )
+
+    now = now_utc()
+
+    all_learner_sessions = db.scalars(
+        select(AssessmentSession)
+        .where(AssessmentSession.learner_user_id == current_user.id)
+        .order_by(AssessmentSession.id.desc())
+    ).all()
+
+    sessions_by_template: dict[int, list[AssessmentSession]] = defaultdict(list)
+    all_session_ids: list[int] = []
+    for s in all_learner_sessions:
+        sessions_by_template[s.template_id].append(s)
+        all_session_ids.append(s.id)
+
+    scores_by_session: dict[int, list[AssessmentScore]] = defaultdict(list)
+    sessions_with_report: set[int] = set()
+    if all_session_ids:
+        score_rows = db.scalars(
+            select(AssessmentScore).where(AssessmentScore.session_id.in_(all_session_ids))
+        ).all()
+        for sc in score_rows:
+            scores_by_session[sc.session_id].append(sc)
+
+        report_session_ids = db.scalars(
+            select(AssessmentReport.session_id).where(AssessmentReport.session_id.in_(all_session_ids))
+        ).all()
+        sessions_with_report = set(report_session_ids)
+
+    status_mutations = False
+    assessment_items: list[StudentAssignedAssessmentItem] = []
+
+    for entry in matched_items:
+        template: AssessmentTemplate = entry["template"]
+        assignment: AssessmentAssignment = entry["assignment"]
+        duration_minutes = get_duration_minutes_for_template(template)
+        due_utc = to_utc(assignment.due_at)
+        assigned_at_utc = to_utc(assignment.assigned_at) or to_utc(template.created_at) or now
+        effective_type = resolve_effective_assessment_type(template)
+        category_label = ASSESSMENT_TYPE_LABELS.get(
+            effective_type,
+            effective_type.replace("_", " ").title(),
+        )
+
+        t_sessions = sessions_by_template.get(template.id, [])
+        completed_session = next(
+            (s for s in t_sessions if s.status == "completed" and s.id in scores_by_session),
+            None,
+        ) or next(
+            (s for s in t_sessions if s.status == "completed"),
+            None,
+        )
+        in_progress_session = next(
+            (s for s in t_sessions if s.status == "in_progress"),
+            None,
+        )
+        expired_session = next(
+            (s for s in t_sessions if s.status == "expired"),
+            None,
+        )
+
+        # Auto-transition timed-out unsubmitted in_progress sessions to EXPIRED (never COMPLETED)
+        if completed_session is None and in_progress_session is not None:
+            started_utc = to_utc(in_progress_session.started_at) or now
+            expires_utc = to_utc(in_progress_session.expires_at) or (
+                started_utc + timedelta(minutes=duration_minutes)
+            )
+            rem_sec = int((expires_utc - now).total_seconds())
+            if rem_sec <= -60 or (due_utc is not None and now > due_utc and rem_sec <= 0):
+                in_progress_session.status = "expired"
+                in_progress_session.completed_at = None
+                expired_session = in_progress_session
+                in_progress_session = None
+                status_mutations = True
+
+        if completed_session is not None:
+            sess_scores = scores_by_session.get(completed_session.id, [])
+            total_score = round(sum(float(sc.score) for sc in sess_scores), 2)
+            max_score = round(sum(float(sc.max_score) for sc in sess_scores), 2)
+            overall_pct = round((total_score / max_score) * 100, 2) if max_score > 0 else 0.0
+            assessment_items.append(
+                StudentAssignedAssessmentItem(
+                    template_id=template.id,
+                    assignment_id=assignment.id,
+                    assignment_scope=entry["assignment_scope"],
+                    cohort_name=entry["cohort_name"],
+                    name=template.name,
+                    description=template.description,
+                    assessment_type=effective_type,
+                    category_label=category_label,
+                    question_count=template.question_count,
+                    duration_minutes=duration_minutes,
+                    status="COMPLETED",
+                    assigned_at=assigned_at_utc,
+                    due_at=due_utc,
+                    session_id=completed_session.id,
+                    started_at=completed_session.started_at,
+                    expires_at=completed_session.expires_at,
+                    completed_at=completed_session.completed_at,
+                    remaining_seconds=0,
+                    total_score=total_score,
+                    max_score=max_score,
+                    overall_percentage=overall_pct,
+                    has_report=completed_session.id in sessions_with_report,
+                    tab_switch_count=getattr(completed_session, "tab_switch_count", 0) or 0,
+                    can_start=False,
+                    can_continue=False,
+                    notification_title=None,
+                )
+            )
+        elif in_progress_session is not None:
+            started_utc = to_utc(in_progress_session.started_at) or now
+            expires_utc = to_utc(in_progress_session.expires_at) or (
+                started_utc + timedelta(minutes=duration_minutes)
+            )
+            rem_sec = max(0, int((expires_utc - now).total_seconds()))
+            assessment_items.append(
+                StudentAssignedAssessmentItem(
+                    template_id=template.id,
+                    assignment_id=assignment.id,
+                    assignment_scope=entry["assignment_scope"],
+                    cohort_name=entry["cohort_name"],
+                    name=template.name,
+                    description=template.description,
+                    assessment_type=effective_type,
+                    category_label=category_label,
+                    question_count=template.question_count,
+                    duration_minutes=duration_minutes,
+                    status="IN_PROGRESS",
+                    assigned_at=assigned_at_utc,
+                    due_at=due_utc,
+                    session_id=in_progress_session.id,
+                    started_at=started_utc,
+                    expires_at=expires_utc,
+                    completed_at=None,
+                    remaining_seconds=rem_sec,
+                    total_score=None,
+                    max_score=None,
+                    overall_percentage=None,
+                    has_report=False,
+                    tab_switch_count=getattr(in_progress_session, "tab_switch_count", 0) or 0,
+                    can_start=False,
+                    can_continue=True,
+                    notification_title="Assessment In Progress",
+                )
+            )
+        elif expired_session is not None or (due_utc is not None and now > due_utc):
+            assessment_items.append(
+                StudentAssignedAssessmentItem(
+                    template_id=template.id,
+                    assignment_id=assignment.id,
+                    assignment_scope=entry["assignment_scope"],
+                    cohort_name=entry["cohort_name"],
+                    name=template.name,
+                    description=template.description,
+                    assessment_type=effective_type,
+                    category_label=category_label,
+                    question_count=template.question_count,
+                    duration_minutes=duration_minutes,
+                    status="EXPIRED",
+                    assigned_at=assigned_at_utc,
+                    due_at=due_utc,
+                    session_id=expired_session.id if expired_session else None,
+                    started_at=expired_session.started_at if expired_session else None,
+                    expires_at=expired_session.expires_at if expired_session else due_utc,
+                    completed_at=None,
+                    remaining_seconds=0,
+                    total_score=None,
+                    max_score=None,
+                    overall_percentage=None,
+                    has_report=False,
+                    tab_switch_count=getattr(expired_session, "tab_switch_count", 0) if expired_session else 0,
+                    can_start=False,
+                    can_continue=False,
+                    notification_title="Assessment Expired",
+                )
+            )
+        else:
+            assessment_items.append(
+                StudentAssignedAssessmentItem(
+                    template_id=template.id,
+                    assignment_id=assignment.id,
+                    assignment_scope=entry["assignment_scope"],
+                    cohort_name=entry["cohort_name"],
+                    name=template.name,
+                    description=template.description,
+                    assessment_type=effective_type,
+                    category_label=category_label,
+                    question_count=template.question_count,
+                    duration_minutes=duration_minutes,
+                    status="NOT_STARTED",
+                    assigned_at=assigned_at_utc,
+                    due_at=due_utc,
+                    session_id=None,
+                    started_at=None,
+                    expires_at=None,
+                    completed_at=None,
+                    remaining_seconds=None,
+                    total_score=None,
+                    max_score=None,
+                    overall_percentage=None,
+                    has_report=False,
+                    tab_switch_count=0,
+                    can_start=True,
+                    can_continue=False,
+                    notification_title="New Assessment Assigned",
+                )
+            )
+
+    if status_mutations:
+        db.commit()
+
+    status_priority = {"IN_PROGRESS": 0, "NOT_STARTED": 1, "COMPLETED": 2, "EXPIRED": 3}
+    assessment_items.sort(key=lambda item: (status_priority.get(item.status, 9), item.template_id))
+
+    notifications = [
+        item for item in assessment_items if item.status in {"IN_PROGRESS", "NOT_STARTED", "EXPIRED"}
+    ]
+    notifications.sort(
+        key=lambda item: ({"IN_PROGRESS": 0, "NOT_STARTED": 1, "EXPIRED": 2}.get(item.status, 9), item.template_id)
+    )
+
+    completed_items = [item for item in assessment_items if item.status == "COMPLETED"]
+    completed_pcts = [
+        item.overall_percentage for item in completed_items if item.overall_percentage is not None
+    ]
+    avg_score = round(sum(completed_pcts) / len(completed_pcts), 1) if completed_pcts else 0.0
+
+    stats = StudentAssignedStats(
+        total_assigned=len(assessment_items),
+        not_started_count=sum(1 for item in assessment_items if item.status == "NOT_STARTED"),
+        in_progress_count=sum(1 for item in assessment_items if item.status == "IN_PROGRESS"),
+        completed_count=len(completed_items),
+        expired_count=sum(1 for item in assessment_items if item.status == "EXPIRED"),
+        average_score=avg_score,
+    )
+
+    return StudentAssignedAssessmentsResponse(
+        assessments=assessment_items,
+        notifications=notifications,
+        stats=stats,
+        cohort_names=cohort_names,
+        synced_at=now,
+    )
 
 
 # --------------------------------------------------
@@ -284,26 +1303,104 @@ def get_my_assessment_status(
             session_id=completed_session.id,
         )
 
-    # Check for an existing unfinished session.
-    existing_session = db.scalar(
+    # Check for an existing unfinished session that has not expired.
+    existing_sessions = db.scalars(
         select(AssessmentSession)
         .where(
             AssessmentSession.learner_user_id == current_user.id,
             AssessmentSession.status == "in_progress",
         )
         .order_by(AssessmentSession.started_at.desc())
-    )
+    ).all()
 
-    if existing_session:
-        return LearnerAssessmentStatusResponse(
-            status="in_progress",
-            session_id=existing_session.id,
-        )
+    now = now_utc()
+    expired_any = False
+    for existing_session in existing_sessions:
+        template = db.get(AssessmentTemplate, existing_session.template_id)
+        duration_minutes = get_duration_minutes_for_template(template)
+        started_utc = to_utc(existing_session.started_at) or now
+        expires_utc = to_utc(existing_session.expires_at) or (started_utc + timedelta(minutes=duration_minutes))
+        if (expires_utc - now).total_seconds() <= -60:
+            existing_session.status = "expired"
+            existing_session.completed_at = None
+            expired_any = True
+        else:
+            if expired_any:
+                db.commit()
+            return LearnerAssessmentStatusResponse(
+                status="in_progress",
+                session_id=existing_session.id,
+            )
+
+    if expired_any:
+        db.commit()
 
     return LearnerAssessmentStatusResponse(
         status="not_started",
         session_id=None,
     )
+
+
+# --------------------------------------------------
+# Admin / Teacher: Assignable cohorts and learners lookup
+# --------------------------------------------------
+
+@router.get(
+    "/assignable-targets",
+    response_model=AssignableTargetsResponse,
+)
+def get_assignable_targets(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+
+    cohorts = db.scalars(select(Cohort).order_by(Cohort.id.asc())).all()
+    active_members = db.scalars(
+        select(CohortMember).where(func.lower(CohortMember.status) == "active")
+    ).all()
+
+    cohort_counts: dict[int, int] = defaultdict(int)
+    learner_cohorts: dict[int, list[int]] = defaultdict(list)
+    for m in active_members:
+        cohort_counts[m.cohort_id] += 1
+        learner_cohorts[m.user_id].append(m.cohort_id)
+
+    cohort_items = [
+        AssignableCohortItem(
+            id=c.id,
+            name=c.name,
+            status=c.status,
+            department_id=c.department_id,
+            member_count=cohort_counts.get(c.id, 0),
+        )
+        for c in cohorts
+    ]
+
+    learner_items: list[AssignableLearnerItem] = []
+    try:
+        with IdentitySessionLocal() as id_db:
+            users = id_db.scalars(
+                select(IdentityUser)
+                .where(
+                    func.lower(IdentityUser.role) == Role.LEARNER.value,
+                    IdentityUser.is_active.is_(True),
+                )
+                .order_by(IdentityUser.full_name.asc(), IdentityUser.id.asc())
+            ).all()
+            learner_items = [
+                AssignableLearnerItem(
+                    id=u.id,
+                    full_name=u.full_name,
+                    email=u.email,
+                    cohort_ids=sorted(learner_cohorts.get(u.id, [])),
+                )
+                for u in users
+            ]
+    except Exception:
+        learner_items = []
+
+    return AssignableTargetsResponse(cohorts=cohort_items, learners=learner_items)
 
 
 # --------------------------------------------------
@@ -325,22 +1422,49 @@ def list_templates(
         Role.SUPERADMIN.value,
         Role.TEACHER.value,
     }:
-        query = select(AssessmentTemplate)
+        templates = db.scalars(
+            select(AssessmentTemplate).order_by(AssessmentTemplate.id.desc())
+        ).all()
+        if not templates:
+            return []
+        tids = [t.id for t in templates]
+        all_assigns = db.scalars(
+            select(AssessmentAssignment).where(AssessmentAssignment.template_id.in_(tids))
+        ).all()
+        rows_by_tid: dict[int, list[AssessmentAssignment]] = defaultdict(list)
+        for row in all_assigns:
+            rows_by_tid[row.template_id].append(row)
+
+        result = []
+        for t in templates:
+            rows = rows_by_tid.get(t.id, [])
+            if not rows:
+                rows = ensure_default_assignment_if_empty(db, t, existing_rows=[])
+            result.append(build_template_response(t, rows))
+        return result
 
     elif role == Role.LEARNER.value:
-        query = select(AssessmentTemplate).where(
-            AssessmentTemplate.is_active.is_(True)
+        matched_items, _ = get_assigned_rows_for_learner(
+            db, current_user.id, only_active_templates=True
         )
+        tids = [item["template"].id for item in matched_items]
+        rows_by_tid: dict[int, list[AssessmentAssignment]] = defaultdict(list)
+        if tids:
+            all_assigns = db.scalars(
+                select(AssessmentAssignment).where(AssessmentAssignment.template_id.in_(tids))
+            ).all()
+            for row in all_assigns:
+                rows_by_tid[row.template_id].append(row)
+        return [
+            build_template_response(item["template"], rows_by_tid.get(item["template"].id, []))
+            for item in matched_items
+        ]
 
     else:
         raise HTTPException(
             status_code=403,
             detail="You cannot access assessment templates",
         )
-
-    return db.scalars(
-        query.order_by(AssessmentTemplate.id.desc())
-    ).all()
 
 
 @router.get(
@@ -359,12 +1483,27 @@ def get_template(
             status_code=404,
             detail="Assessment template not found",
         )
-    if role == Role.LEARNER.value and not template.is_active:
-        raise HTTPException(
-            status_code=404,
-            detail="Assessment template is not active",
+    if role == Role.LEARNER.value:
+        if not template.is_active:
+            raise HTTPException(
+                status_code=404,
+                detail="Assessment template is not active",
+            )
+        matched_items, _ = get_assigned_rows_for_learner(
+            db, current_user.id, only_active_templates=True
         )
-    return template
+        if not any(item["template"].id == template.id for item in matched_items):
+            raise HTTPException(
+                status_code=403,
+                detail="This assessment template is not assigned to you",
+            )
+
+    rows = db.scalars(
+        select(AssessmentAssignment).where(AssessmentAssignment.template_id == template.id)
+    ).all()
+    if not rows:
+        rows = ensure_default_assignment_if_empty(db, template, existing_rows=[])
+    return build_template_response(template, rows)
 
 
 # --------------------------------------------------
@@ -413,10 +1552,24 @@ def create_template(
 
     try:
         db.add(template)
+        db.flush()
+        rows = sync_template_assignments(
+            db=db,
+            template_id=template.id,
+            actor_user_id=current_user.id,
+            scope=payload.assignment_scope or "all",
+            cohort_ids=payload.cohort_ids,
+            learner_ids=payload.learner_ids,
+            due_at=payload.due_at,
+            update_due_at=True,
+        )
         db.commit()
         db.refresh(template)
-        return template
+        return build_template_response(template, rows)
 
+    except HTTPException:
+        db.rollback()
+        raise
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -451,6 +1604,12 @@ def update_template(
 
     changes = payload.model_dump(exclude_unset=True)
 
+    assignment_scope = changes.pop("assignment_scope", None)
+    cohort_ids = changes.pop("cohort_ids", None)
+    learner_ids = changes.pop("learner_ids", None)
+    due_at_provided = "due_at" in changes or bool(changes.get("clear_due_at"))
+    due_at_val = None if changes.pop("clear_due_at", False) else changes.pop("due_at", None)
+
     question_count = changes.get(
         "question_count",
         template.question_count,
@@ -481,16 +1640,117 @@ def update_template(
         setattr(template, field, value)
 
     try:
+        rows = db.scalars(
+            select(AssessmentAssignment).where(AssessmentAssignment.template_id == template_id)
+        ).all()
+
+        if (
+            assignment_scope is not None
+            or cohort_ids is not None
+            or learner_ids is not None
+            or due_at_provided
+        ):
+            current_summary = summarize_template_assignments(template, rows)
+            target_scope = assignment_scope or current_summary["scope"]
+            target_cohorts = cohort_ids if cohort_ids is not None else current_summary["cohort_ids"]
+            target_learners = learner_ids if learner_ids is not None else current_summary["learner_ids"]
+            rows = sync_template_assignments(
+                db=db,
+                template_id=template_id,
+                actor_user_id=current_user.id,
+                scope=target_scope,
+                cohort_ids=target_cohorts,
+                learner_ids=target_learners,
+                due_at=due_at_val,
+                update_due_at=due_at_provided,
+            )
+        elif not rows:
+            rows = ensure_default_assignment_if_empty(db, template, existing_rows=[])
+
         db.commit()
         db.refresh(template)
-        return template
+        return build_template_response(template, rows)
 
+    except HTTPException:
+        db.rollback()
+        raise
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Could not update assessment template",
         )
+
+
+# --------------------------------------------------
+# Admin / Teacher: Manage assessment assignments
+# --------------------------------------------------
+
+@router.get(
+    "/templates/{template_id}/assignments",
+    response_model=AssessmentAssignmentTargetSummary,
+)
+def get_template_assignments(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+
+    rows = db.scalars(
+        select(AssessmentAssignment).where(AssessmentAssignment.template_id == template_id)
+    ).all()
+    if not rows:
+        rows = ensure_default_assignment_if_empty(db, template, existing_rows=[])
+    summary = summarize_template_assignments(template, rows)
+    return AssessmentAssignmentTargetSummary(
+        template_id=template_id,
+        scope=summary["scope"],
+        cohort_ids=summary["cohort_ids"],
+        learner_ids=summary["learner_ids"],
+        assigned_count=summary["assigned_count"],
+        due_at=summary["due_at"],
+    )
+
+
+@router.put(
+    "/templates/{template_id}/assignments",
+    response_model=AssessmentAssignmentTargetSummary,
+)
+def update_template_assignments(
+    template_id: int,
+    payload: AssessmentAssignmentPayload,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+
+    rows = sync_template_assignments(
+        db=db,
+        template_id=template_id,
+        actor_user_id=current_user.id,
+        scope=payload.scope,
+        cohort_ids=payload.cohort_ids,
+        learner_ids=payload.learner_ids,
+        due_at=payload.due_at,
+        update_due_at=True,
+    )
+    db.commit()
+    summary = summarize_template_assignments(template, rows)
+    return AssessmentAssignmentTargetSummary(
+        template_id=template_id,
+        scope=summary["scope"],
+        cohort_ids=summary["cohort_ids"],
+        learner_ids=summary["learner_ids"],
+        assigned_count=summary["assigned_count"],
+        due_at=summary["due_at"],
+    )
 
 
 # --------------------------------------------------
@@ -526,6 +1786,22 @@ def start_assessment(
             detail="Active assessment template not found",
         )
 
+    due_utc: datetime | None = None
+    if role_of(current_user) == Role.LEARNER.value:
+        matched_items, _ = get_assigned_rows_for_learner(
+            db, current_user.id, only_active_templates=True
+        )
+        matched_entry = next(
+            (item for item in matched_items if item["template"].id == template.id),
+            None,
+        )
+        if matched_entry is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This assessment has not been assigned to your account or cohort.",
+            )
+        due_utc = to_utc(matched_entry["assignment"].due_at)
+
     # 1. STRICT SERVER-SIDE ENFORCEMENT: A learner can attempt each assigned assessment only ONE TIME.
     completed_session = db.scalar(
         select(AssessmentSession).where(
@@ -540,7 +1816,21 @@ def start_assessment(
             detail=f"You have already completed the '{template.name}'. Only one attempt is permitted per learner. You may view your saved results and official report card.",
         )
 
+    expired_session = db.scalar(
+        select(AssessmentSession).where(
+            AssessmentSession.learner_user_id == current_user.id,
+            AssessmentSession.template_id == template.id,
+            AssessmentSession.status == "expired",
+        ).order_by(AssessmentSession.id.desc())
+    )
+    if expired_session:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Your attempt window for '{template.name}' has expired without a valid submission.",
+        )
+
     duration_minutes = get_duration_minutes_for_template(template)
+    now = now_utc()
 
     existing_session = db.scalar(
         select(AssessmentSession).where(
@@ -553,16 +1843,15 @@ def start_assessment(
     if existing_session:
         started_utc = to_utc(existing_session.started_at)
         deadline_utc = to_utc(existing_session.expires_at) or (started_utc + timedelta(minutes=duration_minutes))
-        now = now_utc()
         rem_sec = int((deadline_utc - now).total_seconds())
-        if rem_sec <= 0:
-            # Stale / expired session! Permanently mark as completed (attempt concluded)
-            existing_session.status = "completed"
-            existing_session.completed_at = deadline_utc
+        if rem_sec <= 0 or (due_utc is not None and now > due_utc):
+            # Transition stale/unsubmitted timed-out attempt to 'expired' (NEVER 'completed')
+            existing_session.status = "expired"
+            existing_session.completed_at = None
             db.commit()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Your allocated examination time for '{template.name}' has expired and this assessment has been concluded.",
+                detail=f"Your allocated examination time for '{template.name}' has expired and this assessment can no longer be resumed.",
             )
         else:
             # Active in-progress session exists with good time remaining! Return it so the learner can continue
@@ -579,8 +1868,11 @@ def start_assessment(
                     difficulty=getattr(q, "difficulty", "Medium") or "Medium",
                     question_type=q.question_type,
                     question_text=q.question_text,
+                    instructions=getattr(q, "instructions", None),
                     options=q.options,
                     display_order=q.display_order,
+                    max_score=float(q.max_score),
+                    negative_marks=float(getattr(q, "negative_marks", 0.0) or 0.0),
                 )
                 for q in q_records
             ]
@@ -594,108 +1886,36 @@ def start_assessment(
                 started_at=to_utc(existing_session.started_at),
                 expires_at=deadline_utc,
                 template_name=template.name,
-                assessment_type=template.assessment_type,
+                assessment_type=resolve_effective_assessment_type(template),
                 questions=public_questions,
             )
 
-    # 2. Strict Category Validation & Question Sourcing
-    name_lower = (template.name or "").lower()
-    type_lower = (template.assessment_type or "").lower()
+    if due_utc is not None and now > due_utc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"The assignment deadline for '{template.name}' has passed and the assessment is expired.",
+        )
 
-    if "grammar" in name_lower or "english" in name_lower or type_lower == "english_grammar":
-        effective_type = "english_grammar"
-    elif "technical" in name_lower or type_lower == "technical":
-        effective_type = "technical"
-    elif "logical" in name_lower or type_lower == "logical_reasoning":
-        effective_type = "logical_reasoning"
-    elif "programming" in name_lower or "coding" in name_lower or type_lower == "programming":
-        effective_type = "programming"
-    else:
-        effective_type = type_lower or "psychometric"
+    # 2. Strict Category Validation & Sequence-Aware Question Sourcing
+    effective_type = resolve_effective_assessment_type(template)
 
     # Synchronize template.assessment_type in DB if it had diverged
     if template.assessment_type != effective_type:
         template.assessment_type = effective_type
         db.flush()
 
-    valid_categories = VALID_CATEGORIES_BY_TYPE.get(effective_type, set())
+    questions, _, _ = _assemble_template_questions(
+        db=db,
+        template=template,
+        include_solutions=False,
+        custom_only=False,
+    )
 
-    bank_questions = db.scalars(
-        select(AssessmentQuestionBank)
-        .where(
-            AssessmentQuestionBank.template_id == template.id,
-            AssessmentQuestionBank.is_active.is_(True),
+    if not questions:
+        raise HTTPException(
+            status_code=422,
+            detail="No valid questions are configured for this assessment template.",
         )
-        .order_by(AssessmentQuestionBank.id)
-    ).all()
-
-    # Filter bank questions: prioritize questions for this template, guarding against cross-domain conflicts
-    invalid_categories = set()
-    for domain, cats in VALID_CATEGORIES_BY_TYPE.items():
-        if domain != effective_type:
-            invalid_categories.update(cats)
-
-    valid_bank = [
-        q for q in bank_questions
-        if q.category not in invalid_categories or q.category in valid_categories or effective_type in q.category
-    ]
-
-    target_count = template.question_count if template.question_count and template.question_count > 0 else (25 if effective_type == "logical_reasoning" else 20)
-
-    # Fetch domain-specific default questions
-    if effective_type == "logical_reasoning":
-        default_pool = get_default_logical_reasoning_questions()
-    elif effective_type == "english_grammar":
-        default_pool = get_default_english_grammar_questions()
-    elif effective_type in {"technical", "programming"}:
-        default_pool = get_default_technical_questions()
-    else:
-        default_pool = generate_mock_questions()
-
-    # Prioritize manual questions authored by teacher/admin first
-    questions = []
-    seen_texts = set()
-
-    for q in valid_bank:
-        options = q.options
-        if isinstance(options, str):
-            try:
-                options = json.loads(options)
-            except Exception:
-                options = []
-        scoring_key = q.scoring_key
-        if isinstance(scoring_key, str):
-            try:
-                scoring_key = json.loads(scoring_key)
-            except Exception:
-                scoring_key = {}
-
-        questions.append({
-            "category": q.category,
-            "difficulty": getattr(q, "difficulty", "Medium") or "Medium",
-            "question_type": q.question_type or "multiple_choice",
-            "question_text": q.question_text,
-            "options": options,
-            "scoring_key": scoring_key,
-            "max_score": q.max_score,
-        })
-        seen_texts.add(q.question_text.strip().lower())
-        if len(questions) >= target_count:
-            break
-
-    # Top up remaining questions from default pool if needed
-    if len(questions) < target_count:
-        for def_q in default_pool:
-            if def_q["question_text"].strip().lower() not in seen_texts:
-                questions.append(def_q)
-                seen_texts.add(def_q["question_text"].strip().lower())
-                if len(questions) >= target_count:
-                    break
-
-    # Backend Validation: Strictly assert every single question matches the target category
-    for q in questions:
-        if valid_categories and q["category"] not in valid_categories:
-            q["category"] = effective_type
 
     duration_minutes = get_duration_minutes_for_template(template)
     started_at = datetime.now(timezone.utc)
@@ -726,10 +1946,12 @@ def start_assessment(
                 difficulty=question.get("difficulty", "Medium"),
                 question_type=question["question_type"],
                 question_text=question["question_text"],
+                instructions=question.get("instructions"),
                 options=question["options"],
                 scoring_key=question["scoring_key"],
                 display_order=index,
                 max_score=question["max_score"],
+                negative_marks=float(question.get("negative_marks") or 0.0),
             )
 
             db.add(db_question)
@@ -742,8 +1964,11 @@ def start_assessment(
                     difficulty=db_question.difficulty,
                     question_type=db_question.question_type,
                     question_text=db_question.question_text,
+                    instructions=db_question.instructions,
                     options=db_question.options,
                     display_order=db_question.display_order,
+                    max_score=float(db_question.max_score),
+                    negative_marks=float(db_question.negative_marks or 0.0),
                 )
             )
 
@@ -814,6 +2039,18 @@ def resume_assessment(
             detail="Assessment session not found",
         )
 
+    if assessment_session.status == "expired":
+        raise HTTPException(
+            status_code=409,
+            detail="This assessment has expired without a submission",
+        )
+
+    if assessment_session.status == "completed":
+        raise HTTPException(
+            status_code=409,
+            detail="This assessment has already been submitted",
+        )
+
     if assessment_session.status != "in_progress":
         raise HTTPException(
             status_code=409,
@@ -825,14 +2062,26 @@ def resume_assessment(
     started_utc = to_utc(assessment_session.started_at)
     expires_utc = to_utc(assessment_session.expires_at) or (started_utc + timedelta(minutes=duration_minutes))
 
+    due_utc: datetime | None = None
+    if role_of(current_user) == Role.LEARNER.value and template is not None:
+        matched_items, _ = get_assigned_rows_for_learner(
+            db, current_user.id, only_active_templates=True
+        )
+        matched_entry = next(
+            (item for item in matched_items if item["template"].id == template.id),
+            None,
+        )
+        if matched_entry is not None:
+            due_utc = to_utc(matched_entry["assignment"].due_at)
+
     now = now_utc()
-    if expires_utc and now >= expires_utc:
-        assessment_session.status = "completed"
-        assessment_session.completed_at = expires_utc
+    if (expires_utc and now >= expires_utc) or (due_utc is not None and now > due_utc):
+        assessment_session.status = "expired"
+        assessment_session.completed_at = None
         db.commit()
         raise HTTPException(
             status_code=409,
-            detail="This assessment has expired and been submitted",
+            detail="This assessment has expired without a submission",
         )
 
     questions = db.scalars(
@@ -882,8 +2131,11 @@ def resume_assessment(
                 difficulty=getattr(question, "difficulty", "Medium") or "Medium",
                 question_type=question.question_type,
                 question_text=question.question_text,
+                instructions=getattr(question, "instructions", None),
                 options=question.options,
                 display_order=question.display_order,
+                max_score=float(question.max_score),
+                negative_marks=float(getattr(question, "negative_marks", 0.0) or 0.0),
             )
             for question in questions
         ],
@@ -966,17 +2218,19 @@ def save_assessment_answer(
         )
     )
 
+    normalized_ans = _normalize_answer_value(payload.answer, question.question_type)
+
     if record is None:
         record = AssessmentResponse(
             session_id=session_id,
             question_id=payload.question_id,
-            answer=payload.answer.strip() if payload.answer else None,
+            answer=normalized_ans,
             is_marked_for_review=payload.is_marked_for_review or False,
         )
         db.add(record)
     else:
         if payload.answer is not None:
-            record.answer = payload.answer.strip() if payload.answer else None
+            record.answer = normalized_ans
         if payload.is_marked_for_review is not None:
             record.is_marked_for_review = payload.is_marked_for_review
 
@@ -1100,9 +2354,11 @@ def submit_assessment(
             detail="Submitted answers contain a question that does not belong to this assessment",
         )
 
+    question_type_map = {q.id: q.question_type for q in questions}
     normalized_responses = []
     for item in answers:
-        if not isinstance(item.answer, str) or not item.answer.strip():
+        norm_ans = _normalize_answer_value(item.answer, question_type_map.get(item.question_id))
+        if not norm_ans:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Every submitted answer must contain a valid option ID",
@@ -1111,7 +2367,7 @@ def submit_assessment(
         normalized_responses.append(
             {
                 "question_id": item.question_id,
-                "answer": item.answer.strip(),
+                "answer": norm_ans,
             }
         )
 
@@ -1119,8 +2375,10 @@ def submit_assessment(
         {
             "id": question.id,
             "category": question.category,
+            "question_type": question.question_type,
             "scoring_key": question.scoring_key,
             "max_score": question.max_score,
+            "negative_marks": float(getattr(question, "negative_marks", 0.0) or 0.0),
         }
         for question in questions
     ]
@@ -1177,6 +2435,8 @@ def submit_assessment(
 
         assessment_session.status = "completed"
         assessment_session.completed_at = datetime.now(timezone.utc)
+        if payload.tab_switch_count is not None and payload.tab_switch_count >= 0:
+            assessment_session.tab_switch_count = payload.tab_switch_count
 
         db.commit()
         db.refresh(assessment_session)
@@ -1211,6 +2471,43 @@ def submit_assessment(
     except Exception:
         db.rollback()
         raise
+
+
+# --------------------------------------------------
+# Proctoring: Record live tab switch violation
+# --------------------------------------------------
+
+@router.post(
+    "/sessions/{session_id}/tab-switch",
+)
+def record_tab_switch(
+    session_id: int,
+    payload: AssessmentTabSwitchRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    session = db.scalar(
+        select(AssessmentSession).where(
+            AssessmentSession.id == session_id,
+            AssessmentSession.learner_user_id == current_user.id,
+        )
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assessment session not found",
+        )
+
+    current_val = getattr(session, "tab_switch_count", 0) or 0
+    new_val = max(current_val, payload.tab_switch_count)
+    session.tab_switch_count = new_val
+    db.commit()
+
+    return {
+        "status": "recorded",
+        "session_id": session.id,
+        "tab_switch_count": session.tab_switch_count,
+    }
 
 
 # --------------------------------------------------
@@ -1310,6 +2607,7 @@ def get_assessment_results(
         total_score=round(total_score, 2),
         max_score=round(max_score, 2),
         overall_percentage=round(overall_percentage, 2),
+        tab_switch_count=getattr(assessment_session, "tab_switch_count", 0) or 0,
     )
 
 
@@ -1376,12 +2674,20 @@ def create_assessment_report(
 
     if existing_report:
         rep_data = dict(existing_report.report_data or {})
+        modified = False
         if not rep_data.get("report_title"):
             from services.training.app.services.assessment_report import get_report_title, get_skill_level
             rep_data["report_title"] = get_report_title(ass_type, temp_name)
             rep_data["assessment_type"] = ass_type
             rep_data["template_name"] = temp_name
             rep_data["skill_level"] = get_skill_level(ass_type, float(rep_data.get("overall_percentage") or 0.0))
+            modified = True
+        if "tab_switch_count" not in rep_data:
+            tsc = getattr(assessment_session, "tab_switch_count", 0) or 0
+            rep_data["tab_switch_count"] = tsc
+            rep_data["proctoring_status"] = "Clean" if not tsc else ("Warning Issued" if tsc < 3 else "Terminated (Limit Reached)")
+            modified = True
+        if modified:
             existing_report.report_data = rep_data
             db.commit()
 
@@ -1436,7 +2742,7 @@ def create_assessment_report(
         resp = ans_map.get(q.id)
         if not resp or not resp.answer or not str(resp.answer).strip():
             unattempted_count += 1
-        elif str(resp.answer).strip().upper() == str(q.scoring_key).strip().upper():
+        elif _is_response_correct(q, resp):
             correct_count += 1
         else:
             incorrect_count += 1
@@ -1457,6 +2763,7 @@ def create_assessment_report(
             incorrect_count=incorrect_count,
             unattempted_count=unattempted_count,
             time_taken_seconds=time_taken_seconds,
+            tab_switch_count=getattr(assessment_session, "tab_switch_count", 0) or 0,
         )
 
         report = AssessmentReport(
@@ -1580,10 +2887,90 @@ def get_assessment_report(
     )
 
     if report is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Assessment report has not been generated yet",
+        # Auto-generate report on the fly for completed assessment session
+        scores = db.scalars(
+            select(AssessmentScore).where(
+                AssessmentScore.session_id == session_id
+            )
+        ).all()
+
+        if not scores:
+            raise HTTPException(
+                status_code=404,
+                detail="Assessment scores are required to generate the report",
+            )
+
+        template = db.scalar(
+            select(AssessmentTemplate).where(AssessmentTemplate.id == assessment_session.template_id)
         )
+        ass_type = template.assessment_type if template else "psychometric"
+        temp_name = template.name if template else "Assessment Report"
+
+        score_data = [
+            {
+                "category": item.category,
+                "score": item.score,
+                "max_score": item.max_score,
+                "percentage": item.percentage,
+            }
+            for item in scores
+        ]
+
+        all_questions = db.scalars(
+            select(AssessmentQuestion).where(AssessmentQuestion.session_id == session_id)
+        ).all()
+        all_responses = db.scalars(
+            select(AssessmentResponse).where(AssessmentResponse.session_id == session_id)
+        ).all()
+
+        total_q = len(all_questions)
+        ans_map = {r.question_id: r for r in all_responses}
+        correct_count = 0
+        incorrect_count = 0
+        unattempted_count = 0
+
+        for q in all_questions:
+            resp = ans_map.get(q.id)
+            if not resp or not resp.answer or not str(resp.answer).strip():
+                unattempted_count += 1
+            elif str(resp.answer).strip().upper() == str(q.scoring_key).strip().upper():
+                correct_count += 1
+            else:
+                incorrect_count += 1
+
+        time_taken_seconds = None
+        if assessment_session.started_at and assessment_session.completed_at:
+            s_utc = to_utc(assessment_session.started_at)
+            c_utc = to_utc(assessment_session.completed_at)
+            time_taken_seconds = max(0, int((c_utc - s_utc).total_seconds()))
+
+        generated = generate_assessment_report(
+            category_scores=score_data,
+            assessment_type=ass_type,
+            template_name=temp_name,
+            total_questions=total_q,
+            correct_count=correct_count,
+            incorrect_count=incorrect_count,
+            unattempted_count=unattempted_count,
+            time_taken_seconds=time_taken_seconds,
+            tab_switch_count=getattr(assessment_session, "tab_switch_count", 0) or 0,
+        )
+
+        report = AssessmentReport(
+            session_id=session_id,
+            report_data=generated["report_data"],
+            report_text=generated["report_text"],
+            ai_model=generated["ai_model"],
+        )
+        db.add(report)
+        try:
+            db.commit()
+            db.refresh(report)
+        except IntegrityError:
+            db.rollback()
+            report = db.scalar(
+                select(AssessmentReport).where(AssessmentReport.session_id == session_id)
+            )
 
     template = db.scalar(
         select(AssessmentTemplate).where(AssessmentTemplate.id == assessment_session.template_id)
@@ -1600,6 +2987,11 @@ def get_assessment_report(
         rep_data["assessment_type"] = ass_type
         rep_data["template_name"] = temp_name
         rep_data["skill_level"] = get_skill_level(ass_type, float(rep_data.get("overall_percentage") or 0.0))
+
+    if "tab_switch_count" not in rep_data:
+        tsc = getattr(assessment_session, "tab_switch_count", 0) or 0
+        rep_data["tab_switch_count"] = tsc
+        rep_data["proctoring_status"] = "Clean" if not tsc else ("Warning Issued" if tsc < 3 else "Terminated (Limit Reached)")
 
     return AssessmentReportResponse(
         id=report.id,
@@ -1685,7 +3077,7 @@ def get_my_assessment_results(
                 session_id=session.id,
                 template_id=template.id,
                 template_name=template.name,
-                assessment_type=template.assessment_type,
+                assessment_type=resolve_effective_assessment_type(template),
                 learner_user_id=current_user.id,
                 learner_name=current_user.full_name,
                 learner_email=current_user.email,
@@ -1698,6 +3090,7 @@ def get_my_assessment_results(
                 completed_at=session.completed_at,
                 has_report=session.id in sessions_with_report,
                 categories=cat_list,
+                tab_switch_count=getattr(session, "tab_switch_count", 0) or 0,
             )
         )
     return result_items
@@ -1814,7 +3207,7 @@ def get_admin_assessment_results(
                 session_id=session.id,
                 template_id=template.id,
                 template_name=template.name,
-                assessment_type=template.assessment_type,
+                assessment_type=resolve_effective_assessment_type(template),
                 learner_user_id=session.learner_user_id,
                 learner_name=learner_name,
                 learner_email=learner_email,
@@ -1827,6 +3220,7 @@ def get_admin_assessment_results(
                 completed_at=session.completed_at,
                 has_report=session.id in sessions_with_report,
                 categories=cat_list,
+                tab_switch_count=getattr(session, "tab_switch_count", 0) or 0,
             )
         )
 
@@ -1845,8 +3239,86 @@ def get_admin_assessment_results(
 
 
 # --------------------------------------------------
-# Admin / Teacher: Manage reusable question bank
+# Admin / Teacher: Manage reusable question bank, sequence & preview
 # --------------------------------------------------
+
+@router.get(
+    "/templates/{template_id}/preview",
+    response_model=AssessmentTemplatePreviewResponse,
+)
+def preview_assessment_template(
+    template_id: int,
+    mode: str = "student",
+    custom_only: bool = False,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    clean_mode = (mode or "student").strip().lower()
+    if clean_mode not in {"student", "admin"}:
+        raise HTTPException(status_code=422, detail="Preview mode must be 'student' or 'admin'")
+
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+
+    effective_type = resolve_effective_assessment_type(template)
+    duration_minutes = get_duration_minutes_for_template(template)
+    include_solutions = clean_mode == "admin"
+
+    assembled, custom_count, builtin_count = _assemble_template_questions(
+        db=db,
+        template=template,
+        include_solutions=include_solutions,
+        custom_only=custom_only,
+    )
+
+    total_marks = round(sum(float(q.get("max_score", 1.0)) for q in assembled), 2)
+    instructions = _default_candidate_instructions(
+        template=template,
+        effective_type=effective_type,
+        duration_minutes=duration_minutes,
+        total_questions=len(assembled),
+        total_marks=total_marks,
+    )
+
+    preview_items = []
+    for q in assembled:
+        preview_items.append(
+            AssessmentPreviewQuestionItem(
+                id=int(q["id"]),
+                source=q.get("source", "bank"),
+                category=q["category"],
+                difficulty=q.get("difficulty", "Medium") or "Medium",
+                question_type=q.get("question_type", "multiple_choice"),
+                question_text=q["question_text"],
+                instructions=q.get("instructions"),
+                options=q.get("options", []),
+                display_order=int(q["display_order"]),
+                max_score=float(q.get("max_score", 1.0)),
+                negative_marks=float(q.get("negative_marks", 0.0) or 0.0),
+                correct_option_id=q.get("correct_option_id") if include_solutions else None,
+                correct_option_ids=q.get("correct_option_ids") if include_solutions else None,
+                explanation=q.get("explanation") if include_solutions else None,
+            )
+        )
+
+    return AssessmentTemplatePreviewResponse(
+        template_id=template.id,
+        template_name=template.name,
+        assessment_type=effective_type,
+        description=template.description,
+        instructions=instructions,
+        mode=clean_mode,
+        duration_minutes=duration_minutes,
+        total_questions=len(preview_items),
+        configured_question_count=template.question_count,
+        custom_question_count=custom_count,
+        builtin_question_count=builtin_count,
+        total_marks=total_marks,
+        questions=preview_items,
+    )
+
 
 @router.get(
     "/templates/{template_id}/questions",
@@ -1854,6 +3326,7 @@ def get_admin_assessment_results(
 )
 def list_bank_questions(
     template_id: int,
+    include_unassigned: bool = True,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -1861,49 +3334,25 @@ def list_bank_questions(
     template = db.get(AssessmentTemplate, template_id)
     if template is None:
         raise HTTPException(status_code=404, detail="Assessment template not found")
-    questions = db.scalars(
+
+    stmt = (
         select(AssessmentQuestionBank)
         .where(
             AssessmentQuestionBank.template_id == template_id,
             AssessmentQuestionBank.is_active.is_(True),
         )
-        .order_by(AssessmentQuestionBank.id.desc())
-    ).all()
-    results = []
-    for q in questions:
-        options = q.options
-        if isinstance(options, str):
-            try:
-                options = json.loads(options)
-            except Exception:
-                options = []
-        scoring_key = q.scoring_key
-        if isinstance(scoring_key, str):
-            try:
-                scoring_key = json.loads(scoring_key)
-            except Exception:
-                scoring_key = {}
-        correct_id = None
-        if isinstance(scoring_key, dict):
-            for opt_id, val in scoring_key.items():
-                if val and float(val) > 0:
-                    correct_id = str(opt_id).upper()
-                    break
-        results.append(
-            AssessmentBankQuestionResponse(
-                id=q.id,
-                template_id=q.template_id,
-                category=q.category,
-                difficulty=getattr(q, "difficulty", "Medium") or "Medium",
-                question_type=q.question_type or "multiple_choice",
-                question_text=q.question_text,
-                options=options,
-                max_score=q.max_score,
-                is_active=q.is_active,
-                correct_option_id=correct_id,
-            )
+        .order_by(
+            AssessmentQuestionBank.in_assessment.desc(),
+            AssessmentQuestionBank.display_order.is_(None).asc(),
+            AssessmentQuestionBank.display_order.asc(),
+            AssessmentQuestionBank.id.asc(),
         )
-    return results
+    )
+    if not include_unassigned:
+        stmt = stmt.where(AssessmentQuestionBank.in_assessment.is_(True))
+
+    questions = db.scalars(stmt).all()
+    return [_build_bank_question_response(q) for q in questions]
 
 
 @router.post(
@@ -1921,51 +3370,296 @@ def create_bank_question(
     template = db.get(AssessmentTemplate, template_id)
     if template is None:
         raise HTTPException(status_code=404, detail="Assessment template not found")
-    option_ids = [str(option.id).strip().upper() for option in payload.options]
-    if len(option_ids) != len(set(option_ids)):
-        raise HTTPException(status_code=422, detail="Option IDs must be unique (A, B, C, D)")
-    correct_opt = str(payload.correct_option_id).strip().upper()
-    if correct_opt not in option_ids:
-        raise HTTPException(status_code=422, detail="Correct option must match one of the options (A, B, C, or D)")
 
-    clean_options = [
-        {"id": str(opt.id).strip().upper(), "text": opt.text.strip()}
-        for opt in payload.options
-    ]
-    score_val = float(payload.max_score) if payload.max_score and payload.max_score > 0 else 1.0
-    clean_scoring_key = {opt_id: (score_val if opt_id == correct_opt else 0.0) for opt_id in option_ids}
-
-    cat = payload.category.strip()
-    if not cat:
-        cat = template.assessment_type or "general"
-
-    question = AssessmentQuestionBank(
-        template_id=template_id,
-        category=cat,
-        difficulty=payload.difficulty.strip() if hasattr(payload, "difficulty") and payload.difficulty else "Medium",
-        question_type=payload.question_type or "multiple_choice",
-        question_text=payload.question_text.strip(),
-        options=clean_options,
-        scoring_key=clean_scoring_key,
-        max_score=score_val,
-        created_by_user_id=current_user.id,
+    normalized = _validate_and_normalize_bank_payload(
+        category=payload.category,
+        difficulty=payload.difficulty,
+        question_type=payload.question_type,
+        question_text=payload.question_text,
+        instructions=payload.instructions,
+        explanation=payload.explanation,
+        options=payload.options,
+        correct_option_id=payload.correct_option_id,
+        correct_option_ids=payload.correct_option_ids,
+        max_score=payload.max_score,
+        negative_marks=payload.negative_marks,
+        fallback_category=template.assessment_type or "general",
     )
-    db.add(question)
-    db.commit()
-    db.refresh(question)
 
-    return AssessmentBankQuestionResponse(
-        id=question.id,
-        template_id=question.template_id,
-        category=question.category,
-        difficulty=question.difficulty or "Medium",
-        question_type=question.question_type,
-        question_text=question.question_text,
-        options=clean_options,
-        max_score=question.max_score,
-        is_active=question.is_active,
-        correct_option_id=correct_opt,
+    try:
+        next_order = None
+        if payload.in_assessment:
+            _normalize_template_sequence(db, template_id)
+            max_order = db.scalar(
+                select(func.max(AssessmentQuestionBank.display_order)).where(
+                    AssessmentQuestionBank.template_id == template_id,
+                    AssessmentQuestionBank.is_active.is_(True),
+                    AssessmentQuestionBank.in_assessment.is_(True),
+                )
+            )
+            next_order = int(max_order or 0) + 1
+
+        question = AssessmentQuestionBank(
+            template_id=template_id,
+            category=normalized["category"],
+            difficulty=normalized["difficulty"],
+            question_type=normalized["question_type"],
+            question_text=normalized["question_text"],
+            instructions=normalized["instructions"],
+            explanation=normalized["explanation"],
+            options=normalized["options"],
+            scoring_key=normalized["scoring_key"],
+            max_score=normalized["max_score"],
+            negative_marks=normalized["negative_marks"],
+            display_order=next_order,
+            in_assessment=bool(payload.in_assessment),
+            created_by_user_id=current_user.id,
+        )
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+        return _build_bank_question_response(question)
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Sequence conflict while adding question. Please retry.")
+
+
+# IMPORTANT: Register static '/reorder' BEFORE parameterized '/{question_id}' routes
+@router.put(
+    "/templates/{template_id}/questions/reorder",
+    response_model=list[AssessmentBankQuestionResponse],
+)
+def reorder_bank_questions(
+    template_id: int,
+    payload: AssessmentBankReorderRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+
+    requested_ids = [int(qid) for qid in (payload.question_ids or [])]
+    if len(requested_ids) != len(set(requested_ids)):
+        raise HTTPException(
+            status_code=422,
+            detail="Duplicate question IDs are not allowed when updating sequence.",
+        )
+
+    all_template_rows = db.scalars(
+        select(AssessmentQuestionBank).where(AssessmentQuestionBank.template_id == template_id)
+    ).all()
+    assigned_active = [r for r in all_template_rows if r.is_active and getattr(r, "in_assessment", True)]
+    assigned_by_id = {r.id: r for r in assigned_active}
+
+    if set(requested_ids) != set(assigned_by_id.keys()):
+        raise HTTPException(
+            status_code=422,
+            detail="Reorder list must contain every active assigned question in this assessment and no foreign questions.",
+        )
+
+    try:
+        # Phase 1: Clear existing display_order within transaction to guarantee uniqueness
+        for row in all_template_rows:
+            row.display_order = None
+        db.flush()
+
+        # Phase 2: Assign consecutive 1..N sequence numbers for this template only
+        for idx, qid in enumerate(requested_ids, start=1):
+            assigned_by_id[qid].display_order = idx
+            assigned_by_id[qid].in_assessment = True
+        db.flush()
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Sequence conflict occurred during reorder transaction.")
+    except Exception:
+        db.rollback()
+        raise
+
+    ordered_assigned = [assigned_by_id[qid] for qid in requested_ids]
+    unassigned_active = sorted(
+        [r for r in all_template_rows if r.is_active and not getattr(r, "in_assessment", True)],
+        key=lambda r: r.id,
+        reverse=True,
     )
+    return [_build_bank_question_response(q) for q in [*ordered_assigned, *unassigned_active]]
+
+
+@router.put(
+    "/templates/{template_id}/questions/{question_id}",
+    response_model=AssessmentBankQuestionResponse,
+)
+def update_bank_question(
+    template_id: int,
+    question_id: int,
+    payload: AssessmentBankQuestionUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+
+    question = db.scalar(
+        select(AssessmentQuestionBank).where(
+            AssessmentQuestionBank.id == question_id,
+            AssessmentQuestionBank.template_id == template_id,
+            AssessmentQuestionBank.is_active.is_(True),
+        )
+    )
+    if question is None:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    changes = payload.model_dump(exclude_unset=True)
+    existing_options = _parse_json_list(question.options)
+    existing_sk = _parse_json_dict(question.scoring_key)
+    existing_correct_ids = _extract_correct_option_ids(existing_sk, existing_options)
+
+    target_type = changes.get("question_type", question.question_type or "multiple_choice")
+    target_options = changes.get("options", existing_options)
+
+    if "correct_option_ids" in changes or "correct_option_id" in changes:
+        target_correct_ids = changes.get("correct_option_ids")
+        target_correct_id = changes.get("correct_option_id")
+    else:
+        target_correct_ids = existing_correct_ids
+        target_correct_id = existing_correct_ids[0] if existing_correct_ids else None
+
+    normalized = _validate_and_normalize_bank_payload(
+        category=changes.get("category", question.category),
+        difficulty=changes.get("difficulty", getattr(question, "difficulty", "Medium") or "Medium"),
+        question_type=target_type,
+        question_text=changes.get("question_text", question.question_text),
+        instructions=changes.get("instructions", getattr(question, "instructions", None)),
+        explanation=changes.get("explanation", getattr(question, "explanation", None)),
+        options=target_options,
+        correct_option_id=target_correct_id,
+        correct_option_ids=target_correct_ids,
+        max_score=changes.get("max_score", question.max_score),
+        negative_marks=changes.get("negative_marks", getattr(question, "negative_marks", 0.0)),
+        fallback_category=template.assessment_type or "general",
+    )
+
+    try:
+        question.category = normalized["category"]
+        question.difficulty = normalized["difficulty"]
+        question.question_type = normalized["question_type"]
+        question.question_text = normalized["question_text"]
+        question.instructions = normalized["instructions"]
+        question.explanation = normalized["explanation"]
+        question.options = normalized["options"]
+        question.scoring_key = normalized["scoring_key"]
+        question.max_score = normalized["max_score"]
+        question.negative_marks = normalized["negative_marks"]
+
+        if "in_assessment" in changes and changes["in_assessment"] is not None:
+            want_in = bool(changes["in_assessment"])
+            if want_in != bool(getattr(question, "in_assessment", True)):
+                question.in_assessment = want_in
+                if not want_in:
+                    question.display_order = None
+                _normalize_template_sequence(db, template_id)
+
+        db.commit()
+        db.refresh(question)
+        return _build_bank_question_response(question)
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Could not update question")
+
+
+@router.post(
+    "/templates/{template_id}/questions/{question_id}/remove",
+    response_model=list[AssessmentBankQuestionResponse],
+)
+def remove_question_from_assessment(
+    template_id: int,
+    question_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Remove a question from this assessment sequence while preserving it in the question bank."""
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+
+    question = db.scalar(
+        select(AssessmentQuestionBank).where(
+            AssessmentQuestionBank.id == question_id,
+            AssessmentQuestionBank.template_id == template_id,
+            AssessmentQuestionBank.is_active.is_(True),
+        )
+    )
+    if question is None:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    try:
+        question.in_assessment = False
+        question.display_order = None
+        _normalize_template_sequence(db, template_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return list_bank_questions(template_id=template_id, include_unassigned=True, db=db, current_user=current_user)
+
+
+@router.post(
+    "/templates/{template_id}/questions/{question_id}/assign",
+    response_model=list[AssessmentBankQuestionResponse],
+)
+def assign_question_to_assessment(
+    template_id: int,
+    question_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Add an existing active bank question back to the assessment sequence at the end."""
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+
+    question = db.scalar(
+        select(AssessmentQuestionBank).where(
+            AssessmentQuestionBank.id == question_id,
+            AssessmentQuestionBank.template_id == template_id,
+            AssessmentQuestionBank.is_active.is_(True),
+        )
+    )
+    if question is None:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    try:
+        if not getattr(question, "in_assessment", True):
+            _normalize_template_sequence(db, template_id)
+            max_order = db.scalar(
+                select(func.max(AssessmentQuestionBank.display_order)).where(
+                    AssessmentQuestionBank.template_id == template_id,
+                    AssessmentQuestionBank.is_active.is_(True),
+                    AssessmentQuestionBank.in_assessment.is_(True),
+                )
+            )
+            question.in_assessment = True
+            question.display_order = int(max_order or 0) + 1
+            _normalize_template_sequence(db, template_id)
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return list_bank_questions(template_id=template_id, include_unassigned=True, db=db, current_user=current_user)
 
 
 @router.delete(
@@ -1987,6 +3681,13 @@ def delete_bank_question(
     )
     if question is None:
         raise HTTPException(status_code=404, detail="Question not found")
-    question.is_active = False
-    db.commit()
+    try:
+        question.is_active = False
+        question.in_assessment = False
+        question.display_order = None
+        _normalize_template_sequence(db, template_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return None

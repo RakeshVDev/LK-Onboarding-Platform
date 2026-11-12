@@ -5,12 +5,12 @@
         ← {{ authService.hasRole('admin', 'teacher', 'superadmin') ? 'Back to Learner Results' : 'Back to My Results' }}
       </button>
       <span class="eyebrow">ASSESSMENT COMPLETED</span>
-      <h1>{{ results?.template_name ? (results?.template_name + ' Results') : 'Your Assessment Results' }}</h1>
-      @if (results?.learner_name) {
+      <h1>{{ results()?.template_name ? (results()?.template_name + ' Results') : 'Your Assessment Results' }}</h1>
+      @if (results()?.learner_name) {
         <p class="learner-tag">
-          <strong>Candidate:</strong> {{ results?.learner_name }}
-          @if (results?.learner_email) {
-            <span>({{ results?.learner_email }})</span>
+          <strong>Candidate:</strong> {{ results()?.learner_name }}
+          @if (results()?.learner_email) {
+            <span>({{ results()?.learner_email }})</span>
           }
         </p>
       }
@@ -19,11 +19,11 @@
     <span class="session-chip">Session #{{ sessionId }}</span>
   </header>
 
-  @if (errorMessage) {
-    <div class="error-message" role="alert">{{ errorMessage }}</div>
+  @if (errorMessage()) {
+    <div class="error-message" role="alert">{{ errorMessage() }}</div>
   }
 
-  @if (loading) {
+  @if (loading()) {
     <section class="state-panel" aria-live="polite">
       <span class="spinner"></span>
       <strong>Loading saved results...</strong>
@@ -31,7 +31,7 @@
     </section>
   }
 
-  @if (!loading && results) {
+  @if (!loading() && results(); as results) {
     <section class="overview-grid">
       <article class="overview-card overall-card">
         <span class="metric-label">OVERALL PERFORMANCE</span>
@@ -58,6 +58,20 @@
         <span class="metric-label">UNANSWERED</span>
         <strong>{{ results.unanswered_count }}</strong>
         <small>Received zero points</small>
+      </article>
+
+      <article class="overview-card" [class.proctor-violation]="(results.tab_switch_count || 0) > 0">
+        <span class="metric-label">PROCTORING INTEGRITY</span>
+        <strong>
+          @if ((results.tab_switch_count || 0) === 0) {
+            Clean (0)
+          } @else {
+            {{ results.tab_switch_count }} / 3 Switches
+          }
+        </strong>
+        <small>
+          {{ (results.tab_switch_count || 0) === 0 ? 'Verified Clean Session' : ((results.tab_switch_count || 0) < 3 ? 'Warning Recorded' : 'Security Limit Reached') }}
+        </small>
       </article>
     </section>
 
@@ -91,18 +105,18 @@
     <section class="report-section">
       <div class="report-copy">
         <span class="eyebrow">PERSONAL DEVELOPMENT</span>
-        <h2>{{ report ? 'Your report is ready' : 'Your development report' }}</h2>
+        <h2>{{ report() ? 'Your report is ready' : 'Your development report' }}</h2>
         <p>
           Review the category interpretations, relative strengths,
           development areas and practical recommendations generated
           from your saved assessment scores.
         </p>
-        @if (report) {
-          <small>Generated {{ report.generated_at | date:'medium' }}</small>
+        @if (report(); as rep) {
+          <small>Generated {{ rep.generated_at | date:'medium' }}</small>
         }
       </div>
 
-      @if (report) {
+      @if (report()) {
         <button class="btn-primary" type="button" (click)="viewReport()">
           View full report →
         </button>
@@ -110,9 +124,9 @@
         <button
           class="btn-primary"
           type="button"
-          [disabled]="reportLoading"
+          [disabled]="reportLoading()"
           (click)="generateReport()">
-          {{ reportLoading ? 'Generating report...' : 'Generate report →' }}
+          {{ reportLoading() ? 'Generating report...' : 'Generate report →' }}
         </button>
       }
     </section>

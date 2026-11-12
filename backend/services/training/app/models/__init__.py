@@ -19,6 +19,7 @@ from services.training.app.models.assessment import (
     AssessmentScore,
     AssessmentReport,
     AssessmentQuestionBank,
+    AssessmentAssignment,
 )
 
 __all__ = [
@@ -38,4 +39,5 @@ __all__ = [
     "AssessmentScore",
     "AssessmentReport",
     "AssessmentQuestionBank",
+    "AssessmentAssignment",
 ]

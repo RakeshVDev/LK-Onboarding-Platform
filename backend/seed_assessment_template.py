@@ -32,11 +32,16 @@ def seed_template():
     try:
         existing = (
             db.query(AssessmentTemplate)
-            .filter(AssessmentTemplate.name == "L&K Psychometric Assessment")
+            .filter(
+                AssessmentTemplate.name.in_(
+                    ["ASE Psychometric Assessment", "L&K Psychometric Assessment"]
+                )
+            )
             .first()
         )
 
         if existing:
+            existing.name = "ASE Psychometric Assessment"
             existing.is_active = True
             existing.question_count = 20
             existing.category_config = CATEGORY_CONFIG
@@ -47,7 +52,7 @@ def seed_template():
             return
 
         template = AssessmentTemplate(
-            name="L&K Psychometric Assessment",
+            name="ASE Psychometric Assessment",
             description=(
                 "A 20-question developmental assessment covering "
                 "personality, reasoning, judgement, emotional "

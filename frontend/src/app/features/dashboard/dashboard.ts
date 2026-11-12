@@ -1,26 +1,29 @@
-import { Component, OnInit, signal, computed, inject } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  DestroyRef,
+  ChangeDetectorRef,
+  signal,
+  computed,
+  effect,
+  inject
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { firstValueFrom, interval } from 'rxjs';
 
 import { AuthService, CurrentUser, UserRole } from '../../core/services/auth.service';
 import {
   AssessmentService,
   AssessmentTemplate,
-  UserAssessmentResultItem
+  AssessmentAssignmentStatus,
+  StudentAssignedAssessmentItem,
+  StudentAssignedStats
 } from '../assessments/services/assessment';
 import { UserManagementService, ManagedUser } from '../../core/services/user-management.service';
 import { LearningService } from '../../core/services/learning.service';
-
-interface QuickAction {
-  title: string;
-  description: string;
-  icon: string;
-  route: string;
-  badge?: string;
-  accent: 'blue' | 'indigo' | 'emerald' | 'amber' | 'purple';
-}
 
 @Component({
   selector: 'app-dashboard',
@@ -36,26 +39,61 @@ export class Dashboard implements OnInit {
   private readonly learningService = inject(LearningService);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   readonly user = signal<CurrentUser | null>(null);
   readonly loading = signal(true);
+  readonly syncingAssessments = signal(false);
   readonly errorMessage = signal('');
 
-  // Learner data
-  readonly templates = signal<AssessmentTemplate[]>([]);
-  readonly learnerResults = signal<UserAssessmentResultItem[]>([]);
-
-  // Filtered completed results
-  readonly completedLearnerResults = computed(() => {
-    return this.learnerResults().filter(r => r.status === 'completed');
+  // Dynamic learner assigned assessments, notifications, stats & cohorts
+  readonly assignedAssessments = signal<StudentAssignedAssessmentItem[]>([]);
+  readonly notifications = signal<StudentAssignedAssessmentItem[]>([]);
+  readonly assignedStats = signal<StudentAssignedStats>({
+    total_assigned: 0,
+    not_started_count: 0,
+    in_progress_count: 0,
+    completed_count: 0,
+    expired_count: 0,
+    average_score: 0
   });
+  readonly assignedCohortNames = signal<string[]>([]);
+  readonly lastSyncedAt = signal<string | null>(null);
+  readonly nowTickMs = signal<number>(Date.now());
+  private lastSyncLocalMs = Date.now();
+  private lastTimeoutRefreshMs = 0;
+  private initializedLearnerSync = false;
 
-  // Accurate true performance average across all completed assessments
+  readonly templates = signal<AssessmentTemplate[]>([]);
+
+  readonly completedAssignedCount = computed(() =>
+    this.assignedAssessments().filter(item => item.status === 'COMPLETED').length
+  );
+
+  readonly totalAssignedCount = computed(() =>
+    this.assignedAssessments().length
+  );
+
+  readonly hasInProgressAssessment = computed(() =>
+    this.assignedAssessments().some(item => item.status === 'IN_PROGRESS')
+  );
+
   readonly learnerAverageScore = computed(() => {
-    const completed = this.completedLearnerResults();
+    const completed = this.assignedAssessments().filter(
+      item => item.status === 'COMPLETED' && item.overall_percentage !== null && item.overall_percentage !== undefined
+    );
     if (completed.length === 0) return 0;
     const sum = completed.reduce((acc, curr) => acc + (curr.overall_percentage || 0), 0);
     return Math.round(sum / completed.length);
+  });
+
+  readonly assignedCohortLabel = computed(() => {
+    const names = this.assignedCohortNames();
+    if (names.length > 0) {
+      return names.join(', ');
+    }
+    return 'All Assigned Batches';
   });
 
   // Admin & Teacher telemetry data
@@ -106,17 +144,27 @@ export class Dashboard implements OnInit {
     });
   });
 
-  // Onboarding progress calculation for learners
+  // Dynamic onboarding progress calculation based on all assigned assessments
   readonly onboardingProgress = computed(() => {
     let score = 25; // 25% for verified account creation
-    const completed = this.completedLearnerResults();
-    // 50% for completed assessments (up to 4 assessments, each 12.5%)
-    score += Math.min(50, Math.round((completed.length / 4) * 50));
-    // 25% for course curriculum assignment
+    const total = this.totalAssignedCount();
+    const completed = this.completedAssignedCount();
+    if (total > 0) {
+      score += Math.min(50, Math.round((completed / total) * 50));
+    } else {
+      score += 50;
+    }
     if (this.coursesCount() > 0) {
       score += 25;
     }
     return Math.min(100, score);
+  });
+
+  private readonly syncReaction = effect(() => {
+    const version = this.assessmentService.syncVersion();
+    if (version > 0 && this.initializedLearnerSync && this.user()?.role === 'learner') {
+      void this.loadAssignedAssessments(true);
+    }
   });
 
   async ngOnInit(): Promise<void> {
@@ -130,10 +178,12 @@ export class Dashboard implements OnInit {
       }
 
       this.user.set(currentUser);
-
-      // Load role-specific data in parallel
       await this.loadRoleSpecificData(currentUser.role);
 
+      if (currentUser.role === 'learner') {
+        this.initializedLearnerSync = true;
+        this.setupLearnerLiveSync();
+      }
     } catch (err) {
       console.error('Dashboard load error:', err);
       this.errorMessage.set('Unable to load your dashboard. Please sign in again.');
@@ -141,31 +191,116 @@ export class Dashboard implements OnInit {
       await this.router.navigateByUrl('/login');
     } finally {
       this.loading.set(false);
+      this.cdr.detectChanges();
     }
   }
 
-  private async loadRoleSpecificData(role: UserRole): Promise<void> {
-    // 1. Fetch real learning entity counts dynamically
-    await this.loadLearningCounts();
+  private setupLearnerLiveSync(): void {
+    // Lightweight 30-second background polling while tab is visible
+    interval(30000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (!document.hidden && this.user()?.role === 'learner') {
+          void this.loadAssignedAssessments(true);
+        }
+      });
 
-    // 2. Role-specific calls
+    // Live 1-second timer tick only when at least one session is IN_PROGRESS
+    interval(1000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (!this.hasInProgressAssessment()) {
+          return;
+        }
+        const now = Date.now();
+        this.nowTickMs.set(now);
+
+        // If any active countdown hit 0, ask backend to refresh lifecycle status (debounced 10s)
+        const justTimedOut = this.assignedAssessments().some(
+          item => item.status === 'IN_PROGRESS' && this.getLiveRemainingSeconds(item) === 0
+        );
+        if (justTimedOut && now - this.lastTimeoutRefreshMs > 10000) {
+          this.lastTimeoutRefreshMs = now;
+          void this.loadAssignedAssessments(true);
+        }
+        this.cdr.detectChanges();
+      });
+
+    // Instant refresh when user returns to browser tab or window focus
+    const onVisibilityOrFocus = (): void => {
+      if (!document.hidden && this.user()?.role === 'learner') {
+        void this.loadAssignedAssessments(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
+    window.addEventListener('focus', onVisibilityOrFocus);
+
+    this.destroyRef.onDestroy(() => {
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+    });
+  }
+
+  private async loadRoleSpecificData(role: UserRole): Promise<void> {
+    const tasks: Promise<any>[] = [this.loadLearningCounts()];
+
     if (role === 'learner') {
-      await Promise.allSettled([
-        this.loadTemplates(),
-        this.loadLearnerResults()
-      ]);
+      tasks.push(this.loadAssignedAssessments(false));
     } else if (role === 'teacher') {
-      await Promise.allSettled([
-        this.loadTemplates(),
-        this.loadAdminResults()
-      ]);
+      tasks.push(this.loadTemplates(), this.loadAdminResults());
     } else if (role === 'admin' || role === 'superadmin') {
-      await Promise.allSettled([
-        this.loadTemplates(),
-        this.loadAdminResults(),
-        this.loadUserStats()
-      ]);
+      tasks.push(this.loadTemplates(), this.loadAdminResults(), this.loadUserStats());
     }
+
+    await Promise.allSettled(tasks);
+  }
+
+  async refreshLearnerAssessments(): Promise<void> {
+    if (this.user()?.role !== 'learner') return;
+    await this.loadAssignedAssessments(true);
+  }
+
+  private async loadAssignedAssessments(silent: boolean): Promise<void> {
+    if (!silent) {
+      this.syncingAssessments.set(true);
+    }
+    try {
+      const data = await firstValueFrom(this.assessmentService.getMyAssignedAssessments());
+      const uniqueAssessments = this.deduplicateByTemplateId(data.assessments || []);
+      const uniqueNotifications = this.deduplicateByTemplateId(data.notifications || []);
+
+      this.assignedAssessments.set(uniqueAssessments);
+      this.notifications.set(uniqueNotifications);
+      this.assignedStats.set(data.stats || {
+        total_assigned: uniqueAssessments.length,
+        not_started_count: uniqueAssessments.filter(a => a.status === 'NOT_STARTED').length,
+        in_progress_count: uniqueAssessments.filter(a => a.status === 'IN_PROGRESS').length,
+        completed_count: uniqueAssessments.filter(a => a.status === 'COMPLETED').length,
+        expired_count: uniqueAssessments.filter(a => a.status === 'EXPIRED').length,
+        average_score: 0
+      });
+      this.assignedCohortNames.set(Array.isArray(data.cohort_names) ? data.cohort_names : []);
+      this.lastSyncedAt.set(data.synced_at || new Date().toISOString());
+      this.lastSyncLocalMs = Date.now();
+      this.nowTickMs.set(this.lastSyncLocalMs);
+    } catch (err) {
+      console.warn('Could not load assigned learner assessments:', err);
+    } finally {
+      this.syncingAssessments.set(false);
+      this.cdr.detectChanges();
+    }
+  }
+
+  private deduplicateByTemplateId(items: StudentAssignedAssessmentItem[]): StudentAssignedAssessmentItem[] {
+    const seen = new Set<number>();
+    const result: StudentAssignedAssessmentItem[] = [];
+    for (const item of items) {
+      if (!seen.has(item.template_id)) {
+        seen.add(item.template_id);
+        result.push(item);
+      }
+    }
+    return result;
   }
 
   private async loadLearningCounts(): Promise<void> {
@@ -196,15 +331,6 @@ export class Dashboard implements OnInit {
       this.templates.set(templates || []);
     } catch (err) {
       console.warn('Could not load templates on dashboard:', err);
-    }
-  }
-
-  private async loadLearnerResults(): Promise<void> {
-    try {
-      const results = await firstValueFrom(this.assessmentService.getMyResults());
-      this.learnerResults.set(results || []);
-    } catch (err) {
-      console.warn('Could not load learner results on dashboard:', err);
     }
   }
 
@@ -243,21 +369,44 @@ export class Dashboard implements OnInit {
     }
   }
 
-  // Learner test status helper
-  getCompletedTest(type: string): UserAssessmentResultItem | undefined {
-    const cleanType = type.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return this.learnerResults().find(r => {
-      if (r.status !== 'completed') return false;
-      const rType = (r.assessment_type || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const rName = (r.template_name || '').toLowerCase();
-      if (rType === cleanType) return true;
-      if (type === 'logical_reasoning' && (rName.includes('logical') || rType.includes('logical'))) return true;
-      if (type === 'english_grammar' && (rName.includes('english') || rName.includes('grammar') || rType.includes('grammar') || rType.includes('english'))) return true;
-      if (type === 'technical' && (rName.includes('technical') || rType.includes('technical'))) return true;
-      if (type === 'programming' && (rName.includes('programming') || rType.includes('programming'))) return true;
-      if (type === 'psychometric' && (rName.includes('psychometric') || rType.includes('psychometric') || rName.includes('assessment-2') || rName.includes('assessment 2'))) return true;
-      return false;
-    });
+  getLiveRemainingSeconds(item: StudentAssignedAssessmentItem): number {
+    if (item.remaining_seconds === null || item.remaining_seconds === undefined) {
+      return 0;
+    }
+    const elapsedSec = Math.max(0, Math.floor((this.nowTickMs() - this.lastSyncLocalMs) / 1000));
+    return Math.max(0, item.remaining_seconds - elapsedSec);
+  }
+
+  formatRemainingTime(totalSeconds: number): string {
+    const safe = Math.max(0, Math.floor(totalSeconds));
+    const hrs = Math.floor(safe / 3600);
+    const mins = Math.floor((safe % 3600) / 60);
+    const secs = safe % 60;
+    if (hrs > 0) {
+      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  getAssessmentIcon(type?: string): string {
+    switch (type) {
+      case 'logical_reasoning': return '⚡';
+      case 'technical': return '💻';
+      case 'english_grammar': return '✍';
+      case 'programming': return '⌘';
+      case 'psychometric': return '✦';
+      default: return '▤';
+    }
+  }
+
+  getStatusBadgeLabel(status: AssessmentAssignmentStatus | string): string {
+    switch (status) {
+      case 'NOT_STARTED': return 'Pending';
+      case 'IN_PROGRESS': return 'In Progress';
+      case 'COMPLETED': return 'Completed';
+      case 'EXPIRED': return 'Expired';
+      default: return status;
+    }
   }
 
   getRoleLabel(role?: string): string {
