@@ -116,6 +116,133 @@
       </div>
     </section>
 
+    <!-- ========================================================= -->
+    <!-- TECH TRACK / DEPARTMENT SELECTION & ALLOCATION CARD      -->
+    <!-- ========================================================= -->
+    <section class="department-track-card">
+      @if (trackSubmitSuccess()) {
+        <div class="alert-success-box">
+          <span>✓</span> {{ trackSubmitSuccess() }}
+        </div>
+      }
+      @if (trackSubmitError()) {
+        <div class="alert-error-box">
+          <span>⚠</span> {{ trackSubmitError() }}
+        </div>
+      }
+
+      <!-- Case 1: Approved -->
+      @if (myDeptRequest()?.status === 'approved') {
+        <div class="track-status-banner track-approved">
+          <div class="status-icon-box">✓</div>
+          <div class="status-content">
+            <span class="track-eyebrow">DEPARTMENT ALLOCATED &amp; VERIFIED</span>
+            <h3>You are assigned to the {{ myDeptRequest()?.department_name }} Track</h3>
+            <p>
+              Your tech stack preference has been reviewed and approved by your instructor/administrator.
+              All specialized study materials, syllabus modules, and course resources are now accessible.
+            </p>
+            <div class="approved-actions">
+              <a routerLink="/courses" class="btn-track-primary">
+                <span>View My Courses &amp; Study Materials →</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Case 2: Pending Approval -->
+      @else if (myDeptRequest()?.status === 'pending') {
+        <div class="track-status-banner track-pending">
+          <div class="status-icon-box">⏳</div>
+          <div class="status-content">
+            <span class="track-eyebrow">PENDING INSTRUCTOR / ADMIN APPROVAL</span>
+            <h3>Requested Track: {{ myDeptRequest()?.department_name }}</h3>
+            <p>
+              Your request to join the <strong>{{ myDeptRequest()?.department_name }}</strong> department has been submitted.
+              Your instructor or superadmin will review your preference. Courses and study materials will unlock as soon as your track is approved.
+            </p>
+            @if (myDeptRequest()?.notes) {
+              <div class="notes-quote">"{{ myDeptRequest()?.notes }}"</div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Case 3: Initial Assessment Done & Need to Choose Tech Stack -->
+      @else if (hasCompletedInitialAssessment()) {
+        <div class="track-selection-banner">
+          <div class="track-header-row">
+            <div>
+              <span class="track-eyebrow">MILESTONE UNLOCKED: CHOOSE YOUR ENGINEERING SPECIALIZATION</span>
+              <h3>Which tech stack are you most interested in and comfortable with?</h3>
+              <p>
+                Congratulations on completing your initial assessment! Select your desired tech track below.
+                Your request will be sent to the instructor and superadmin panel for final onboarding approval.
+              </p>
+            </div>
+          </div>
+
+          <!-- Tech Stack Selection Chips -->
+          <div class="tech-tracks-grid">
+            @for (dept of availableDepartments(); track dept.id) {
+              <button
+                type="button"
+                class="track-chip-card"
+                [class.selected]="selectedTrackDeptId === dept.id"
+                (click)="selectedTrackDeptId = dept.id">
+                <span class="track-icon">{{ getTrackIcon(dept.name) }}</span>
+                <div class="track-info">
+                  <strong>{{ dept.name }}</strong>
+                  <small>{{ dept.description || 'Specialized Track' }}</small>
+                </div>
+                <span class="chip-radio">{{ selectedTrackDeptId === dept.id ? '●' : '○' }}</span>
+              </button>
+            }
+          </div>
+
+          <!-- Notes Input -->
+          <div class="track-notes-group">
+            <label for="trackNotes">Candidate Statement / Prior Comfort Level (Optional):</label>
+            <input
+              id="trackNotes"
+              type="text"
+              [(ngModel)]="trackNotes"
+              placeholder="e.g. Completed projects in Python & Django; or looking forward to .NET backend..."
+            />
+          </div>
+
+          <div class="track-submit-row">
+            <button
+              type="button"
+              class="btn-submit-track"
+              (click)="submitTrackPreference(selectedTrackDeptId, trackNotes)"
+              [disabled]="submittingTrack() || !selectedTrackDeptId">
+              <span>{{ submittingTrack() ? 'Submitting Track...' : 'Submit Track for Approval →' }}</span>
+            </button>
+          </div>
+        </div>
+      }
+
+      <!-- Case 4: Initial Assessment Not Completed Yet -->
+      @else {
+        <div class="track-status-banner track-info">
+          <div class="status-icon-box">✦</div>
+          <div class="status-content">
+            <span class="track-eyebrow">INDUCTION STEP 2 IN PROGRESS</span>
+            <h3>Initial Assessment Pending</h3>
+            <p>
+              Complete your initial psychometric &amp; aptitude assessment above. Once completed,
+              you will choose your tech track (Python, .NET, Java, PHP, Database Engineer) for instructor approval.
+            </p>
+            <a routerLink="/my-assessments" class="btn-track-secondary">
+              <span>Take Initial Assessment →</span>
+            </a>
+          </div>
+        </div>
+      }
+    </section>
+
     <!-- Learner KPI Stat Cards -->
     <section class="stats-row">
       <div class="stat-card">
@@ -385,6 +512,19 @@
   @if (user()?.role === 'teacher') {
   <div class="role-dashboard teacher-layout">
 
+    @if (pendingRequestsCount() > 0) {
+      <div class="pending-allocations-alert">
+        <div class="alert-icon-wrap">🔔</div>
+        <div class="alert-text-wrap">
+          <strong>{{ pendingRequestsCount() }} New Joinee Track Allocation{{ pendingRequestsCount() === 1 ? '' : 's' }} Pending Approval</strong>
+          <p>Review new joinees' tech stack preferences and approve their departments to unlock course materials and syllabus.</p>
+        </div>
+        <a routerLink="/departments" class="btn-review-allocations">
+          <span>Review &amp; Approve Track →</span>
+        </a>
+      </div>
+    }
+
     <!-- Teacher KPI Stats -->
     <section class="stats-row">
       <div class="stat-card">
@@ -514,6 +654,19 @@
         <span>Version: <strong>2.4 Enterprise</strong></span>
       </div>
     </div>
+
+    @if (pendingRequestsCount() > 0) {
+      <div class="pending-allocations-alert">
+        <div class="alert-icon-wrap">🔔</div>
+        <div class="alert-text-wrap">
+          <strong>{{ pendingRequestsCount() }} New Joinee Track Allocation{{ pendingRequestsCount() === 1 ? '' : 's' }} Pending Approval</strong>
+          <p>Review new joinees' tech stack preferences and approve their departments to unlock course materials and syllabus.</p>
+        </div>
+        <a routerLink="/departments" class="btn-review-allocations">
+          <span>Review &amp; Approve Track →</span>
+        </a>
+      </div>
+    }
 
     <!-- Executive KPI Metric Row -->
     <section class="stats-row">

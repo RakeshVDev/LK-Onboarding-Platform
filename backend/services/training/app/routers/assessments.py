@@ -1,6 +1,7 @@
 
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -24,6 +25,7 @@ from services.training.app.models.assessment import (
     AssessmentReport,
     AssessmentQuestionBank,
 )
+from services.training.app.models.entities import Department, StudentDepartmentRequest
 
 from services.training.app.schemas.assessment import (
     AssessmentTemplateCreate,
@@ -236,17 +238,12 @@ def now_utc() -> datetime:
 
 
 def validate_template_settings(question_count: int, config: dict, assessment_type: str = "psychometric"):
-    if assessment_type == "logical_reasoning":
-        if question_count != 25:
-            raise HTTPException(status_code=422, detail="Logical Reasoning assessment must contain exactly 25 questions")
-    elif assessment_type == "psychometric":
-        if question_count != 20:
-            raise HTTPException(status_code=422, detail="Each psychometric assessment must contain exactly 20 questions")
-        validate_category_config(config)
-    elif question_count <= 0:
+    if question_count <= 0:
         raise HTTPException(status_code=422, detail="Assessment must contain at least 1 question")
+    if question_count > 200:
+        raise HTTPException(status_code=422, detail="Assessment cannot exceed 200 questions")
 
-    if not isinstance(config, dict):
+    if config is not None and not isinstance(config, dict):
         raise HTTPException(status_code=422, detail="Invalid category configuration")
 
 
@@ -310,6 +307,24 @@ def get_my_assessment_status(
 # Admin: List assessment templates
 # --------------------------------------------------
 
+def build_template_response(
+    t: AssessmentTemplate, dept_map: dict[int, str]
+) -> AssessmentTemplateResponse:
+    return AssessmentTemplateResponse(
+        id=t.id,
+        name=t.name,
+        department_id=t.department_id,
+        department_name=dept_map.get(t.department_id) if t.department_id else None,
+        assessment_type=t.assessment_type,
+        description=t.description,
+        question_count=t.question_count,
+        category_config=t.category_config,
+        is_active=t.is_active,
+        created_by_user_id=t.created_by_user_id,
+        created_at=t.created_at,
+    )
+
+
 @router.get(
     "/templates",
     response_model=list[AssessmentTemplateResponse],
@@ -329,8 +344,42 @@ def list_templates(
 
     elif role == Role.LEARNER.value:
         query = select(AssessmentTemplate).where(
-            AssessmentTemplate.is_active.is_(True)
+            AssessmentTemplate.is_active == True
         )
+        approved_req = db.scalar(
+            select(StudentDepartmentRequest).where(
+                StudentDepartmentRequest.user_id == current_user.id,
+                StudentDepartmentRequest.status == "approved",
+            )
+        )
+        common_dept = db.scalar(
+            select(Department).where(
+                Department.name.in_(["All / Common", "All/Common", "Common"])
+            )
+        )
+        common_id = common_dept.id if common_dept else None
+
+        if approved_req:
+            allowed_dept_ids = {approved_req.department_id}
+            if common_id:
+                allowed_dept_ids.add(common_id)
+            query = query.where(
+                (AssessmentTemplate.department_id == None) |
+                (AssessmentTemplate.department_id.in_(allowed_dept_ids))
+            )
+        else:
+            initial_types = ["psychometric", "logical_reasoning", "english_grammar"]
+            if common_id:
+                query = query.where(
+                    (AssessmentTemplate.department_id == None) |
+                    (AssessmentTemplate.department_id == common_id) |
+                    (AssessmentTemplate.assessment_type.in_(initial_types))
+                )
+            else:
+                query = query.where(
+                    (AssessmentTemplate.department_id == None) |
+                    (AssessmentTemplate.assessment_type.in_(initial_types))
+                )
 
     else:
         raise HTTPException(
@@ -338,9 +387,19 @@ def list_templates(
             detail="You cannot access assessment templates",
         )
 
-    return db.scalars(
+    templates = db.scalars(
         query.order_by(AssessmentTemplate.id.desc())
     ).all()
+    if not templates:
+        return []
+
+    dept_ids = {t.department_id for t in templates if t.department_id}
+    dept_map = {}
+    if dept_ids:
+        depts = db.scalars(select(Department).where(Department.id.in_(dept_ids))).all()
+        dept_map = {d.id: d.name for d in depts}
+
+    return [build_template_response(t, dept_map) for t in templates]
 
 
 @router.get(
@@ -364,7 +423,13 @@ def get_template(
             status_code=404,
             detail="Assessment template is not active",
         )
-    return template
+
+    dept_map = {}
+    if template.department_id:
+        dept = db.get(Department, template.department_id)
+        if dept:
+            dept_map[dept.id] = dept.name
+    return build_template_response(template, dept_map)
 
 
 # --------------------------------------------------
@@ -403,6 +468,7 @@ def create_template(
 
     template = AssessmentTemplate(
         name=payload.name,
+        department_id=payload.department_id,
         assessment_type=payload.assessment_type,
         description=payload.description,
         question_count=payload.question_count,
@@ -415,7 +481,12 @@ def create_template(
         db.add(template)
         db.commit()
         db.refresh(template)
-        return template
+        dept_map = {}
+        if template.department_id:
+            dept = db.get(Department, template.department_id)
+            if dept:
+                dept_map[dept.id] = dept.name
+        return build_template_response(template, dept_map)
 
     except IntegrityError:
         db.rollback()
@@ -483,7 +554,12 @@ def update_template(
     try:
         db.commit()
         db.refresh(template)
-        return template
+        dept_map = {}
+        if template.department_id:
+            dept = db.get(Department, template.department_id)
+            if dept:
+                dept_map[dept.id] = dept.name
+        return build_template_response(template, dept_map)
 
     except IntegrityError:
         db.rollback()
@@ -491,6 +567,24 @@ def update_template(
             status_code=409,
             detail="Could not update assessment template",
         )
+
+
+@router.delete(
+    "/templates/{template_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+    template.is_active = False
+    db.commit()
+    return None
 
 
 # --------------------------------------------------
@@ -624,7 +718,7 @@ def start_assessment(
         select(AssessmentQuestionBank)
         .where(
             AssessmentQuestionBank.template_id == template.id,
-            AssessmentQuestionBank.is_active.is_(True),
+            AssessmentQuestionBank.is_active == True,
         )
         .order_by(AssessmentQuestionBank.id)
     ).all()
@@ -635,10 +729,7 @@ def start_assessment(
         if domain != effective_type:
             invalid_categories.update(cats)
 
-    valid_bank = [
-        q for q in bank_questions
-        if q.category not in invalid_categories or q.category in valid_categories or effective_type in q.category
-    ]
+    valid_bank = list(bank_questions)
 
     target_count = template.question_count if template.question_count and template.question_count > 0 else (25 if effective_type == "logical_reasoning" else 20)
 
@@ -1865,7 +1956,7 @@ def list_bank_questions(
         select(AssessmentQuestionBank)
         .where(
             AssessmentQuestionBank.template_id == template_id,
-            AssessmentQuestionBank.is_active.is_(True),
+            AssessmentQuestionBank.is_active == True,
         )
         .order_by(AssessmentQuestionBank.id.desc())
     ).all()
@@ -1889,6 +1980,12 @@ def list_bank_questions(
                 if val and float(val) > 0:
                     correct_id = str(opt_id).upper()
                     break
+        clean_opts = []
+        if isinstance(options, list):
+            for opt in options:
+                if isinstance(opt, dict) and "id" in opt and "text" in opt:
+                    clean_opts.append({"id": str(opt["id"]), "text": str(opt["text"])})
+
         results.append(
             AssessmentBankQuestionResponse(
                 id=q.id,
@@ -1897,7 +1994,7 @@ def list_bank_questions(
                 difficulty=getattr(q, "difficulty", "Medium") or "Medium",
                 question_type=q.question_type or "multiple_choice",
                 question_text=q.question_text,
-                options=options,
+                options=clean_opts,
                 max_score=q.max_score,
                 is_active=q.is_active,
                 correct_option_id=correct_id,
@@ -1990,3 +2087,65 @@ def delete_bank_question(
     question.is_active = False
     db.commit()
     return None
+
+@router.post(
+    "/templates/{template_id}/populate-defaults",
+    response_model=list[AssessmentBankQuestionResponse],
+)
+def populate_default_questions(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+
+    effective_type = template.assessment_type or "psychometric"
+    if effective_type == "logical_reasoning":
+        default_pool = get_default_logical_reasoning_questions()
+    elif effective_type == "english_grammar":
+        default_pool = get_default_english_grammar_questions()
+    elif effective_type in {"technical", "programming"}:
+        default_pool = get_default_technical_questions()
+    else:
+        default_pool = generate_mock_questions()
+
+    existing_texts = set(
+        db.scalars(
+            select(AssessmentQuestionBank.question_text)
+            .where(AssessmentQuestionBank.template_id == template_id)
+        ).all()
+    )
+
+    try:
+        for q_data in default_pool:
+            q_text = q_data["question_text"].strip()
+            if q_text in existing_texts:
+                continue
+
+            q = AssessmentQuestionBank(
+                template_id=template_id,
+                category=q_data.get("category", effective_type),
+                difficulty=q_data.get("difficulty", "Medium"),
+                question_type=q_data.get("question_type", "multiple_choice"),
+                question_text=q_text,
+                options=q_data["options"],
+                scoring_key=q_data.get("scoring_key", {}),
+                max_score=float(q_data.get("max_score", 1.0)),
+                is_active=True,
+                created_by_user_id=current_user.id,
+            )
+            db.add(q)
+            existing_texts.add(q_text)
+
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to populate questions: {str(exc)}"
+        )
+    return list_bank_questions(template_id, db, current_user)
+

@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from services.training.app.db.session import SessionLocal
-from services.training.app.models.entities import Course, Department, LearningMaterial
+from services.training.app.models.entities import Course, Department, LearningMaterial, StudentDepartmentRequest
 from services.training.app.schemas.training import (
     CourseCreate,
     CourseResponse,
@@ -18,7 +18,7 @@ from services.training.app.schemas.training import (
     LearningMaterialResponse,
 )
 
-from services.identity.app.core.roles import Permission
+from services.identity.app.core.roles import Permission, Role
 from services.identity.app.dependencies.auth import (
     get_current_user,
     require_permissions,
@@ -52,6 +52,32 @@ def require_department(db: Session, department_id: int):
     return department
 
 
+def get_learner_approved_dept_ids(db: Session, user_id: int) -> set[int] | None:
+    """
+    Returns set of allowed department IDs (the student's approved department + All/Common department).
+    If the learner has no approved department allocation, returns None.
+    """
+    approved_req = db.scalar(
+        select(StudentDepartmentRequest).where(
+            StudentDepartmentRequest.user_id == user_id,
+            StudentDepartmentRequest.status == "approved",
+        )
+    )
+    if not approved_req:
+        return None
+
+    allowed_ids = {approved_req.department_id}
+    common_dept = db.scalar(
+        select(Department).where(
+            Department.name.in_(["All / Common", "All/Common", "Common"])
+        )
+    )
+    if common_dept:
+        allowed_ids.add(common_dept.id)
+
+    return allowed_ids
+
+
 @router.post(
     "",
     response_model=CourseResponse,
@@ -64,7 +90,7 @@ def create_course(
         require_permissions(Permission.MANAGE_COURSES)
     ),
 ):
-    require_department(db, payload.department_id)
+    dept = require_department(db, payload.department_id)
 
     course = Course(**payload.model_dump())
     db.add(course)
@@ -79,7 +105,14 @@ def create_course(
             detail="Could not create course because of a data conflict",
         )
 
-    return course
+    return CourseResponse(
+        id=course.id,
+        department_id=course.department_id,
+        department_name=dept.name,
+        title=course.title,
+        description=course.description,
+        is_published=course.is_published,
+    )
 
 
 @router.get("", response_model=list[CourseResponse])
@@ -90,14 +123,34 @@ def list_courses(
 ):
     query = select(Course).order_by(Course.id)
 
-    if department_id is not None:
-        query = query.where(
-            Course.department_id == department_id
-        )
+    if current_user.role == Role.LEARNER:
+        allowed_dept_ids = get_learner_approved_dept_ids(db, current_user.id)
+        if not allowed_dept_ids:
+            # Student has not been approved for a department yet: unlock nothing
+            return []
+        query = query.where(Course.department_id.in_(allowed_dept_ids))
+    elif department_id is not None:
+        query = query.where(Course.department_id == department_id)
 
-    # TODO: Filter results by teacher assignments and learner enrollments.
-    # Authentication alone does not grant access to every course.
-    return db.scalars(query).all()
+    courses = db.scalars(query).all()
+    if not courses:
+        return []
+
+    dept_ids = {c.department_id for c in courses}
+    depts = db.scalars(select(Department).where(Department.id.in_(dept_ids))).all()
+    dept_map = {d.id: d.name for d in depts}
+
+    return [
+        CourseResponse(
+            id=c.id,
+            department_id=c.department_id,
+            department_name=dept_map.get(c.department_id),
+            title=c.title,
+            description=c.description,
+            is_published=c.is_published,
+        )
+        for c in courses
+    ]
 
 
 @router.get("/{course_id}", response_model=CourseResponse)
@@ -107,16 +160,34 @@ def get_course(
     current_user=Depends(get_current_user),
 ):
     course = db.get(Course, course_id)
-
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found",
         )
 
-    # TODO: Enforce teacher-assignment and learner-enrollment checks
-    # before returning course details.
-    return course
+    if current_user.role == Role.LEARNER:
+        allowed_dept_ids = get_learner_approved_dept_ids(db, current_user.id)
+        if not allowed_dept_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your department allocation is pending instructor/admin approval. Courses and study materials will unlock once approved.",
+            )
+        if course.department_id not in allowed_dept_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to study materials outside your approved department.",
+            )
+
+    dept = db.get(Department, course.department_id)
+    return CourseResponse(
+        id=course.id,
+        department_id=course.department_id,
+        department_name=dept.name if dept else None,
+        title=course.title,
+        description=course.description,
+        is_published=course.is_published,
+    )
 
 
 @router.patch(
@@ -218,11 +289,19 @@ def list_course_materials(
             detail="Course not found",
         )
 
+    if current_user.role == Role.LEARNER:
+        allowed_dept_ids = get_learner_approved_dept_ids(db, current_user.id)
+        if not allowed_dept_ids or course.department_id not in allowed_dept_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to study materials outside your approved department.",
+            )
+
     return db.scalars(
         select(LearningMaterial)
         .where(
             LearningMaterial.course_id == course_id,
-            LearningMaterial.is_active.is_(True),
+            LearningMaterial.is_active == True,
         )
         .order_by(LearningMaterial.id.desc())
     ).all()
@@ -326,6 +405,18 @@ def download_material_file(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Learning material not found",
         )
+
+    course = db.get(Course, course_id)
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+    if current_user.role == Role.LEARNER:
+        allowed_dept_ids = get_learner_approved_dept_ids(db, current_user.id)
+        if not allowed_dept_ids or course.department_id not in allowed_dept_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to study materials outside your approved department.",
+            )
 
     if not os.path.exists(material.storage_key):
         raise HTTPException(

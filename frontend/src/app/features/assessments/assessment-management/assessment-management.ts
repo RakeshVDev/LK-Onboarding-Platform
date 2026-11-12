@@ -113,6 +113,23 @@ export class AssessmentManagement implements OnInit {
     }
   }
 
+  deleteAssessment(template: AssessmentTemplate): void {
+    if (!confirm(`Are you sure you want to deactivate and remove "${template.name}"?`)) {
+      return;
+    }
+    this.errorMessage = '';
+    this.assessmentService.deleteTemplate(template.id).subscribe({
+      next: () => {
+        this.loadTemplates();
+      },
+      error: (error) => {
+        console.error('Delete template failed:', error);
+        this.errorMessage = error.error?.detail || 'Unable to delete assessment template.';
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   toggleStatus(template: AssessmentTemplate): void {
 
     this.errorMessage = '';

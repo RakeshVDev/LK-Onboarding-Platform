@@ -24,6 +24,9 @@ class AssessmentTemplate(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    department_id: Mapped[int | None] = mapped_column(
+        ForeignKey("departments.id"), nullable=True, index=True
+    )
     assessment_type: Mapped[str] = mapped_column(String(40), default="psychometric", nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 

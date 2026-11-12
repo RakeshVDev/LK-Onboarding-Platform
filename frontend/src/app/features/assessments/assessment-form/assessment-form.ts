@@ -21,6 +21,7 @@ import {
   BankQuestion,
   CreateBankQuestionPayload
 } from '../services/assessment';
+import { LearningService, Department } from '../../../core/services/learning.service';
 
 export interface CategoryOption {
   key: string;
@@ -91,12 +92,14 @@ const CATEGORY_MAP: Record<string, CategoryOption[]> = {
 export class AssessmentForm implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(AssessmentService);
+  private readonly learningService = inject(LearningService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
   templateId: number | null = null;
   template: AssessmentTemplate | null = null;
+  departments: Department[] = [];
 
   activeTab: 'config' | 'questions' = 'config';
 
@@ -109,6 +112,7 @@ export class AssessmentForm implements OnInit {
   bankQuestions: BankQuestion[] = [];
   loadingQuestions = false;
   savingQuestion = false;
+  populatingDefaults = false;
   showAddQuestionForm = false;
   deletingQuestionId: number | null = null;
   questionError = '';
@@ -124,6 +128,7 @@ export class AssessmentForm implements OnInit {
         Validators.maxLength(200)
       ]
     ],
+    department_id: [null as number | null],
     assessment_type: [
       'logical_reasoning' as 'psychometric' | 'technical' | 'english_grammar' | 'logical_reasoning' | 'programming',
       [Validators.required]
@@ -145,6 +150,7 @@ export class AssessmentForm implements OnInit {
   qMaxScore = 1.0;
 
   ngOnInit(): void {
+    void this.loadDepartments();
     const id = Number(this.route.snapshot.paramMap.get('id'));
 
     if (id > 0) {
@@ -159,6 +165,15 @@ export class AssessmentForm implements OnInit {
     const tab = this.route.snapshot.queryParamMap.get('tab');
     if (tab === 'questions') {
       this.activeTab = 'questions';
+    }
+  }
+
+  async loadDepartments(): Promise<void> {
+    try {
+      this.departments = await this.learningService.getDepartments();
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.warn('Could not load departments in assessment form:', err);
     }
   }
 
@@ -241,6 +256,7 @@ export class AssessmentForm implements OnInit {
         this.template = template;
         this.form.patchValue({
           name: template.name,
+          department_id: template.department_id ?? null,
           assessment_type: template.assessment_type || 'logical_reasoning',
           description: template.description ?? '',
           question_count: template.question_count || (template.assessment_type === 'logical_reasoning' ? 25 : 20),
@@ -300,9 +316,11 @@ export class AssessmentForm implements OnInit {
       return;
     }
 
-    const type = this.form.controls.assessment_type.value;
-    const name = this.form.controls.name.value.trim();
-    const description = this.form.controls.description.value.trim() || null;
+    const type = this.form.controls.assessment_type.value || 'logical_reasoning';
+    const name = (this.form.controls.name.value || '').trim();
+    const deptVal = this.form.controls.department_id.value;
+    const departmentId = deptVal ? Number(deptVal) : null;
+    const description = (this.form.controls.description.value || '').trim() || null;
     const questionCount = Number(this.form.controls.question_count.value) || 20;
 
     // Build category configuration
@@ -317,6 +335,13 @@ export class AssessmentForm implements OnInit {
       };
     }
 
+    if (Object.keys(catConfig).length === 0) {
+      catConfig[type || 'general'] = {
+        label: (type || 'General').replaceAll('_', ' ').toUpperCase(),
+        question_count: questionCount
+      };
+    }
+
     this.saving = true;
     this.cdr.detectChanges();
 
@@ -325,6 +350,7 @@ export class AssessmentForm implements OnInit {
         const updated = await firstValueFrom(
           this.api.updateTemplate(this.templateId, {
             name,
+            department_id: departmentId,
             assessment_type: type,
             description,
             question_count: questionCount,
@@ -337,6 +363,7 @@ export class AssessmentForm implements OnInit {
         const created = await firstValueFrom(
           this.api.createTemplate({
             name,
+            department_id: departmentId,
             assessment_type: type,
             description,
             question_count: questionCount,
@@ -345,8 +372,14 @@ export class AssessmentForm implements OnInit {
         );
         this.templateId = created.id;
         this.template = created;
-        this.successMessage = 'Assessment created successfully! You can now add questions below.';
+        this.successMessage = 'Assessment created successfully! You can now author questions for it below.';
         this.activeTab = 'questions';
+        this.showAddQuestionForm = true;
+        await this.loadBankQuestions(created.id);
+        void this.router.navigate(['/assessments/edit', created.id], {
+          queryParams: { tab: 'questions' },
+          replaceUrl: true
+        });
       }
     } catch (error: any) {
       console.error('Template save error:', error);
@@ -360,6 +393,28 @@ export class AssessmentForm implements OnInit {
   // ----------------------------------------------------
   // Manual Question Management
   // ----------------------------------------------------
+
+  async populateDefaultQuestions(): Promise<void> {
+    if (!this.templateId) return;
+    this.populatingDefaults = true;
+    this.questionError = '';
+    this.questionSuccess = '';
+    this.cdr.detectChanges();
+
+    try {
+      const questions = await firstValueFrom(
+        this.api.populateDefaultQuestions(this.templateId)
+      );
+      this.bankQuestions = Array.isArray(questions) ? questions : [];
+      this.questionSuccess = `Successfully populated ${this.bankQuestions.length} standard questions into this assessment bank!`;
+    } catch (err: any) {
+      console.error('Populate default questions error:', err);
+      this.questionError = this.parseErrorMessage(err, 'Failed to populate standard questions.');
+    } finally {
+      this.populatingDefaults = false;
+      this.cdr.detectChanges();
+    }
+  }
 
   toggleAddQuestion(): void {
     this.showAddQuestionForm = !this.showAddQuestionForm;

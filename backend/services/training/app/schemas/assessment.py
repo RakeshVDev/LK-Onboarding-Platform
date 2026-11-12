@@ -21,10 +21,11 @@ def serialize_utc_datetime(dt: datetime | None) -> str | None:
 
 class AssessmentTemplateCreate(BaseModel):
     name: str = Field(min_length=3, max_length=200)
+    department_id: int | None = None
     description: str | None = None
-    assessment_type: str = Field(default="psychometric", pattern="^(psychometric|technical|english_grammar|logical_reasoning)$")
+    assessment_type: str = Field(default="psychometric", pattern=r"^[a-zA-Z0-9_-]+$")
 
-    question_count: int = Field(default=20, gt=0, le=100)
+    question_count: int = Field(default=20, gt=0, le=200)
 
     category_config: dict[str, Any] = Field(
         description="Question categories and their distribution"
@@ -36,6 +37,8 @@ class AssessmentTemplateResponse(BaseModel):
 
     id: int
     name: str
+    department_id: int | None = None
+    department_name: str | None = None
     assessment_type: str = "psychometric"
     description: str | None
     question_count: int
@@ -241,12 +244,13 @@ class AssessmentSessionResponse(BaseModel):
 
 
 class AssessmentTemplateUpdate(BaseModel):
-    assessment_type: str | None = Field(default=None, pattern="^(psychometric|technical|english_grammar|logical_reasoning)$")
+    assessment_type: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]+$")
+    department_id: int | None = None
     name: str | None = Field(default=None, min_length=3, max_length=200)
     description: str | None = None
     is_active: bool | None = None
     category_config: dict[str, Any] | None = None
-    question_count: int | None = Field(default=None, gt=0, le=100)
+    question_count: int | None = Field(default=None, gt=0, le=200)
 
 
 class LearnerAssessmentStatusResponse(BaseModel):

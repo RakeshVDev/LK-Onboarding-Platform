@@ -37,6 +37,40 @@
   </div>
   }
 
+  <!-- Learner Department Track Allocation Notice -->
+  @if (!loading() && isLearner) {
+    @if (!isApprovedForDepartment) {
+      <div class="locked-department-banner">
+        <div class="lock-icon-box">🔒</div>
+        <div class="lock-content">
+          @if (departmentStatus === 'pending') {
+            <h3>Track Allocation Pending Approval</h3>
+            <p>
+              You have requested to join the <strong>{{ requestedDepartmentName }}</strong> department track.
+              Your instructor or superadmin will review and approve your allocation shortly.
+              All courses, syllabus lessons, and study materials will unlock automatically once approved.
+            </p>
+          } @else {
+            <h3>Department Allocation Required</h3>
+            <p>
+              To access specialized course materials and syllabus modules, complete your initial assessment
+              and select your preferred technology stack (e.g., Python, .NET, Java, PHP, Database Engineer).
+            </p>
+            <a routerLink="/my-assessments" class="btn-goto-assessments">
+              <span>Go to Initial Assessments →</span>
+            </a>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="approved-track-pill-banner">
+        <span class="track-check">✓</span>
+        <span>Allocated Department Track: <strong>{{ requestedDepartmentName }}</strong></span>
+        <span class="track-subtitle">· Showing courses and study materials approved for your technical specialization</span>
+      </div>
+    }
+  }
+
   <!-- Courses Grid -->
   @if (!loading() && courses().length > 0) {
   <div class="courses-grid">

@@ -10,6 +10,8 @@ export interface AssessmentCategory {
 export interface AssessmentTemplate {
   id: number;
   name: string;
+  department_id?: number | null;
+  department_name?: string | null;
   assessment_type: "psychometric" | "technical" | "english_grammar" | "logical_reasoning" | "programming";
   description: string | null;
   question_count: number;
@@ -21,6 +23,7 @@ export interface AssessmentTemplate {
 
 export interface CreateAssessmentTemplate {
   name: string;
+  department_id?: number | null;
   assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning" | "programming";
   description: string | null;
   question_count: number;
@@ -29,6 +32,7 @@ export interface CreateAssessmentTemplate {
 
 export interface UpdateAssessmentTemplate {
   name?: string;
+  department_id?: number | null;
   assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning" | "programming";
   description?: string | null;
   question_count?: number;
@@ -258,6 +262,15 @@ export class AssessmentService {
     );
   }
 
+  populateDefaultQuestions(
+    templateId: number
+  ): Observable<BankQuestion[]> {
+    return this.http.post<BankQuestion[]>(
+      `${this.apiUrl}/templates/${templateId}/populate-defaults`,
+      {}
+    );
+  }
+
   resumeAssessment(
     sessionId: number
   ): Observable<AssessmentResumeResponse> {
@@ -282,6 +295,14 @@ export class AssessmentService {
     return this.http.put<AssessmentTemplate>(
       `${this.apiUrl}/templates/${id}`,
       data
+    );
+  }
+
+  deleteTemplate(
+    id: number
+  ): Observable<void> {
+    return this.http.delete<void>(
+      `${this.apiUrl}/templates/${id}`
     );
   }
 

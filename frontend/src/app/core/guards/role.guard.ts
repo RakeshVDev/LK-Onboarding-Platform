@@ -20,7 +20,7 @@ export const roleGuard = (allowedRoles: UserRole[]): CanActivateFn => {
         return router.createUrlTree(['/login']);
       }
 
-      if (!allowedRoles.includes(user.role)) {
+      if (!allowedRoles.includes(user.role) && !(user.role === 'superadmin' && allowedRoles.includes('admin'))) {
         return router.createUrlTree(['/dashboard']);
       }
 

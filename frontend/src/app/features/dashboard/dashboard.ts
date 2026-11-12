@@ -1,6 +1,7 @@
 import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
@@ -11,7 +12,7 @@ import {
   UserAssessmentResultItem
 } from '../assessments/services/assessment';
 import { UserManagementService, ManagedUser } from '../../core/services/user-management.service';
-import { LearningService } from '../../core/services/learning.service';
+import { LearningService, Department, StudentDepartmentRequest } from '../../core/services/learning.service';
 
 interface QuickAction {
   title: string;
@@ -25,7 +26,7 @@ interface QuickAction {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, FormsModule],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss'
 })
@@ -88,6 +89,31 @@ export class Dashboard implements OnInit {
   readonly coursesCount = signal<number>(0);
   readonly cohortsCount = signal<number>(0);
   readonly departmentsCount = signal<number>(0);
+
+  // Student Department Allocation Request state
+  readonly myDeptRequest = signal<StudentDepartmentRequest | null>(null);
+  readonly availableDepartments = signal<Department[]>([]);
+  readonly pendingRequestsCount = signal<number>(0);
+  selectedTrackDeptId = 0;
+  trackNotes = '';
+  readonly submittingTrack = signal(false);
+  readonly trackSubmitSuccess = signal('');
+  readonly trackSubmitError = signal('');
+
+  readonly hasCompletedInitialAssessment = computed(() => {
+    return this.completedLearnerResults().some(r => {
+      const t = (r.assessment_type || '').toLowerCase();
+      const n = (r.template_name || '').toLowerCase();
+      return (
+        t.includes('psychometric') ||
+        n.includes('psychometric') ||
+        t.includes('logical') ||
+        n.includes('logical') ||
+        t.includes('grammar') ||
+        n.includes('grammar')
+      );
+    });
+  });
 
   // Time-based greeting
   readonly greeting = computed(() => {
@@ -152,20 +178,79 @@ export class Dashboard implements OnInit {
     if (role === 'learner') {
       await Promise.allSettled([
         this.loadTemplates(),
-        this.loadLearnerResults()
+        this.loadLearnerResults(),
+        this.loadLearnerDepartmentData()
       ]);
     } else if (role === 'teacher') {
       await Promise.allSettled([
         this.loadTemplates(),
-        this.loadAdminResults()
+        this.loadAdminResults(),
+        this.loadPendingRequests()
       ]);
     } else if (role === 'admin' || role === 'superadmin') {
       await Promise.allSettled([
         this.loadTemplates(),
         this.loadAdminResults(),
-        this.loadUserStats()
+        this.loadUserStats(),
+        this.loadPendingRequests()
       ]);
     }
+  }
+
+  private async loadLearnerDepartmentData(): Promise<void> {
+    try {
+      const [req, depts] = await Promise.all([
+        this.learningService.getMyDepartmentRequest().catch(() => null),
+        this.learningService.getDepartments().catch(() => [])
+      ]);
+      this.myDeptRequest.set(req);
+      const activeDepts = depts.filter(d => d.is_active);
+      this.availableDepartments.set(activeDepts);
+      if (req?.department_id) {
+        this.selectedTrackDeptId = req.department_id;
+      } else if (activeDepts.length > 0) {
+        this.selectedTrackDeptId = activeDepts[0].id;
+      }
+    } catch (err) {
+      console.warn('Could not load learner department request:', err);
+    }
+  }
+
+  private async loadPendingRequests(): Promise<void> {
+    try {
+      const requests = await this.learningService.getDepartmentRequests('pending');
+      this.pendingRequestsCount.set(requests.length);
+    } catch (err) {
+      console.warn('Could not load pending department requests count:', err);
+    }
+  }
+
+  async submitTrackPreference(deptId: number, notes?: string): Promise<void> {
+    if (!deptId) return;
+    this.submittingTrack.set(true);
+    this.trackSubmitError.set('');
+    this.trackSubmitSuccess.set('');
+    try {
+      const res = await this.learningService.submitDepartmentRequest(deptId, notes || this.trackNotes);
+      this.myDeptRequest.set(res);
+      this.selectedTrackDeptId = res.department_id;
+      this.trackSubmitSuccess.set(`Successfully submitted request for the ${res.department_name || 'Department'} track! Waiting for instructor approval.`);
+    } catch (err: any) {
+      this.trackSubmitError.set(err.error?.detail || 'Failed to submit department track request.');
+    } finally {
+      this.submittingTrack.set(false);
+    }
+  }
+
+  getTrackIcon(name?: string | null): string {
+    const lower = (name || '').toLowerCase();
+    if (lower.includes('php')) return '🐘';
+    if (lower.includes('.net') || lower.includes('c#')) return '⚙';
+    if (lower.includes('python')) return '🐍';
+    if (lower.includes('java')) return '☕';
+    if (lower.includes('data') || lower.includes('sql') || lower.includes('db')) return '🗄';
+    if (lower.includes('all') || lower.includes('common')) return '🌐';
+    return '💻';
   }
 
   private async loadLearningCounts(): Promise<void> {
