@@ -1,0 +1,168 @@
+
+<div class="assessment-page">
+
+  <!-- Page Header -->
+  <div class="page-header">
+    <div>
+      <h1>Assessment Management</h1>
+      <p>Manage psychometric assessments and evaluate learner development.</p>
+    </div>
+
+    <button class="btn-primary" (click)="createAssessment()">
+      <span>＋</span> Create Assessment
+    </button>
+  </div>
+
+  <!-- Statistics -->
+  <div class="stats-grid">
+
+    <div class="stat-card">
+      <div class="stat-icon purple">▤</div>
+      <div>
+        <span>Total Templates</span>
+        <h2>{{ templates.length }}</h2>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon green">✓</div>
+      <div>
+        <span>Active Templates</span>
+        <h2>{{ activeCount }}</h2>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon blue">☷</div>
+      <div>
+        <span>Total Questions</span>
+        <h2>{{ totalQuestions }}</h2>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Error -->
+  @if (errorMessage) {
+    <div class="error-message">
+      {{ errorMessage }}
+    </div>
+  }
+
+  <!-- Templates -->
+  <div class="section-header">
+    <div>
+      <h2>Assessment Templates</h2>
+      <p>View and manage your assessment configurations.</p>
+    </div>
+  </div>
+
+  @if (loading) {
+    <div class="loading-state">
+      Loading assessment templates...
+    </div>
+  }
+
+  @if (!loading && templates.length === 0 && !errorMessage) {
+    <div class="empty-state">
+      <div class="empty-icon">▤</div>
+      <h3>No assessments created yet</h3>
+      <p>Create your first psychometric assessment template.</p>
+
+      <button class="btn-primary" (click)="createAssessment()">
+        ＋ Create Assessment
+      </button>
+    </div>
+  }
+
+  @if (!loading && templates.length > 0) {
+    <div class="template-grid">
+
+      @for (template of templates; track template.id) {
+        <div class="template-card">
+
+          <div class="template-top">
+            <div class="template-icon">
+              {{ getTypeIcon(template.assessment_type) }}
+            </div>
+
+            <div class="top-meta-right">
+              <span class="type-pill">
+                {{ getTypeLabel(template.assessment_type) }}
+              </span>
+              <span
+                class="status"
+                [class.active]="template.is_active"
+                [class.inactive]="!template.is_active">
+                {{ template.is_active ? 'Active' : 'Inactive' }}
+              </span>
+            </div>
+          </div>
+
+          <h3>{{ template.name }}</h3>
+
+          <p class="description">
+            {{ template.description || 'No description provided.' }}
+          </p>
+
+          <div class="template-meta">
+            <div>
+              <strong>{{ template.question_count }}</strong>
+              <span>Questions</span>
+            </div>
+
+            <div>
+              <strong>{{ (template.category_config | keyvalue).length }}</strong>
+              <span>Categories</span>
+            </div>
+
+            <div>
+              <strong>{{ template.assessment_type === 'logical_reasoning' ? '30 Min' : '15 Min' }}</strong>
+              <span>Duration</span>
+            </div>
+          </div>
+
+          <div class="category-list">
+            @for (
+              category of template.category_config | keyvalue;
+              track category.key
+            ) {
+              <div class="category-item">
+                <span>{{ category.value.label }}</span>
+                <span>{{ category.value.question_count }} Qs</span>
+              </div>
+            }
+          </div>
+
+          <div class="card-actions">
+            <button
+              type="button"
+              class="btn-outline btn-edit"
+              (click)="editAssessment(template.id)">
+              ⚙ Edit
+            </button>
+
+            <button
+              type="button"
+              class="btn-outline btn-questions"
+              (click)="manageQuestions(template.id)">
+              📑 Manage Questions
+            </button>
+
+            <button
+              type="button"
+              class="btn-outline"
+              [class.deactivate]="template.is_active"
+              [class.activate]="!template.is_active"
+              (click)="toggleStatus(template)">
+              {{ template.is_active ? 'Deactivate' : 'Activate' }}
+            </button>
+          </div>
+
+        </div>
+      }
+
+    </div>
+  }
+
+</div>

@@ -1,80 +1,687 @@
+<div class="dashboard-container">
 
-@if (loading()) {
-  <section class="dashboard-state">
-    <div class="loader"></div>
-    <p>Loading your workspace...</p>
-  </section>
-} @else if (errorMessage()) {
-  <section class="dashboard-state">
+  @if (loading()) {
+  <div class="dashboard-loading">
+    <div class="spinner"></div>
+    <p>Initializing your personalized workspace...</p>
+  </div>
+  } @else if (errorMessage()) {
+  <div class="dashboard-error">
     <h2>Unable to load dashboard</h2>
     <p>{{ errorMessage() }}</p>
-  </section>
-} @else {
-  <main class="dashboard-page">
-    <section class="dashboard-heading">
-      <div>
-        <span class="eyebrow">OVERVIEW</span>
-        <h1>{{ roleTitle }}</h1>
-        <p>{{ roleDescription }}</p>
+  </div>
+  } @else if (user()) {
+
+  <!-- TOP HERO WELCOME BAR -->
+  <header class="dash-hero">
+    <div class="hero-main">
+      <div class="hero-badge-row">
+        <span class="role-track-pill" [attr.data-role]="user()?.role">
+          {{ getRoleLabel(user()?.role) }}
+        </span>
+        <span class="date-chip">
+          <span class="cal-icon">📅</span> {{ todayFormatted() }}
+        </span>
       </div>
 
-      <div class="profile-summary">
-        <div class="avatar">
-          {{ user()?.full_name?.charAt(0)?.toUpperCase() || 'U' }}
+      <h1 class="hero-greeting">{{ greeting() }}, {{ user()?.full_name }}! 👋</h1>
+      <p class="hero-subtitle">
+        @if (user()?.role === 'learner') {
+          Welcome to your ASE onboarding workspace. Complete your mandatory skill assessments and begin your induction journey.
+        } @else if (user()?.role === 'teacher') {
+          Welcome to your Academic Faculty Suite. Oversee cohort progress, evaluate assessment submissions, and curate question banks.
+        } @else {
+          Welcome to the Enterprise Operations Center. Monitor organizational telemetry, assessment analytics, and manage access controls.
+        }
+      </p>
+    </div>
+
+    <!-- Quick User Profile Card -->
+    <a routerLink="/profile" class="hero-profile-card" title="Click to view full profile">
+      <div class="dash-avatar">
+        {{ userInitial }}
+        <span class="live-status-dot"></span>
+      </div>
+      <div class="profile-details">
+        <span class="user-name">{{ user()?.full_name }}</span>
+        <span class="user-role">{{ getRoleLabel(user()?.role) }}</span>
+        <span class="profile-link-hint">Manage Profile &rarr;</span>
+      </div>
+    </a>
+  </header>
+
+  <!-- ========================================================= -->
+  <!-- 1. LEARNER / NEW JOINEE DASHBOARD ("user new joine")     -->
+  <!-- ========================================================= -->
+  @if (user()?.role === 'learner') {
+  <div class="role-dashboard learner-layout">
+
+    <!-- Onboarding Journey Card -->
+    <section class="onboarding-journey-card">
+      <div class="journey-header">
+        <div class="journey-title-group">
+          <span class="journey-tag">ONBOARDING PATHWAY</span>
+          <h2>Your New Joinee Milestones</h2>
+          <p>Complete each essential induction milestone to finalize your ASE onboarding.</p>
         </div>
-        <div>
-          <h3>{{ user()?.full_name }}</h3>
-          <p>{{ user()?.role }}</p>
+        <div class="journey-progress-dial">
+          <div class="progress-ring-container">
+            <span class="progress-dial-val">{{ onboardingProgress() }}%</span>
+            <span class="progress-dial-label">Progress</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Linear Stepper Grid -->
+      <div class="milestones-grid">
+        <div class="milestone-step step-completed">
+          <div class="step-icon">✓</div>
+          <div class="step-info">
+            <span class="step-num">Step 1</span>
+            <strong>Profile Setup</strong>
+            <span class="step-status">Verified</span>
+          </div>
+        </div>
+
+        <div class="milestone-step" [class.step-completed]="completedLearnerResults().length >= 1" [class.step-active]="completedLearnerResults().length === 0">
+          <div class="step-icon">
+            {{ completedLearnerResults().length >= 1 ? '✓' : '⚡' }}
+          </div>
+          <div class="step-info">
+            <span class="step-num">Step 2</span>
+            <strong>Skill Assessments</strong>
+            <span class="step-status">
+              {{ completedLearnerResults().length }}/4 Completed
+            </span>
+          </div>
+        </div>
+
+        <div class="milestone-step" [class.step-completed]="completedLearnerResults().length >= 4" [class.step-active]="completedLearnerResults().length >= 1 && completedLearnerResults().length < 4">
+          <div class="step-icon">▣</div>
+          <div class="step-info">
+            <span class="step-num">Step 3</span>
+            <strong>Course Curriculum</strong>
+            <span class="step-status">Active Track</span>
+          </div>
+        </div>
+
+        <div class="milestone-step">
+          <div class="step-icon">◷</div>
+          <div class="step-info">
+            <span class="step-num">Step 4</span>
+            <strong>Cohort Induction</strong>
+            <span class="step-status">Batch 2026-A</span>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="welcome-panel">
-      <div>
-        <span class="eyebrow">YOUR WORKSPACE</span>
-        <h2>Welcome back, {{ user()?.full_name }}</h2>
-        <p>Choose an area below to continue your work.</p>
+    <!-- Learner KPI Stat Cards -->
+    <section class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon-wrap icon-purple">
+          <span>📝</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Assessments Completed</span>
+          <strong class="stat-value">{{ completedLearnerResults().length }} of 4</strong>
+          <span class="stat-trend positive">Mandatory Onboarding</span>
+        </div>
       </div>
 
-      <span class="role-badge">{{ roleTitle }}</span>
+      <div class="stat-card">
+        <div class="stat-icon-wrap icon-emerald">
+          <span>🏆</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Performance Average</span>
+          <strong class="stat-value">
+            @if (completedLearnerResults().length > 0) {
+              {{ learnerAverageScore() }}%
+            } @else {
+              Pending
+            }
+          </strong>
+          <span class="stat-trend positive">Official Score</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon-wrap icon-blue">
+          <span>▣</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Training Courses</span>
+          <strong class="stat-value">{{ coursesCount() }} Courses</strong>
+          <span class="stat-trend neutral">Enrolled in Cohort</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon-wrap icon-amber">
+          <span>◷</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Assigned Cohort</span>
+          <strong class="stat-value">Batch 2026-A</strong>
+          <span class="stat-trend neutral">Active Session</span>
+        </div>
+      </div>
     </section>
 
-    <section class="workspace-section">
-      <div class="section-heading">
+    <!-- Assessment Launcher Center -->
+    <section class="section-container">
+      <div class="section-topbar">
         <div>
-          <h2>Workspace shortcuts</h2>
-          <p>Tools and activities available for your role.</p>
+          <span class="sub-eyebrow">EXAMINATION SUITE</span>
+          <h2>Mandatory Skill Assessments</h2>
+          <p>All newly joined personnel must attempt these examinations as part of the onboarding process.</p>
         </div>
-        <span class="item-count">{{ cards().length }} items</span>
+        <a routerLink="/my-results" class="btn-secondary-link">
+          <span>View All Results &amp; Reports &rarr;</span>
+        </a>
       </div>
 
-      <div class="workspace-grid">
-        @for (card of cards(); track card.title) {
-          <article class="workspace-card">
-            <div class="card-top">
-              <div class="card-icon">{{ card.icon }}</div>
-              <span
-                class="status"
-                [class.status-ready]="card.status === 'Available'">
-                {{ card.status }}
-              </span>
+      <div class="tests-grid">
+
+        <!-- 1. Logical Reasoning Assessment -->
+        <article class="test-launch-card" data-type="logical_reasoning">
+          <div class="card-top-tag" data-type="logical_reasoning"></div>
+          <div class="test-card-body">
+            <div class="test-header">
+              <span class="test-symbol">⚡</span>
+              <span class="test-badge">Fixed 30 Mins · 25 Marks</span>
             </div>
 
-            <h3>{{ card.title }}</h3>
-            <p>{{ card.description }}</p>
+            <h3>ASE Logical Reasoning Assessment</h3>
+            <p>25 multiple-choice questions covering Number Series, Coding-Decoding, Blood Relations &amp; Patterns.</p>
 
-            @if (card.route) {
-              <a class="card-link" [routerLink]="card.route">
-                Open workspace <span>→</span>
-              </a>
-            } @else {
-              <span class="card-link disabled-link">
-                Feature in development
-              </span>
-            }
-          </article>
-        }
+            <div class="test-details-strip">
+              <span><strong>25</strong> Questions</span>
+              <span><strong>30</strong> Minutes</span>
+              <span><strong>No</strong> Negative Marks</span>
+            </div>
+
+            <div class="test-action-wrap">
+              @if (getCompletedTest('logical_reasoning'); as completed) {
+                <div class="completed-actions-row">
+                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
+                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
+                  </a>
+                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
+                    <span>Breakdown &rarr;</span>
+                  </a>
+                </div>
+              } @else {
+                <a routerLink="/my-assessments" class="btn-test-action btn-start">
+                  <span>Start Assessment &rarr;</span>
+                </a>
+              }
+            </div>
+          </div>
+        </article>
+
+        <!-- 2. Technical Assessment -->
+        <article class="test-launch-card" data-type="technical">
+          <div class="card-top-tag" data-type="technical"></div>
+          <div class="test-card-body">
+            <div class="test-header">
+              <span class="test-symbol">💻</span>
+              <span class="test-badge">Technical Knowledge</span>
+            </div>
+
+            <h3>ASE Technical Assessment</h3>
+            <p>20 questions on core engineering fundamentals, architecture, and technology best practices.</p>
+
+            <div class="test-details-strip">
+              <span><strong>20</strong> Questions</span>
+              <span><strong>15</strong> Minutes</span>
+              <span><strong>+1.0</strong> Mark each</span>
+            </div>
+
+            <div class="test-action-wrap">
+              @if (getCompletedTest('technical'); as completed) {
+                <div class="completed-actions-row">
+                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
+                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
+                  </a>
+                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
+                    <span>Breakdown &rarr;</span>
+                  </a>
+                </div>
+              } @else {
+                <a routerLink="/my-assessments" class="btn-test-action btn-start">
+                  <span>Start Assessment &rarr;</span>
+                </a>
+              }
+            </div>
+          </div>
+        </article>
+
+        <!-- 3. English Grammar Assessment -->
+        <article class="test-launch-card" data-type="english_grammar">
+          <div class="card-top-tag" data-type="english_grammar"></div>
+          <div class="test-card-body">
+            <div class="test-header">
+              <span class="test-symbol">✍</span>
+              <span class="test-badge">Verbal &amp; Grammar</span>
+            </div>
+
+            <h3>ASE English Grammar Assessment</h3>
+            <p>20 questions on corporate communications, syntax correctness, vocabulary, and sentence usage.</p>
+
+            <div class="test-details-strip">
+              <span><strong>20</strong> Questions</span>
+              <span><strong>15</strong> Minutes</span>
+              <span><strong>+1.0</strong> Mark each</span>
+            </div>
+
+            <div class="test-action-wrap">
+              @if (getCompletedTest('english_grammar'); as completed) {
+                <div class="completed-actions-row">
+                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
+                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
+                  </a>
+                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
+                    <span>Breakdown &rarr;</span>
+                  </a>
+                </div>
+              } @else {
+                <a routerLink="/my-assessments" class="btn-test-action btn-start">
+                  <span>Start Assessment &rarr;</span>
+                </a>
+              }
+            </div>
+          </div>
+        </article>
+
+        <!-- 4. Psychometric Assessment -->
+        <article class="test-launch-card" data-type="psychometric">
+          <div class="card-top-tag" data-type="psychometric"></div>
+          <div class="test-card-body">
+            <div class="test-header">
+              <span class="test-symbol">✦</span>
+              <span class="test-badge">Behavioral Profile</span>
+            </div>
+
+            <h3>ASE Psychometric Assessment</h3>
+            <p>20 evaluation scenarios measuring emotional intelligence, adaptability, teamwork, and ethics.</p>
+
+            <div class="test-details-strip">
+              <span><strong>20</strong> Questions</span>
+              <span><strong>15</strong> Minutes</span>
+              <span><strong>AI</strong> Report Card</span>
+            </div>
+
+            <div class="test-action-wrap">
+              @if (getCompletedTest('psychometric'); as completed) {
+                <div class="completed-actions-row">
+                  <a [routerLink]="['/assessments/report', completed.session_id]" class="btn-test-action btn-completed" title="View Official Report Card">
+                    <span>✓ View Report ({{ completed.overall_percentage }}%)</span>
+                  </a>
+                  <a [routerLink]="['/assessments/results', completed.session_id]" class="btn-breakdown-link" title="Question Breakdown">
+                    <span>Breakdown &rarr;</span>
+                  </a>
+                </div>
+              } @else {
+                <a routerLink="/my-assessments" class="btn-test-action btn-start">
+                  <span>Start Assessment &rarr;</span>
+                </a>
+              }
+            </div>
+          </div>
+        </article>
+
       </div>
     </section>
-  </main>
-}
+
+    <!-- Learner Quick Shortcuts & Training Center -->
+    <section class="section-container">
+      <div class="shortcuts-row">
+        <a routerLink="/courses" class="shortcut-card">
+          <div class="shortcut-icon">▣</div>
+          <div>
+            <h4>Explore My Courses</h4>
+            <p>Access your training syllabus, lesson plans, and learning materials.</p>
+          </div>
+          <span class="shortcut-arrow">&rarr;</span>
+        </a>
+
+        <a routerLink="/cohorts" class="shortcut-card">
+          <div class="shortcut-icon">◷</div>
+          <div>
+            <h4>My Cohort Batch</h4>
+            <p>Meet your cohort peers, instructors, and batch timetable schedules.</p>
+          </div>
+          <span class="shortcut-arrow">&rarr;</span>
+        </a>
+
+        <a routerLink="/my-results" class="shortcut-card">
+          <div class="shortcut-icon">▥</div>
+          <div>
+            <h4>Results &amp; Report Cards</h4>
+            <p>Inspect your test scores, category breakdowns, and AI developmental feedback.</p>
+          </div>
+          <span class="shortcut-arrow">&rarr;</span>
+        </a>
+
+        <a routerLink="/profile" class="shortcut-card">
+          <div class="shortcut-icon">👤</div>
+          <div>
+            <h4>Profile &amp; Credentials</h4>
+            <p>Update your personal information, contact credentials, and security password.</p>
+          </div>
+          <span class="shortcut-arrow">&rarr;</span>
+        </a>
+      </div>
+    </section>
+
+  </div>
+  }
+
+  <!-- ========================================================= -->
+  <!-- 2. TEACHER / INSTRUCTOR DASHBOARD                         -->
+  <!-- ========================================================= -->
+  @if (user()?.role === 'teacher') {
+  <div class="role-dashboard teacher-layout">
+
+    <!-- Teacher KPI Stats -->
+    <section class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon-wrap icon-blue">
+          <span>◷</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Active Cohorts</span>
+          <strong class="stat-value">{{ cohortsCount() }} Batches</strong>
+          <span class="stat-trend positive">Under Instruction</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon-wrap icon-purple">
+          <span>👥</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Learners Evaluated</span>
+          <strong class="stat-value">{{ adminResultsStats().uniqueLearners }} Students</strong>
+          <span class="stat-trend positive">Across All Tests</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon-wrap icon-emerald">
+          <span>📝</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Total Submissions</span>
+          <strong class="stat-value">{{ adminResultsStats().completedCount }}</strong>
+          <span class="stat-trend neutral">Completed Attempts</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon-wrap icon-amber">
+          <span>📊</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Batch Average Score</span>
+          <strong class="stat-value">{{ adminResultsStats().averageScore }}%</strong>
+          <span class="stat-trend positive">Mean Cohort Score</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Teacher Action Hub -->
+    <section class="section-container">
+      <div class="section-topbar">
+        <div>
+          <span class="sub-eyebrow">TEACHING &amp; EVALUATION</span>
+          <h2>Faculty Workspace &amp; Assessment Operations</h2>
+          <p>Direct access to your evaluation tools, question banks, and cohort batches.</p>
+        </div>
+      </div>
+
+      <div class="admin-modules-grid">
+        <article class="module-card">
+          <div class="module-top">
+            <span class="module-icon">▥</span>
+            <span class="module-badge">Live Scores</span>
+          </div>
+          <h3>Learner Results &amp; Reports</h3>
+          <p>Review comprehensive scorecards, category breakdowns, and AI developmental insights for all learners.</p>
+          <a routerLink="/assessment-results" class="btn-module-action">
+            <span>Open Results Panel &rarr;</span>
+          </a>
+        </article>
+
+        <article class="module-card">
+          <div class="module-top">
+            <span class="module-icon">✎</span>
+            <span class="module-badge">Question Bank</span>
+          </div>
+          <h3>Assessment Management</h3>
+          <p>Manage test templates and author domain questions with customizable scoring keys.</p>
+          <a routerLink="/assessments" class="btn-module-action">
+            <span>Manage Question Bank &rarr;</span>
+          </a>
+        </article>
+
+        <article class="module-card">
+          <div class="module-top">
+            <span class="module-icon">▣</span>
+            <span class="module-badge">Curriculum</span>
+          </div>
+          <h3>Courses &amp; Syllabus</h3>
+          <p>Publish course modules, structure syllabus sequences, and manage learner enrolments.</p>
+          <a routerLink="/courses" class="btn-module-action">
+            <span>Manage Courses &rarr;</span>
+          </a>
+        </article>
+
+        <article class="module-card">
+          <div class="module-top">
+            <span class="module-icon">◷</span>
+            <span class="module-badge">Batches</span>
+          </div>
+          <h3>Cohorts &amp; Attendance</h3>
+          <p>Track learner progress within each batch, monitor attendance records, and coordinate sessions.</p>
+          <a routerLink="/cohorts" class="btn-module-action">
+            <span>View Cohorts &rarr;</span>
+          </a>
+        </article>
+      </div>
+    </section>
+
+  </div>
+  }
+
+  <!-- ========================================================= -->
+  <!-- 3. ADMIN & SUPER ADMIN DASHBOARD ("more advnaced")        -->
+  <!-- ========================================================= -->
+  @if (user()?.role === 'admin' || user()?.role === 'superadmin') {
+  <div class="role-dashboard admin-layout">
+
+    <!-- Enterprise Telemetry Header Pill -->
+    <div class="telemetry-banner">
+      <div class="telemetry-left">
+        <span class="pulse-green-dot"></span>
+        <strong>ASE Enterprise Platform Telemetry</strong>
+        <span class="telemetry-tag">Identity &amp; Training APIs Live</span>
+      </div>
+      <div class="telemetry-right">
+        <span>Active Database: <strong>lk_training / lk_identity</strong></span>
+        <span>Version: <strong>2.4 Enterprise</strong></span>
+      </div>
+    </div>
+
+    <!-- Executive KPI Metric Row -->
+    <section class="stats-row">
+      <div class="stat-card stat-card-admin">
+        <div class="stat-icon-wrap icon-purple">
+          <span>👥</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Total Platform Users</span>
+          <strong class="stat-value">{{ userStats().total || 'Active' }}</strong>
+          <span class="stat-trend positive">
+            {{ userStats().learners }} Learners · {{ userStats().teachers }} Teachers
+          </span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-card-admin">
+        <div class="stat-icon-wrap icon-emerald">
+          <span>🏢</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Departments</span>
+          <strong class="stat-value">{{ departmentsCount() }} Units</strong>
+          <span class="stat-trend neutral">Enterprise Structure</span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-card-admin">
+        <div class="stat-icon-wrap icon-blue">
+          <span>📝</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Total Exam Attempts</span>
+          <strong class="stat-value">{{ adminResultsStats().totalAssessments || adminResultsStats().completedCount }}</strong>
+          <span class="stat-trend positive">{{ adminResultsStats().uniqueLearners }} Unique Students</span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-card-admin">
+        <div class="stat-icon-wrap icon-amber">
+          <span>📊</span>
+        </div>
+        <div class="stat-meta">
+          <span class="stat-label">Global Average Score</span>
+          <strong class="stat-value">{{ adminResultsStats().averageScore }}%</strong>
+          <span class="stat-trend positive">All Test Types</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Admin Operational Control Grid -->
+    <section class="section-container">
+      <div class="section-topbar">
+        <div>
+          <span class="sub-eyebrow">ENTERPRISE GOVERNANCE</span>
+          <h2>Platform Management &amp; Analytics Hub</h2>
+          <p>Centralized operational controls for user access, examination rules, and cohort management.</p>
+        </div>
+      </div>
+
+      <div class="admin-modules-grid">
+
+        <!-- User Management Card -->
+        <article class="module-card premium-card">
+          <div class="module-top">
+            <span class="module-icon">♙</span>
+            <span class="module-badge">User Access</span>
+          </div>
+          <h3>User Management &amp; RBAC</h3>
+          <p>Provision new joiners, configure account access roles (Admin, Teacher, Learner), and toggle user status.</p>
+          <div class="card-footer-action">
+            <a routerLink="/users" class="btn-module-action">
+              <span>Manage Users &rarr;</span>
+            </a>
+          </div>
+        </article>
+
+        <!-- Assessment Management Card -->
+        <article class="module-card premium-card">
+          <div class="module-top">
+            <span class="module-icon">⚡</span>
+            <span class="module-badge">Exam Studio</span>
+          </div>
+          <h3>Assessment &amp; Question Banks</h3>
+          <p>Configure fixed 25-question Logical Reasoning tests, Technical question banks, and custom scoring keys.</p>
+          <div class="card-footer-action">
+            <a routerLink="/assessments" class="btn-module-action">
+              <span>Manage Assessments &rarr;</span>
+            </a>
+          </div>
+        </article>
+
+        <!-- Learner Results Hub -->
+        <article class="module-card premium-card">
+          <div class="module-top">
+            <span class="module-icon">▥</span>
+            <span class="module-badge">Audit &amp; Reports</span>
+          </div>
+          <h3>Global Results &amp; Scorecards</h3>
+          <p>Inspect all submitted tests, filter by assessment template, and review AI psychometric report cards.</p>
+          <div class="card-footer-action">
+            <a routerLink="/assessment-results" class="btn-module-action">
+              <span>Review All Results &rarr;</span>
+            </a>
+          </div>
+        </article>
+
+        <!-- Departments Card -->
+        <article class="module-card premium-card">
+          <div class="module-top">
+            <span class="module-icon">▤</span>
+            <span class="module-badge">Organization</span>
+          </div>
+          <h3>Departments &amp; Units</h3>
+          <p>Maintain corporate departments, map training programs, and configure organizational hierarchies.</p>
+          <div class="card-footer-action">
+            <a routerLink="/departments" class="btn-module-action">
+              <span>Manage Departments &rarr;</span>
+            </a>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- Additional Quick Operations Row -->
+    <section class="section-container">
+      <div class="shortcuts-row">
+        <a routerLink="/courses" class="shortcut-card">
+          <div class="shortcut-icon">▣</div>
+          <div>
+            <h4>Training Curriculum</h4>
+            <p>Publish enterprise training modules and syllabus tracks.</p>
+          </div>
+          <span class="shortcut-arrow">&rarr;</span>
+        </a>
+
+        <a routerLink="/cohorts" class="shortcut-card">
+          <div class="shortcut-icon">◷</div>
+          <div>
+            <h4>Training Cohorts</h4>
+            <p>Coordinate training batches and schedule onboarding inductions.</p>
+          </div>
+          <span class="shortcut-arrow">&rarr;</span>
+        </a>
+
+        <a routerLink="/assessments/create" class="shortcut-card">
+          <div class="shortcut-icon">✦</div>
+          <div>
+            <h4>Create Assessment</h4>
+            <p>Add new examination templates with custom category configs.</p>
+          </div>
+          <span class="shortcut-arrow">&rarr;</span>
+        </a>
+
+        <a routerLink="/profile" class="shortcut-card">
+          <div class="shortcut-icon">🛡️</div>
+          <div>
+            <h4>Admin Profile &amp; Security</h4>
+            <p>Inspect administrator credentials and token authorization.</p>
+          </div>
+          <span class="shortcut-arrow">&rarr;</span>
+        </a>
+      </div>
+    </section>
+
+  </div>
+  }
+
+  }
+</div>

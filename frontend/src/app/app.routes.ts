@@ -3,14 +3,17 @@ import { Routes } from '@angular/router';
 
 import { AuthLayout } from './layouts/auth-layout/auth-layout';
 import { MainLayout } from './layouts/main-layout/main-layout';
+
 import { Dashboard } from './features/dashboard/dashboard';
 import { Login } from './features/auth/login/login';
 
 import { authGuard } from './core/guards/auth.guard';
 import { roleGuard } from './core/guards/role.guard';
+import { assessmentCompletionGuard } from './core/guards/assessment-completion.guard';
 
 export const routes: Routes = [
-  // Public authentication routes
+
+  // Public authentication
   {
     path: 'login',
     component: AuthLayout,
@@ -22,67 +25,197 @@ export const routes: Routes = [
     ]
   },
 
-  // Protected application layout
+  // Protected application
   {
     path: '',
     component: MainLayout,
     canActivate: [authGuard],
+    canActivateChild: [assessmentCompletionGuard],
+
     children: [
+
       {
         path: '',
         pathMatch: 'full',
         redirectTo: 'dashboard'
       },
 
-      // All authenticated roles can access their own dashboard
+      // Dashboard
       {
         path: 'dashboard',
         component: Dashboard
       },
 
-      // Superadmin and admin only
+      // Profile
+      {
+        path: 'profile',
+        data: {
+          allowIncompleteAssessment: true
+        },
+        loadComponent: () =>
+          import('./features/profile/profile')
+            .then(m => m.Profile)
+      },
+
+      // User Management
       {
         path: 'users',
-        canActivate: [
-          roleGuard(['superadmin', 'admin'])
-        ],
+        canActivate: [roleGuard(['superadmin', 'admin'])],
         loadComponent: () =>
-          import('./features/users/users').then(m => m.Users)
+          import('./features/users/users')
+            .then(m => m.Users)
       },
 
-      // Organization management
+      // Departments
       {
         path: 'departments',
-        canActivate: [
-          roleGuard(['superadmin', 'admin'])
-        ],
+        canActivate: [roleGuard(['superadmin', 'admin'])],
         loadComponent: () =>
-          import('./features/departments/departments').then(
-            m => m.Departments
-          )
+          import('./features/departments/departments')
+            .then(m => m.Departments)
       },
 
-      // Courses: all roles can open the page;
-      // backend must enforce which courses each user can access
+      // Courses
       {
         path: 'courses',
         canActivate: [
           roleGuard(['superadmin', 'admin', 'teacher', 'learner'])
         ],
         loadComponent: () =>
-          import('./features/courses/courses').then(m => m.Courses)
+          import('./features/courses/courses')
+            .then(m => m.Courses)
       },
 
-      // Cohorts: all roles can open the page;
-      // backend must enforce assignment and membership restrictions
+      // Cohorts
       {
         path: 'cohorts',
         canActivate: [
           roleGuard(['superadmin', 'admin', 'teacher', 'learner'])
         ],
         loadComponent: () =>
-          import('./features/cohorts/cohorts').then(m => m.Cohorts)
+          import('./features/cohorts/cohorts')
+            .then(m => m.Cohorts)
+      },
+
+      // Assessment Management - Admin and Teacher only
+      {
+        path: 'assessments',
+        canActivate: [
+          roleGuard(['admin', 'teacher'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/assessment-management/assessment-management')
+            .then(m => m.AssessmentManagement)
+      },
+
+      // Create Assessment
+      {
+        path: 'assessments/create',
+        canActivate: [
+          roleGuard(['admin', 'teacher'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/assessment-form/assessment-form')
+            .then(m => m.AssessmentForm)
+      },
+
+      // Edit Assessment
+      {
+        path: 'assessments/edit/:id',
+        canActivate: [
+          roleGuard(['admin', 'teacher'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/assessment-form/assessment-form')
+            .then(m => m.AssessmentForm)
+      },
+
+      // Learner Assessment Listing
+      {
+        path: 'my-assessments',
+        data: {
+          allowIncompleteAssessment: true
+        },
+        canActivate: [
+          roleGuard(['learner'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/learner-assessments/learner-assessments')
+            .then(m => m.LearnerAssessments)
+      },
+
+      // Learner Assessment Results & Report Cards
+      {
+        path: 'my-results',
+        data: {
+          allowIncompleteAssessment: true
+        },
+        canActivate: [
+          roleGuard(['learner', 'admin', 'teacher', 'superadmin'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/learner-results/learner-results')
+            .then(m => m.LearnerResults)
+      },
+      {
+        path: 'results',
+        redirectTo: 'my-results',
+        pathMatch: 'full'
+      },
+
+      // Admin & Teacher: Learner Results Panel
+      {
+        path: 'assessment-results',
+        canActivate: [
+          roleGuard(['admin', 'teacher', 'superadmin'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/admin-results/admin-results')
+            .then(m => m.AdminResults)
+      },
+
+      // Take or resume assessment
+      {
+        path: 'assessments/take/:sessionId',
+        data: {
+          allowIncompleteAssessment: true
+        },
+        canActivate: [
+          roleGuard(['learner'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/assessment-taking/assessment-taking')
+            .then(m => m.AssessmentTaking)
+      },
+
+      // Assessment Results
+      {
+        path: 'assessments/results/:sessionId',
+        data: {
+          allowIncompleteAssessment: true
+        },
+        canActivate: [
+          roleGuard(['learner', 'admin', 'teacher', 'superadmin'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/assessment-results/assessment-results')
+            .then(m => m.AssessmentResults)
+      },
+
+      // Assessment Report
+      {
+        path: 'assessments/report/:sessionId',
+        data: {
+          allowIncompleteAssessment: true
+        },
+        canActivate: [
+          roleGuard(['learner', 'admin', 'teacher', 'superadmin'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/assessment-report/assessment-report')
+            .then(m => m.AssessmentReportPage)
       }
+
     ]
   },
 
@@ -91,4 +224,5 @@ export const routes: Routes = [
     path: '**',
     redirectTo: 'dashboard'
   }
+
 ];

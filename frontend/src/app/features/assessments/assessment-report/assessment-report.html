@@ -1,0 +1,255 @@
+<div class="report-page">
+  @if (loading) {
+    <section class="panel loading-state" aria-live="polite">
+      <span class="loading-spinner"></span>
+      <h3>Preparing your official assessment report</h3>
+      <p>Retrieving your verified report and performance telemetry...</p>
+    </section>
+  }
+
+  @if (!loading && errorMessage) {
+    <section class="panel error-message" role="alert">
+      <span class="eyebrow">REPORT UNAVAILABLE</span>
+      <h2>Unable to load assessment report</h2>
+      <p>{{ errorMessage }}</p>
+      <div class="error-actions">
+        <button class="print-button" type="button" (click)="loadReport()">Retry</button>
+        <button class="btn-back" type="button" (click)="goBack()">Back to Results</button>
+      </div>
+    </section>
+  }
+
+  @if (!loading && report) {
+    <!-- Top Action Bar -->
+    <div class="top-nav-bar no-print">
+      <button class="btn-back-link" type="button" (click)="goBack()">
+        ← Back to Results
+      </button>
+
+      <div class="top-actions">
+        <a [routerLink]="['/assessments/results', sessionId]" class="btn-breakdown">
+          <span>Question-by-Question Breakdown</span>
+        </a>
+        <button class="print-button" type="button" (click)="printReport()">
+          <span>🖨 Print / Save PDF</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Official Report Header -->
+    <header class="report-header">
+      <div class="header-left">
+        <div class="badge-row">
+          <span class="eyebrow">L&amp;K · LEARNER DEVELOPMENT &amp; EVALUATION</span>
+          <span class="type-tag" [attr.data-type]="report.assessment_type">{{ report.assessment_type ? (report.assessment_type.replace('_', ' ') | titlecase) : 'Official' }}</span>
+        </div>
+        <h1>{{ reportTitle }}</h1>
+        <div class="meta-row">
+          <span>Assessment Session <strong>#{{ report.session_id }}</strong></span>
+          <span class="meta-dot">·</span>
+          <span>Generated <strong>{{ report.generated_at | date:'medium' }}</strong></span>
+          @if (report.learner_name) {
+            <span class="meta-dot">·</span>
+            <span>Candidate: <strong>{{ report.learner_name }}</strong></span>
+          }
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="skill-level-card">
+          <span class="level-label">EVALUATED PROFICIENCY LEVEL</span>
+          <strong class="level-title">{{ skillLevel }}</strong>
+        </div>
+      </div>
+    </header>
+
+    <!-- Executive Summary & Metrics Grid -->
+    <section class="panel summary-panel">
+      <span class="eyebrow">ASSESSMENT EXECUTIVE SUMMARY</span>
+      <h2 class="summary-text">{{ report.report_data.summary }}</h2>
+
+      <div class="metrics-dashboard">
+        <!-- 1. Overall Percentage -->
+        @if (report.report_data.overall_percentage !== undefined) {
+          <div class="metric-tile tile-primary">
+            <span class="metric-label">Overall Performance</span>
+            <strong class="metric-val">{{ report.report_data.overall_percentage | number:'1.0-1' }}%</strong>
+            <span class="metric-sub">Certified Score</span>
+          </div>
+        }
+
+        <!-- 2. Marks Obtained -->
+        @if (report.report_data.total_score !== undefined && report.report_data.max_score !== undefined) {
+          <div class="metric-tile">
+            <span class="metric-label">Score / Marks</span>
+            <strong class="metric-val">{{ report.report_data.total_score | number:'1.0-1' }} / {{ report.report_data.max_score | number:'1.0-1' }}</strong>
+            <span class="metric-sub">Total Points</span>
+          </div>
+        }
+
+        <!-- 3. Total Questions -->
+        @if (totalQuestions) {
+          <div class="metric-tile">
+            <span class="metric-label">Total Questions</span>
+            <strong class="metric-val">{{ totalQuestions }}</strong>
+            <span class="metric-sub">Assigned Items</span>
+          </div>
+        }
+
+        <!-- 4. Correct Answers -->
+        @if (correctAnswers !== null) {
+          <div class="metric-tile tile-success">
+            <span class="metric-label">Correct Answers</span>
+            <strong class="metric-val">{{ correctAnswers }}</strong>
+            <span class="metric-sub">Accurate responses</span>
+          </div>
+        }
+
+        <!-- 5. Incorrect Answers -->
+        @if (incorrectAnswers !== null) {
+          <div class="metric-tile tile-danger">
+            <span class="metric-label">Incorrect Answers</span>
+            <strong class="metric-val">{{ incorrectAnswers }}</strong>
+            <span class="metric-sub">Missed opportunities</span>
+          </div>
+        }
+
+        <!-- 6. Time Taken -->
+        @if (timeTakenStr) {
+          <div class="metric-tile">
+            <span class="metric-label">Time Taken</span>
+            <strong class="metric-val">{{ timeTakenStr }}</strong>
+            <span class="metric-sub">Examination Duration</span>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- Category Performance Analysis -->
+    @if (categoryScores.length) {
+      <section class="panel">
+        <span class="eyebrow">PERFORMANCE ANALYSIS BY TOPIC</span>
+        <h2>Topic-Wise Proficiency &amp; Scores</h2>
+        <div class="category-grid">
+          @for (item of categoryScores; track item.category) {
+            <article class="category-card">
+              <div class="category-heading">
+                <h3>{{ categoryLabel(item.category) }}</h3>
+                <strong class="cat-pct">{{ item.percentage | number:'1.0-1' }}%</strong>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" [style.width.%]="item.percentage"></div>
+              </div>
+              <div class="cat-footer">
+                <span>{{ item.score | number:'1.0-1' }} / {{ item.max_score | number:'1.0-1' }} marks</span>
+                <span class="cat-status" [class.status-high]="item.percentage >= 70" [class.status-mid]="item.percentage >= 50 && item.percentage < 70" [class.status-low]="item.percentage < 50">
+                  {{ item.percentage >= 70 ? 'Strong' : (item.percentage >= 50 ? 'Moderate' : 'Needs Practice') }}
+                </span>
+              </div>
+            </article>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Detailed Topic Interpretations -->
+    <section class="panel">
+      <span class="eyebrow">DIAGNOSTIC INTERPRETATION</span>
+      <h2>Competency Evaluation &amp; Insights</h2>
+      @if (categoryEntries.length) {
+        <div class="interpretation-grid">
+          @for (item of categoryEntries; track item[0]) {
+            <article class="interpretation-card">
+              <h3>{{ categoryLabel(item[0]) }}</h3>
+              <p>{{ item[1] }}</p>
+            </article>
+          }
+        </div>
+      } @else {
+        <p>No category interpretations are available in this report.</p>
+      }
+    </section>
+
+    <!-- Strengths & Growth Areas -->
+    <div class="insight-grid">
+      <section class="panel strength-panel">
+        <span class="eyebrow">KEY STRENGTHS</span>
+        <h2>Demonstrated Capabilities</h2>
+        @if (strengths.length) {
+          <ul class="insight-list">
+            @for (item of strengths; track item) {
+              <li>
+                <span class="bullet-icon success">✓</span>
+                <span>{{ item }}</span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p>No specific strengths recorded.</p>
+        }
+      </section>
+
+      <section class="panel development-panel">
+        <span class="eyebrow">TARGETED GROWTH AREAS</span>
+        <h2>Priority Improvement Areas</h2>
+        @if (developmentAreas.length) {
+          <ul class="insight-list">
+            @for (item of developmentAreas; track item) {
+              <li>
+                <span class="bullet-icon alert">!</span>
+                <span>{{ item }}</span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p>Well-rounded competency demonstrated across all evaluated sections.</p>
+        }
+      </section>
+    </div>
+
+    <!-- Recommendations -->
+    <section class="panel recommendation-panel">
+      <span class="eyebrow">RECOMMENDED ACTION ITEMS</span>
+      <h2>Personalized Developmental Recommendations</h2>
+      @if (recommendations.length) {
+        <ul class="recommendation-list">
+          @for (item of recommendations; track item) {
+            <li>
+              <span class="rec-icon">→</span>
+              <span>{{ item }}</span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p>Maintain your current learning and practice schedule to preserve high competency.</p>
+      }
+    </section>
+
+    <!-- Full Text Transcript (Collapsible/Accordion) -->
+    @if (report.report_text) {
+      <details class="panel full-report-details">
+        <summary>
+          <span class="eyebrow">OFFICIAL TRANSCRIPT</span>
+          <h3>View Raw Assessment Record &amp; Text Summary</h3>
+        </summary>
+        <pre>{{ report.report_text }}</pre>
+      </details>
+    }
+
+    <!-- Official Report Footer -->
+    <footer class="report-footer">
+      <div class="footer-brand">
+        <strong>L&amp;K Onboarding Platform</strong>
+        <span>Official Evaluation Suite</span>
+      </div>
+      <p class="footer-disclaimer">
+        @if (isPsychometric) {
+          Developmental feedback only. This report is not a clinical diagnosis or a standalone employment-suitability decision.
+        } @else {
+          This official {{ reportTitle }} certifies candidate proficiency demonstrated during the timed onboarding examination.
+        }
+      </p>
+      <small>Evaluation Engine: {{ report.ai_model }} · Session Ref #{{ report.session_id }}</small>
+    </footer>
+  }
+</div>

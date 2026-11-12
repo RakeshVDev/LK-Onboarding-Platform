@@ -1,204 +1,382 @@
+<div class="courses-page">
 
-<section class="courses-page">
+  <!-- Header -->
   <header class="page-header">
-    <div>
-      <p class="eyebrow">LEARNING MANAGEMENT</p>
-      <h1>Course Management</h1>
-      <p class="subtitle">
-        Browse courses and manage their learning syllabus.
-      </p>
+    <div class="header-left">
+      <span class="eyebrow">ACADEMIC &amp; TRAINING CURRICULUM</span>
+      <h1>Training Courses</h1>
+      <p>Explore specialized technical and onboarding courses, download course PDFs, and access recommended learning links.</p>
     </div>
-
-    <button class="refresh-button"
-      type="button"
-      (click)="loadCourses()"
-      [disabled]="loading()">
-      ↻ Refresh
-    </button>
-  </header>
-
-  @if (errorMessage()) {
-    <div class="alert error-alert" role="alert">
-      {{ errorMessage() }}
-    </div>
-  }
-
-  @if (successMessage()) {
-    <div class="alert success-alert" role="status">
-      {{ successMessage() }}
-    </div>
-  }
-
-  @if (!selectedCourse()) {
-    <div class="section-heading">
-      <div>
-        <h2>Available Courses</h2>
-        <p>{{ courses().length }} course(s) found</p>
-      </div>
-    </div>
-
-    @if (loading()) {
-      <div class="empty-state">Loading courses...</div>
-    } @else if (courses().length === 0) {
-      <div class="empty-state">
-        <span class="empty-icon">📚</span>
-        <h3>No courses found</h3>
-        <p>Create or publish a course through your existing course-management API.</p>
-      </div>
-    } @else {
-      <div class="course-grid">
-        @for (course of courses(); track course.id) {
-          <article class="course-card">
-            <div class="course-card-top">
-              <span class="course-icon">📘</span>
-
-              <span class="status"
-                [class.published]="course.is_published">
-                {{ course.is_published ? 'Published' : 'Draft' }}
-              </span>
-            </div>
-
-            <h3>{{ course.title }}</h3>
-
-            <p class="course-description">
-              {{ course.description || 'No course description provided.' }}
-            </p>
-
-            <div class="course-meta">
-              <span>Course ID: {{ course.id }}</span>
-              <span>Department: {{ course.department_id }}</span>
-            </div>
-
-            <button class="primary-button full-width"
-              type="button"
-              (click)="openSyllabus(course)">
-              View syllabus
-              <span>→</span>
-            </button>
-          </article>
-        }
-      </div>
-    }
-  } @else {
-    <div class="detail-header">
-      <button class="back-button"
-        type="button"
-        (click)="closeSyllabus()">
-        ← All courses
-      </button>
-
-      <div>
-        <p class="eyebrow">COURSE SYLLABUS</p>
-        <h2>{{ selectedCourse()?.title }}</h2>
-        <p class="subtitle">
-          {{ selectedCourse()?.description || 'Learning modules and topics' }}
-        </p>
-      </div>
-    </div>
-
-    @if (canManage() && selectedCourse()?.is_published === false) {
-      <div class="alert">
-        This course is a draft. Only administrators can view its syllabus
-        until it is published.
-      </div>
-    }
 
     @if (canManage()) {
-      <section class="panel">
-        <h3>Add syllabus item</h3>
-        <p class="panel-description">
-          Add topics in the order learners should complete them.
-        </p>
-
-        <form (ngSubmit)="addSyllabusItem()" class="syllabus-form">
-          <div class="form-field">
-            <label for="syllabus-title">Topic title</label>
-            <input
-              id="syllabus-title"
-              name="title"
-              type="text"
-              [(ngModel)]="title"
-              placeholder="e.g. Python Fundamentals"
-              minlength="2"
-              maxlength="200"
-              required />
-          </div>
-
-          <div class="form-field">
-            <label for="syllabus-description">Description</label>
-            <textarea
-              id="syllabus-description"
-              name="description"
-              [(ngModel)]="description"
-              rows="3"
-              placeholder="Describe what learners will study"></textarea>
-          </div>
-
-          <div class="form-field order-field">
-            <label for="sequence-order">Sequence number</label>
-            <input
-              id="sequence-order"
-              name="sequenceOrder"
-              type="number"
-              [(ngModel)]="sequenceOrder"
-              min="1"
-              step="1"
-              required />
-          </div>
-
-          <button class="primary-button"
-            type="submit"
-            [disabled]="saving()">
-            {{ saving() ? 'Saving...' : '+ Add topic' }}
-          </button>
-        </form>
-      </section>
+    <div class="header-actions">
+      <button type="button" class="btn-create-course" (click)="openCreateModal()">
+        <span>+ Create New Course</span>
+      </button>
+    </div>
     }
+  </header>
 
-    <section class="panel syllabus-panel">
-      <div class="section-heading">
-        <div>
-          <h3>Learning topics</h3>
-          <p>{{ syllabus().length }} topic(s)</p>
-        </div>
+  <!-- Alerts -->
+  @if (errorMessage()) {
+  <div class="alert-banner alert-error">
+    <span>⚠</span> {{ errorMessage() }}
+  </div>
+  }
+  @if (successMessage()) {
+  <div class="alert-banner alert-success">
+    <span>✓</span> {{ successMessage() }}
+  </div>
+  }
+
+  <!-- Loading State -->
+  @if (loading()) {
+  <div class="loading-state">
+    <div class="spinner"></div>
+    <p>Loading course directory...</p>
+  </div>
+  }
+
+  <!-- Courses Grid -->
+  @if (!loading() && courses().length > 0) {
+  <div class="courses-grid">
+    @for (course of courses(); track course.id) {
+    <article class="course-card">
+      <div class="card-accent"></div>
+
+      <div class="card-header">
+        <span class="dept-badge">{{ getDepartmentName(course.department_id) }}</span>
+        @if (course.is_published) {
+        <span class="status-pill status-published">● Published</span>
+        } @else {
+        <span class="status-pill status-draft">Draft</span>
+        }
       </div>
 
-      @if (syllabusLoading()) {
-        <div class="empty-state">Loading syllabus...</div>
-      } @else if (syllabus().length === 0) {
-        <div class="empty-state">
-          <span class="empty-icon">📝</span>
-          <h3>No syllabus items yet</h3>
-          <p>Topics will appear here when they are added to this course.</p>
+      <h2 class="course-title">{{ course.title }}</h2>
+      <p class="course-description">
+        {{ course.description || 'Comprehensive curriculum covering core principles, hands-on modules, and industry best practices.' }}
+      </p>
+
+      <div class="course-actions">
+        <!-- Syllabus Action -->
+        <button type="button" class="btn-action btn-syllabus" (click)="openSyllabus(course)">
+          <span class="btn-icon">📑</span>
+          <span>Syllabus</span>
+        </button>
+
+        <!-- Learning Materials (PDF & Links) Action -->
+        <button type="button" class="btn-action btn-materials" (click)="openMaterials(course)">
+          <span class="btn-icon">📂</span>
+          <span>Resources &amp; PDFs</span>
+        </button>
+      </div>
+    </article>
+    }
+  </div>
+  } @else if (!loading() && courses().length === 0) {
+  <div class="empty-state">
+    <div class="empty-icon">▣</div>
+    <h3>No courses available</h3>
+    <p>There are currently no training courses created in this workspace.</p>
+    @if (canManage()) {
+    <button type="button" class="btn-create-course" (click)="openCreateModal()">
+      <span>Create Your First Course</span>
+    </button>
+    }
+  </div>
+  }
+
+  <!-- ========================================================= -->
+  <!-- MODAL: CREATE COURSE                                      -->
+  <!-- ========================================================= -->
+  @if (activeModal() === 'create') {
+  <div class="modal-backdrop" (click)="closeModal()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="modal-tag">COURSE AUTHORING</span>
+          <h2>Create New Training Course</h2>
         </div>
-      } @else {
-        <div class="syllabus-list">
-          @for (item of syllabus(); track item.id) {
-            <article class="syllabus-item">
-              <span class="sequence-number">
-                {{ item.sequence_order }}
-              </span>
+        <button type="button" class="btn-close" (click)="closeModal()">×</button>
+      </div>
 
-              <div class="syllabus-content">
-                <h4>{{ item.title }}</h4>
-                @if (item.description) {
-                  <p>{{ item.description }}</p>
-                }
-              </div>
+      <form (ngSubmit)="createCourse()" class="modal-form">
+        <div class="form-group">
+          <label for="cTitle">Course Title *</label>
+          <input
+            id="cTitle"
+            type="text"
+            [(ngModel)]="newCourseTitle"
+            name="newCourseTitle"
+            placeholder="e.g. Full-Stack Cloud Architecture 2026"
+            required />
+        </div>
 
-              @if (canManage()) {
-                <button class="delete-button"
-                  type="button"
-                  (click)="deleteSyllabusItem(item)"
-                  [attr.aria-label]="'Delete ' + item.title"
-                  title="Delete topic">
-                  Delete
-                </button>
-              }
-            </article>
+        <div class="form-group">
+          <label for="cDept">Department *</label>
+          <select id="cDept" [(ngModel)]="newCourseDeptId" name="newCourseDeptId">
+            @for (dept of departments(); track dept.id) {
+            <option [value]="dept.id">{{ dept.name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="cDesc">Course Overview &amp; Learning Objectives</label>
+          <textarea
+            id="cDesc"
+            rows="3"
+            [(ngModel)]="newCourseDesc"
+            name="newCourseDesc"
+            placeholder="Describe what learners will achieve upon completing this curriculum..."></textarea>
+        </div>
+
+        <div class="form-checkbox">
+          <label>
+            <input type="checkbox" [(ngModel)]="newCoursePublished" name="newCoursePublished" />
+            <span>Publish immediately (visible to enrolled learners)</span>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeModal()">Cancel</button>
+          <button type="submit" class="btn-primary" [disabled]="saving()">
+            <span>{{ saving() ? 'Creating...' : 'Create Course' }}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  }
+
+  <!-- ========================================================= -->
+  <!-- MODAL: SYLLABUS & MODULES                                 -->
+  <!-- ========================================================= -->
+  @if (activeModal() === 'syllabus') {
+  <div class="modal-backdrop" (click)="closeModal()">
+    <div class="modal-card modal-large" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="modal-tag">CURRICULUM LESSONS</span>
+          <h2>{{ selectedCourse()?.title }} · Syllabus</h2>
+        </div>
+        <button type="button" class="btn-close" (click)="closeModal()">×</button>
+      </div>
+
+      <!-- Add Lesson Form for Teachers/Admins -->
+      @if (canManage()) {
+      <div class="curriculum-add-box">
+        <h3>+ Add New Module / Lesson</h3>
+        <div class="add-grid">
+          <input
+            type="text"
+            [(ngModel)]="syllabusTitle"
+            placeholder="Lesson Title (e.g. Introduction to Microservices)" />
+          <input
+            type="number"
+            [(ngModel)]="syllabusOrder"
+            class="order-input"
+            placeholder="Order #" />
+          <button type="button" class="btn-add-item" (click)="addSyllabusItem()" [disabled]="saving()">
+            <span>Add Module</span>
+          </button>
+        </div>
+        <textarea
+          rows="2"
+          [(ngModel)]="syllabusDesc"
+          placeholder="Brief summary of topics covered in this lesson..."></textarea>
+      </div>
+      }
+
+      <!-- Lessons List -->
+      <div class="modules-list">
+        @if (syllabusLoading()) {
+        <div class="loading-state mini-loading">
+          <div class="spinner"></div>
+          <p>Loading lesson modules...</p>
+        </div>
+        } @else if (syllabus().length > 0) {
+        @for (item of syllabus(); track item.id; let i = $index) {
+        <div class="module-row">
+          <div class="module-order-badge">{{ item.sequence_order || (i + 1) }}</div>
+          <div class="module-content">
+            <h4>{{ item.title }}</h4>
+            @if (item.description) {
+            <p>{{ item.description }}</p>
+            }
+          </div>
+          @if (canManage()) {
+          <button type="button" class="btn-del-item" (click)="deleteSyllabusItem(item)" title="Delete lesson">
+            ✕
+          </button>
           }
         </div>
-      }
-    </section>
+        }
+        } @else {
+        <div class="empty-substate">
+          <p>No syllabus lessons have been authored for this course yet.</p>
+        </div>
+        }
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" (click)="closeModal()">Done</button>
+      </div>
+    </div>
+  </div>
   }
-</section>
+
+  <!-- ========================================================= -->
+  <!-- MODAL: LEARNING MATERIALS (PDF UPLOADS & LINKS)           -->
+  <!-- ========================================================= -->
+  @if (activeModal() === 'materials') {
+  <div class="modal-backdrop" (click)="closeModal()">
+    <div class="modal-card modal-large" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="modal-tag">LEARNING RESOURCES</span>
+          <h2>{{ selectedCourse()?.title }} · Materials &amp; PDFs</h2>
+        </div>
+        <button type="button" class="btn-close" (click)="closeModal()">×</button>
+      </div>
+
+      <!-- Upload & Link Adding Tools (Teachers & Admins) -->
+      @if (canManage()) {
+      <div class="resource-authoring-container">
+
+        <!-- PDF Document Upload Card -->
+        <div class="resource-box upload-pdf-box">
+          <div class="box-header">
+            <span class="box-icon">📄</span>
+            <div>
+              <h4>Upload PDF / Document</h4>
+              <p>Upload lecture slides, reading material, or assignment PDFs.</p>
+            </div>
+          </div>
+
+          <div class="upload-controls">
+            <input
+              type="text"
+              [(ngModel)]="materialTitle"
+              placeholder="Document Title (e.g. Architecture Guide PDF)" />
+
+            <div class="file-picker-row">
+              <label class="btn-file-select">
+                <span>📎 Choose PDF File</span>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  (change)="onFileSelected($event)" />
+              </label>
+              <span class="chosen-filename">{{ selectedFile?.name || 'No file selected' }}</span>
+              <button
+                type="button"
+                class="btn-upload-file"
+                (click)="uploadPdfResource()"
+                [disabled]="!selectedFile || isUploadingFile()">
+                <span>{{ isUploadingFile() ? 'Uploading...' : 'Upload PDF' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resource Link Card -->
+        <div class="resource-box add-link-box">
+          <div class="box-header">
+            <span class="box-icon">🔗</span>
+            <div>
+              <h4>Attach Learning Link</h4>
+              <p>Add URLs to online documentation, external videos, or repositories.</p>
+            </div>
+          </div>
+
+          <div class="link-controls">
+            <div class="link-inputs-row">
+              <input
+                type="text"
+                [(ngModel)]="materialTitle"
+                placeholder="Resource Title (e.g. Official Documentation)" />
+              <select [(ngModel)]="materialType">
+                <option value="link">Web Link</option>
+                <option value="video">Video Tutorial</option>
+                <option value="doc">Online Doc</option>
+              </select>
+            </div>
+
+            <div class="link-submit-row">
+              <input
+                type="url"
+                [(ngModel)]="materialUrl"
+                placeholder="https://example.com/guide" />
+              <button
+                type="button"
+                class="btn-add-link"
+                (click)="addLinkResource()"
+                [disabled]="saving()">
+                <span>Attach Link</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      }
+
+      <!-- Materials List -->
+      <div class="materials-list-container">
+        <h3>Available Resources ({{ materials().length }})</h3>
+
+        @if (materialsLoading()) {
+        <div class="loading-state mini-loading">
+          <div class="spinner"></div>
+          <p>Loading course resources...</p>
+        </div>
+        } @else if (materials().length > 0) {
+        <div class="materials-grid">
+          @for (item of materials(); track item.id) {
+          <div class="material-item-card" [attr.data-type]="item.material_type">
+            <div class="mat-icon-col">
+              @if (item.material_type === 'pdf') {
+              <span class="icon-mat pdf-icon">📄</span>
+              } @else if (item.material_type === 'video') {
+              <span class="icon-mat video-icon">🎬</span>
+              } @else {
+              <span class="icon-mat link-icon">🔗</span>
+              }
+            </div>
+
+            <div class="mat-info-col">
+              <h4>{{ item.title }}</h4>
+              <span class="mat-type-badge">{{ item.material_type | uppercase }} Resource</span>
+            </div>
+
+            <div class="mat-actions-col">
+              <button type="button" class="btn-open-res" (click)="openResource(item)">
+                <span>{{ item.material_type === 'pdf' ? 'Download / View PDF' : 'Open Link ↗' }}</span>
+              </button>
+
+              @if (canManage()) {
+              <button type="button" class="btn-del-res" (click)="deleteMaterial(item)" title="Delete material">
+                ✕
+              </button>
+              }
+            </div>
+          </div>
+          }
+        </div>
+        } @else {
+        <div class="empty-substate">
+          <p>No learning materials or PDFs have been uploaded to this course yet.</p>
+        </div>
+        }
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" (click)="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+  }
+
+</div>

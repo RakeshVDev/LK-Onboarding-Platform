@@ -7,13 +7,14 @@ from services.training.app.routers import (
     cohorts,
     enrolments,
     syllabus,
+    assessments,
 )
 
 app = FastAPI(
-    title="L&K Training Service",
+    title="ASE Assessment Tool - Training Service",
     description=(
         "Training, courses, cohorts, learning materials, "
-        "and attendance APIs"
+        "attendance, psychometric, technical and English grammar assessment APIs"
     ),
     version="1.0.0",
 )
@@ -24,6 +25,7 @@ app.include_router(courses.router, prefix="/api/v1")
 app.include_router(cohorts.router, prefix="/api/v1")
 app.include_router(enrolments.router, prefix="/api/v1")
 app.include_router(syllabus.router, prefix="/api/v1")
+app.include_router(assessments.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Health"])
@@ -37,6 +39,6 @@ def health_check():
 @app.get("/", tags=["Root"])
 def root():
     return {
-        "message": "L&K Training Service API",
+        "message": "ASE Assessment Tool Training API",
         "docs": "/docs",
     }

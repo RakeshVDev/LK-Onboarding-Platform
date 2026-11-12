@@ -29,3 +29,18 @@ class CohortResponse(BaseModel):
     start_date: datetime | None
     end_date: datetime | None
     status: str
+
+
+class CohortMemberCreate(BaseModel):
+    user_id: int = Field(gt=0)
+    status: str = Field(default="active", max_length=30)
+
+
+class CohortMemberResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    cohort_id: int
+    user_id: int
+    joined_at: datetime
+    status: str

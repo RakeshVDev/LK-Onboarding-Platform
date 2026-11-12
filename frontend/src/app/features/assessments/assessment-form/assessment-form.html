@@ -1,0 +1,397 @@
+<div class="form-page">
+
+  <!-- Back Link -->
+  <button class="back-link" type="button" (click)="cancel()">
+    ← Back to Assessment Management
+  </button>
+
+  <!-- Page Heading -->
+  <header class="page-heading">
+    <div class="heading-meta">
+      <span class="eyebrow">ASSESSMENT MANAGEMENT &amp; QUESTION AUTHORING</span>
+      <h1>{{ templateId ? 'Edit Assessment' : 'Create New Assessment' }}</h1>
+      <p>Configure assessment parameters and author custom manual questions across all domain categories.</p>
+    </div>
+
+    @if (templateId) {
+    <div class="tab-pill-bar">
+      <button type="button" class="tab-pill" [class.active]="activeTab === 'config'" (click)="setActiveTab('config')">
+        <span>⚙</span> Settings &amp; Configuration
+      </button>
+      <button type="button" class="tab-pill" [class.active]="activeTab === 'questions'"
+        (click)="setActiveTab('questions')">
+        <span>📑</span> Question Bank ({{ bankQuestions.length }})
+      </button>
+    </div>
+    }
+  </header>
+
+  <!-- Notification Banners -->
+  @if (errorMessage) {
+  <div class="alert-banner error-banner">
+    <span>⚠</span> {{ errorMessage }}
+  </div>
+  }
+
+  @if (successMessage) {
+  <div class="alert-banner success-banner">
+    <span>✓</span> {{ successMessage }}
+  </div>
+  }
+
+  <!-- Loading State -->
+  @if (loading) {
+  <div class="panel loading-panel">
+    <div class="spinner"></div>
+    <h3>Loading Assessment</h3>
+    <p>Retrieving configuration parameters and question bank...</p>
+  </div>
+  } @else {
+
+  <!-- TAB 1: Assessment Configuration -->
+  @if (activeTab === 'config') {
+  <div class="tab-pane">
+
+    <form class="form-card" [formGroup]="form" (ngSubmit)="save()">
+
+      <!-- Assessment Type Selection -->
+      <div class="form-group">
+        <label class="group-label">Assessment Domain / Category <span>*</span></label>
+        <div class="type-cards-grid">
+
+          <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'logical_reasoning'">
+            <input type="radio" formControlName="assessment_type" value="logical_reasoning"
+              (change)="onTypeChange('logical_reasoning')">
+            <div class="type-icon icon-yellow">⚡</div>
+            <div class="type-meta">
+              <strong>Logical Reasoning</strong>
+              <span>25 MCQs · 30 Mins limit · 9 Reasoning Topics</span>
+            </div>
+          </label>
+
+          <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'english_grammar'">
+            <input type="radio" formControlName="assessment_type" value="english_grammar"
+              (change)="onTypeChange('english_grammar')">
+            <div class="type-icon icon-purple">✍</div>
+            <div class="type-meta">
+              <strong>English Grammar</strong>
+              <span>20 MCQs · 15 Mins limit · Syntax &amp; Vocabulary</span>
+            </div>
+          </label>
+
+          <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'technical'">
+            <input type="radio" formControlName="assessment_type" value="technical"
+              (change)="onTypeChange('technical')">
+            <div class="type-icon icon-blue">💻</div>
+            <div class="type-meta">
+              <strong>Technical Skills</strong>
+              <span>20 MCQs · 15 Mins limit · DSA, Python, Web &amp; SQL</span>
+            </div>
+          </label>
+
+          <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'psychometric'">
+            <input type="radio" formControlName="assessment_type" value="psychometric"
+              (change)="onTypeChange('psychometric')">
+            <div class="type-icon icon-teal">✦</div>
+            <div class="type-meta">
+              <strong>Psychometric &amp; EQ</strong>
+              <span>20 Scenarios · 15 Mins limit · Behavioral Profile</span>
+            </div>
+          </label>
+
+          <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'programming'">
+            <input type="radio" formControlName="assessment_type" value="programming"
+              (change)="onTypeChange('programming')">
+            <div class="type-icon icon-indigo">💻</div>
+            <div class="type-meta">
+              <strong>Programming &amp; Logic</strong>
+              <span>20 MCQs · 30 Mins limit · Logic, Algorithms &amp; Debugging</span>
+            </div>
+          </label>
+
+        </div>
+      </div>
+
+      <!-- Assessment Name -->
+      <div class="form-group">
+        <label for="name">Assessment Name <span>*</span></label>
+        <input id="name" type="text" formControlName="name" placeholder="e.g. ASE Logical Reasoning Assessment">
+        @if (form.controls.name.touched && form.controls.name.invalid) {
+        <small class="field-error">Assessment name must be between 3 and 200 characters.</small>
+        }
+      </div>
+
+      <!-- Description -->
+      <div class="form-group">
+        <label for="description">Description &amp; Candidate Guidelines</label>
+        <textarea id="description" rows="3" formControlName="description"
+          placeholder="Enter brief description or candidate instructions...">
+            </textarea>
+      </div>
+
+      <!-- Question Count -->
+      <div class="form-row-2">
+        <div class="form-group">
+          <label for="question_count">Total Examination Questions <span>*</span></label>
+          <input id="question_count" type="number" min="1" max="100" formControlName="question_count">
+          <small class="field-hint">Standard: 25 for Logical Reasoning, 20 for Grammar/Technical.</small>
+        </div>
+
+        <div class="form-group">
+          <label>Default Duration</label>
+          <input type="text" disabled
+            [value]="form.controls.assessment_type.value === 'logical_reasoning' ? '30 Minutes' : '15 Minutes'">
+          <small class="field-hint">Calculated automatically based on domain standard.</small>
+        </div>
+      </div>
+
+      <!-- Domain Category Distribution Preview -->
+      <div class="structure-card">
+        <div class="structure-header">
+          <h4>Standard Category Breakdown ({{ availableCategories.length }} Categories)</h4>
+          <span class="sub-pill">Domain Presets</span>
+        </div>
+        <div class="categories-tag-cloud">
+          @for (cat of availableCategories; track cat.key) {
+          <div class="cat-chip">
+            <span class="chip-dot"></span>
+            <strong>{{ cat.label }}</strong>
+          </div>
+          }
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="form-actions">
+        <button class="btn-cancel" type="button" (click)="cancel()">Cancel</button>
+        <button class="btn-submit" type="submit" [disabled]="saving">
+          {{ saving ? 'Saving Assessment...' : (templateId ? 'Update Assessment Settings' : 'Create Assessment &
+          Continue') }}
+        </button>
+      </div>
+
+    </form>
+
+  </div>
+  }
+
+  <!-- TAB 2: Question Bank & Manual Questions Management -->
+  @if (activeTab === 'questions') {
+  <div class="tab-pane questions-pane">
+
+    <!-- Question Bank Top Action Bar -->
+    <div class="bank-topbar">
+      <div>
+        <h3>Question Bank Management</h3>
+        <p>
+          Author and review questions for <strong>{{ template?.name || form.controls.name.value }}</strong>.
+          Questions created here will be assigned to students taking this assessment.
+        </p>
+      </div>
+
+      <button class="btn-add-question" type="button" (click)="toggleAddQuestion()">
+        <span>{{ showAddQuestionForm ? '✕ Close Form' : '＋ Add Manual Question' }}</span>
+      </button>
+    </div>
+
+    @if (questionError) {
+    <div class="alert-banner error-banner">
+      <span>⚠</span> {{ questionError }}
+    </div>
+    }
+
+    @if (questionSuccess) {
+    <div class="alert-banner success-banner">
+      <span>✓</span> {{ questionSuccess }}
+    </div>
+    }
+
+    <!-- ADD MANUAL QUESTION FORM CARD -->
+    @if (showAddQuestionForm) {
+    <div class="add-question-card">
+      <div class="card-title-bar">
+        <h4>Author New Question</h4>
+        <span class="badge-badge">Manual Entry</span>
+      </div>
+
+      <form (ngSubmit)="addManualQuestion()">
+
+        <div class="form-row-3">
+          <!-- Category Selector with Grouping across all domains -->
+          <div class="form-group">
+            <label>Question Topic / Category <span>*</span></label>
+            <select [(ngModel)]="qCategory" name="qCategory">
+              @for (group of categoryGroups; track group.domain) {
+              <optgroup [label]="group.domain">
+                @for (cat of group.categories; track cat.key) {
+                <option [value]="cat.key">{{ cat.label }}</option>
+                }
+              </optgroup>
+              }
+              <option value="__custom__">★ Custom Topic...</option>
+            </select>
+          </div>
+
+          <!-- Custom Category Input if selected -->
+          @if (qCategory === '__custom__') {
+          <div class="form-group">
+            <label>Enter Custom Topic Name <span>*</span></label>
+            <input type="text" [(ngModel)]="qCustomCategory" name="qCustomCategory"
+              placeholder="e.g. Critical Thinking">
+          </div>
+          }
+
+          <!-- Difficulty Selector -->
+          <div class="form-group">
+            <label>Difficulty Level <span>*</span></label>
+            <div class="diff-btn-group">
+              <button type="button" class="diff-btn easy" [class.active]="qDifficulty === 'Easy'"
+                (click)="qDifficulty = 'Easy'">Easy</button>
+              <button type="button" class="diff-btn medium" [class.active]="qDifficulty === 'Medium'"
+                (click)="qDifficulty = 'Medium'">Medium</button>
+              <button type="button" class="diff-btn hard" [class.active]="qDifficulty === 'Hard'"
+                (click)="qDifficulty = 'Hard'">Hard</button>
+            </div>
+          </div>
+
+          <!-- Max Score -->
+          <div class="form-group">
+            <label>Marks for Correct Answer</label>
+            <input type="number" step="0.5" min="0.5" max="10" [(ngModel)]="qMaxScore" name="qMaxScore">
+          </div>
+        </div>
+
+        <!-- Question Statement -->
+        <div class="form-group">
+          <label>Question Statement <span>*</span></label>
+          <textarea rows="3" [(ngModel)]="qText" name="qText"
+            placeholder="Enter the full question problem statement here...">
+                </textarea>
+        </div>
+
+        <!-- 4 Options Inputs -->
+        <div class="options-inputs-card">
+          <div class="options-label-row">
+            <label>Four Answer Choices (A, B, C, D) <span>*</span></label>
+            <span class="hint-small">Select the radio button next to the correct answer.</span>
+          </div>
+
+          <div class="option-input-row" [class.is-correct]="qCorrectOption === 'A'" (click)="setCorrectOption('A')">
+            <label class="radio-label" (click)="$event.stopPropagation(); setCorrectOption('A')">
+              <input type="radio" [checked]="qCorrectOption === 'A'" (change)="setCorrectOption('A')" name="qCorrectRadio" value="A">
+              <span class="opt-key">A</span>
+            </label>
+            <input type="text" [(ngModel)]="qOptionA" (click)="$event.stopPropagation()" name="qOptionA" placeholder="Enter answer choice A">
+            @if (qCorrectOption === 'A') {
+              <span class="correct-tag">✓ Correct Answer</span>
+            }
+          </div>
+
+          <div class="option-input-row" [class.is-correct]="qCorrectOption === 'B'" (click)="setCorrectOption('B')">
+            <label class="radio-label" (click)="$event.stopPropagation(); setCorrectOption('B')">
+              <input type="radio" [checked]="qCorrectOption === 'B'" (change)="setCorrectOption('B')" name="qCorrectRadio" value="B">
+              <span class="opt-key">B</span>
+            </label>
+            <input type="text" [(ngModel)]="qOptionB" (click)="$event.stopPropagation()" name="qOptionB" placeholder="Enter answer choice B">
+            @if (qCorrectOption === 'B') {
+              <span class="correct-tag">✓ Correct Answer</span>
+            }
+          </div>
+
+          <div class="option-input-row" [class.is-correct]="qCorrectOption === 'C'" (click)="setCorrectOption('C')">
+            <label class="radio-label" (click)="$event.stopPropagation(); setCorrectOption('C')">
+              <input type="radio" [checked]="qCorrectOption === 'C'" (change)="setCorrectOption('C')" name="qCorrectRadio" value="C">
+              <span class="opt-key">C</span>
+            </label>
+            <input type="text" [(ngModel)]="qOptionC" (click)="$event.stopPropagation()" name="qOptionC" placeholder="Enter answer choice C">
+            @if (qCorrectOption === 'C') {
+              <span class="correct-tag">✓ Correct Answer</span>
+            }
+          </div>
+
+          <div class="option-input-row" [class.is-correct]="qCorrectOption === 'D'" (click)="setCorrectOption('D')">
+            <label class="radio-label" (click)="$event.stopPropagation(); setCorrectOption('D')">
+              <input type="radio" [checked]="qCorrectOption === 'D'" (change)="setCorrectOption('D')" name="qCorrectRadio" value="D">
+              <span class="opt-key">D</span>
+            </label>
+            <input type="text" [(ngModel)]="qOptionD" (click)="$event.stopPropagation()" name="qOptionD" placeholder="Enter answer choice D">
+            @if (qCorrectOption === 'D') {
+              <span class="correct-tag">✓ Correct Answer</span>
+            }
+          </div>
+        </div>
+
+        <!-- Question Form Actions -->
+        <div class="form-actions">
+          <button class="btn-cancel" type="button" (click)="toggleAddQuestion()">Cancel</button>
+          <button class="btn-submit" type="submit" [disabled]="savingQuestion">
+            {{ savingQuestion ? 'Saving Question...' : '✓ Save Question to Bank' }}
+          </button>
+        </div>
+
+      </form>
+    </div>
+    }
+
+    <!-- BANK QUESTIONS LIST -->
+    @if (loadingQuestions) {
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Loading questions from bank...</p>
+    </div>
+    } @else if (bankQuestions.length === 0) {
+    <div class="empty-questions-card">
+      <div class="empty-icon">📂</div>
+      <h4>No custom manual questions in this bank yet</h4>
+      <p>
+        Students who start this assessment will automatically receive the high-quality built-in questions for
+        <strong>{{ form.controls.assessment_type.value.replace('_', ' ') | titlecase }}</strong>.
+        Click <strong>"+ Add Manual Question"</strong> above to add custom questions.
+      </p>
+    </div>
+    } @else {
+    <div class="questions-list">
+      @for (question of bankQuestions; track question.id; let idx = $index) {
+      <article class="question-item-card">
+
+        <div class="item-header">
+          <div class="item-meta">
+            <span class="q-number">Q{{ idx + 1 }}</span>
+            <span class="cat-badge">{{ categoryLabel(question.category) }}</span>
+            <span class="diff-badge" [attr.data-diff]="question.difficulty">
+              {{ question.difficulty }}
+            </span>
+            <span class="score-badge">+{{ question.max_score }} Marks</span>
+          </div>
+
+          <button type="button" class="btn-delete-q" (click)="deleteQuestion(question.id)"
+            [disabled]="deletingQuestionId === question.id" title="Delete question from bank">
+            {{ deletingQuestionId === question.id ? 'Deleting...' : '🗑 Delete' }}
+          </button>
+        </div>
+
+        <h4 class="item-statement">{{ question.question_text }}</h4>
+
+        <div class="item-options-grid">
+          @for (opt of question.options; track opt.id) {
+          <div class="item-option" [class.is-correct]="question.correct_option_id === opt.id">
+            <span class="opt-id">{{ opt.id }}</span>
+            <span class="opt-text">{{ opt.text }}</span>
+            @if (question.correct_option_id === opt.id) {
+            <span class="correct-check" title="Correct Answer">✓</span>
+            }
+          </div>
+          }
+        </div>
+
+      </article>
+      }
+    </div>
+    }
+
+  </div>
+  }
+
+  }
+
+</div>

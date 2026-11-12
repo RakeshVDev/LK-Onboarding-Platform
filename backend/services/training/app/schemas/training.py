@@ -48,3 +48,22 @@ class CourseResponse(BaseModel):
     title: str
     description: str | None
     is_published: bool
+
+
+# ---------- Learning Material schemas ----------
+
+class LearningMaterialCreate(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+    material_type: str = Field(default="link", pattern="^(pdf|link|doc|video)$")
+    storage_key: str = Field(min_length=1, max_length=1000)
+
+
+class LearningMaterialResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    course_id: int
+    title: str
+    material_type: str
+    storage_key: str
+    is_active: bool

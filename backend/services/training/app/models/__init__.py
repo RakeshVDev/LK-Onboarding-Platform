@@ -11,6 +11,16 @@ from services.training.app.models.entities import (
     TimetableSession,
 )
 
+from services.training.app.models.assessment import (
+    AssessmentTemplate,
+    AssessmentSession,
+    AssessmentQuestion,
+    AssessmentResponse,
+    AssessmentScore,
+    AssessmentReport,
+    AssessmentQuestionBank,
+)
+
 __all__ = [
     "Department",
     "Cohort",
@@ -21,4 +31,11 @@ __all__ = [
     "LearningMaterial",
     "TimetableSession",
     "AttendanceRecord",
+    "AssessmentTemplate",
+    "AssessmentSession",
+    "AssessmentQuestion",
+    "AssessmentResponse",
+    "AssessmentScore",
+    "AssessmentReport",
+    "AssessmentQuestionBank",
 ]

@@ -5,11 +5,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from services.training.app.db.session import SessionLocal
-from services.training.app.models.entities import Cohort, Department
+from services.training.app.models.entities import Cohort, CohortMember, Department
 from services.training.app.schemas.cohort import (
     CohortCreate,
+    CohortMemberCreate,
+    CohortMemberResponse,
     CohortResponse,
     CohortUpdate,
+)
+
+from services.identity.app.core.roles import Permission
+from services.identity.app.dependencies.auth import (
+    get_current_user,
+    require_permissions,
 )
 
 router = APIRouter(prefix="/cohorts", tags=["Cohorts"])
@@ -141,5 +149,99 @@ def delete_cohort(cohort_id: int, db: Session = Depends(get_db)):
             status_code=409,
             detail="Cannot delete this cohort while dependent records exist",
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --------------------------------------------------
+# Cohort Members Management
+# --------------------------------------------------
+
+@router.get(
+    "/{cohort_id}/members",
+    response_model=list[CohortMemberResponse],
+)
+def list_cohort_members(
+    cohort_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    cohort = db.get(Cohort, cohort_id)
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+
+    return db.scalars(
+        select(CohortMember)
+        .where(CohortMember.cohort_id == cohort_id)
+        .order_by(CohortMember.id.desc())
+    ).all()
+
+
+@router.post(
+    "/{cohort_id}/members",
+    response_model=CohortMemberResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_cohort_member(
+    cohort_id: int,
+    payload: CohortMemberCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(
+        require_permissions(Permission.MANAGE_COHORTS)
+    ),
+):
+    cohort = db.get(Cohort, cohort_id)
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+
+    existing = db.scalar(
+        select(CohortMember).where(
+            CohortMember.cohort_id == cohort_id,
+            CohortMember.user_id == payload.user_id,
+        )
+    )
+    if existing:
+        existing.status = payload.status
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    member = CohortMember(
+        cohort_id=cohort_id,
+        user_id=payload.user_id,
+        status=payload.status,
+    )
+    db.add(member)
+    try:
+        db.commit()
+        db.refresh(member)
+        return member
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Could not add member to cohort")
+
+
+@router.delete(
+    "/{cohort_id}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_cohort_member(
+    cohort_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(
+        require_permissions(Permission.MANAGE_COHORTS)
+    ),
+):
+    member = db.scalar(
+        select(CohortMember).where(
+            CohortMember.cohort_id == cohort_id,
+            CohortMember.user_id == user_id,
+        )
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Cohort member record not found")
+
+    db.delete(member)
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
