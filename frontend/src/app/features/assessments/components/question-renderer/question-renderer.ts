@@ -2,7 +2,10 @@ import {
   Component,
   EventEmitter,
   Input,
+  OnChanges,
+  OnDestroy,
   Output,
+  SimpleChanges,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AssessmentOption } from '../../services/assessment';
@@ -29,7 +32,7 @@ export interface RenderableQuestion {
   templateUrl: './question-renderer.html',
   styleUrl: './question-renderer.scss',
 })
-export class QuestionRenderer {
+export class QuestionRenderer implements OnChanges, OnDestroy {
   @Input() question: RenderableQuestion | null = null;
   @Input() questionNumber = 1;
   @Input() totalQuestions = 1;
@@ -40,6 +43,32 @@ export class QuestionRenderer {
 
   @Output() answerChange = new EventEmitter<string>();
   @Output() answerClear = new EventEmitter<void>();
+
+  openTextDraft = '';
+  private freeResponseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['question']) {
+      this.clearFreeResponseTimer();
+      this.openTextDraft = String(this.selectedAnswer || '');
+      return;
+    }
+
+    if (changes['selectedAnswer'] && !this.freeResponseTimer) {
+      this.openTextDraft = String(this.selectedAnswer || '');
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.clearFreeResponseTimer();
+  }
+
+  private clearFreeResponseTimer(): void {
+    if (this.freeResponseTimer !== null) {
+      clearTimeout(this.freeResponseTimer);
+      this.freeResponseTimer = null;
+    }
+  }
 
   get isAdminPreview(): boolean {
     return this.mode === 'admin_preview';
@@ -57,12 +86,42 @@ export class QuestionRenderer {
     return this.normalizedType === 'true_false';
   }
 
+  get isLikert(): boolean {
+    return this.normalizedType === 'likert';
+  }
+
+  get isCodeSubmission(): boolean {
+    return this.normalizedType === 'code_submission';
+  }
+
+  get isOpenEnded(): boolean {
+    return (
+      this.normalizedType === 'short_answer' ||
+      this.normalizedType === 'essay' ||
+      this.normalizedType === 'composition'
+    );
+  }
+
+  get isFreeResponse(): boolean {
+    return this.isOpenEnded || this.isCodeSubmission;
+  }
+
   get typeBadgeLabel(): string {
     switch (this.normalizedType) {
       case 'multiple_select':
         return 'Multi-Select';
       case 'true_false':
         return 'True / False';
+      case 'likert':
+        return 'Likert Scale';
+      case 'short_answer':
+        return 'Short Answer';
+      case 'essay':
+        return 'Essay / Prose';
+      case 'composition':
+        return 'Writing Composition';
+      case 'code_submission':
+        return 'Code Sandbox';
       case 'single_choice':
       case 'multiple_choice':
         return 'Single-Choice MCQ';
@@ -79,6 +138,15 @@ export class QuestionRenderer {
 
   get helperInstruction(): string {
     const count = this.optionsList.length;
+    if (this.isCodeSubmission) {
+      return 'Write clean Python code solving the problem specification below:';
+    }
+    if (this.isOpenEnded) {
+      return 'Compose a clear, well-structured written response in the editor below:';
+    }
+    if (this.isLikert) {
+      return 'Select the response that best reflects your perspective:';
+    }
     if (this.isMultiSelect) {
       return 'Select all correct answers from the choices below:';
     }
@@ -88,7 +156,36 @@ export class QuestionRenderer {
     return `Choose the correct answer from the ${count} ${count === 1 ? 'choice' : 'choices'} below:`;
   }
 
+  get wordCount(): number {
+    const trimmed = this.openTextDraft.trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).length;
+  }
+
+  get charCount(): number {
+    return this.openTextDraft.length;
+  }
+
+  get lineCount(): number {
+    if (!this.openTextDraft) return 1;
+    return this.openTextDraft.split(/\r\n|\r|\n/).length;
+  }
+
+  get freeResponsePlaceholder(): string {
+    if (this.isCodeSubmission) {
+      return 'def solve(x):\n    # Write your Python implementation here...\n    return x';
+    }
+    if (this.normalizedType === 'short_answer') {
+      return 'Type a concise, direct explanation...';
+    }
+    return 'Write your response with clear structure, grammar, and supporting detail...';
+  }
+
   get selectedTokens(): Set<string> {
+    if (this.isFreeResponse) {
+      const clean = this.openTextDraft.trim();
+      return clean ? new Set([clean]) : new Set();
+    }
     const raw = String(this.selectedAnswer || '').trim();
     if (!raw) return new Set();
     if (this.isMultiSelect) {
@@ -103,6 +200,9 @@ export class QuestionRenderer {
   }
 
   get hasSelection(): boolean {
+    if (this.isFreeResponse) {
+      return Boolean(this.openTextDraft.trim());
+    }
     return this.selectedTokens.size > 0;
   }
 
@@ -196,8 +296,41 @@ export class QuestionRenderer {
     this.answerChange.emit(norm);
   }
 
+  onFreeResponseInput(value: string): void {
+    if (this.disabled) return;
+    this.openTextDraft = value ?? '';
+    this.clearFreeResponseTimer();
+    this.freeResponseTimer = setTimeout(() => {
+      this.freeResponseTimer = null;
+      this.emitFreeResponse(this.openTextDraft);
+    }, 300);
+  }
+
+  onFreeResponseBlur(): void {
+    if (this.disabled) return;
+    if (this.freeResponseTimer !== null) {
+      this.clearFreeResponseTimer();
+      this.emitFreeResponse(this.openTextDraft);
+      return;
+    }
+    if (this.openTextDraft !== String(this.selectedAnswer || '')) {
+      this.emitFreeResponse(this.openTextDraft);
+    }
+  }
+
+  private emitFreeResponse(value: string): void {
+    if (!value || !value.trim()) {
+      this.answerClear.emit();
+      this.answerChange.emit('');
+      return;
+    }
+    this.answerChange.emit(value);
+  }
+
   onClearClick(): void {
     if (this.disabled) return;
+    this.clearFreeResponseTimer();
+    this.openTextDraft = '';
     this.answerClear.emit();
   }
 }

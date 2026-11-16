@@ -1,0 +1,229 @@
+<div class="live-classes-page">
+
+  <header class="page-hero">
+    <div class="hero-copy">
+      <div class="hero-eyebrow-row">
+        <app-brand-logo variant="compact" size="sm" [showSubtitle]="false"></app-brand-logo>
+        <span class="dept-lock-pill">STRICT DEPARTMENT-GATED STREAM</span>
+      </div>
+      <h1>Live Classes &amp; Department Video Sessions</h1>
+      <p>
+        @if (isStaff) {
+        Schedule and broadcast department-exclusive live workshops, mentoring sessions, and technical walkthroughs.
+        } @else if (approvedDepartmentId()) {
+        Showing live and upcoming instructor sessions exclusively for your approved track:
+        <strong>{{ approvedDepartmentName }}</strong>.
+        } @else {
+        Department live sessions remain restricted until onboarding assessments and department approval are completed.
+        }
+      </p>
+    </div>
+
+    <div class="hero-actions">
+      @if (isStaff) {
+      <select class="dept-filter-select" [(ngModel)]="filterDepartmentId" (ngModelChange)="loadSessions()"
+        aria-label="Filter by Department">
+        @if (!isTeacher || departments().length > 1) {
+        <option [ngValue]="null">{{ isTeacher ? 'All My Assigned Departments' : 'All Departments' }}</option>
+        }
+        @for (dept of departments(); track dept.id) {
+        <option [ngValue]="dept.id">{{ dept.name }}</option>
+        }
+      </select>
+
+      <button type="button" class="btn-primary" [disabled]="!hasAssignedDepartments" (click)="openScheduler()">
+        ＋ Schedule Live Class
+      </button>
+      } @else {
+      <button type="button" class="btn-secondary" (click)="loadSessions()">
+        ↻ Refresh Schedule
+      </button>
+      }
+    </div>
+  </header>
+
+  @if (errorMessage()) {
+  <div class="alert-box error">
+    <span>⚠</span> {{ errorMessage() }}
+  </div>
+  }
+
+  @if (successMessage()) {
+  <div class="alert-box success">
+    <span>✓</span> {{ successMessage() }}
+  </div>
+  }
+
+  @if (loading()) {
+  <div class="loading-box csm-card">
+    <app-skeleton-loader [rows]="3" [heightPx]="68" ariaLabel="Loading department live classes"></app-skeleton-loader>
+  </div>
+  } @else if (!isStaff && restrictedReason()) {
+  <section class="restricted-panel csm-card">
+    <div class="restricted-icon">🔒</div>
+    <h2>Department Access Required</h2>
+    <p>{{ restrictedReason() }}</p>
+    <div class="restricted-actions">
+      <a routerLink="/my-assessments" class="btn-primary">Go to My Assessments →</a>
+      <a routerLink="/department-selection" class="btn-secondary">Department Selection →</a>
+    </div>
+  </section>
+  } @else if (sessions().length === 0) {
+  <section class="empty-panel csm-card">
+    <div class="empty-icon">📹</div>
+    <h3>No Live Sessions Scheduled</h3>
+    <p>
+      @if (isStaff) {
+      Use "+ Schedule Live Class" above to publish a new session for a selected department.
+      } @else {
+      No upcoming sessions are currently scheduled for {{ approvedDepartmentName }}. Check back soon!
+      }
+    </p>
+  </section>
+  } @else {
+  <section class="sessions-grid">
+    @for (session of sessions(); track session.id) {
+    <article class="session-card csm-card" [attr.data-status]="session.status">
+      <div class="card-top-row">
+        <span class="dept-chip">🏢 {{ session.department_name || ('Department #' + session.department_id) }}</span>
+        <span class="status-badge" [attr.data-status]="session.status">
+          @if (session.status === 'live') {
+          <span class="live-dot"></span> LIVE NOW
+          } @else {
+          {{ session.status | uppercase }}
+          }
+        </span>
+      </div>
+
+      <h3>{{ session.title }}</h3>
+      <p class="session-desc">
+        {{ session.description || 'Department-focused interactive live instruction and Q&A.' }}
+      </p>
+
+      <div class="session-meta">
+        <div><span>👩‍🏫 Instructor:</span> <strong>{{ session.instructor_name || 'Faculty Instructor' }}</strong></div>
+        <div><span>🗓 Starts:</span> <strong>{{ session.scheduled_start | date:'medium' }}</strong></div>
+        <div><span>⏱ Duration:</span> <strong>{{ session.duration_minutes }} mins</strong></div>
+        <div><span>📡 Platform:</span> <strong>{{ session.platform }}</strong></div>
+      </div>
+
+      <div class="card-actions">
+        @if (session.status === 'live') {
+        <button type="button" class="btn-primary btn-join" [disabled]="joiningId() === session.id"
+          (click)="joinSession(session)">
+          {{ joiningId() === session.id ? 'Verifying Access...' : 'Join Live Session →' }}
+        </button>
+        } @else if (session.status === 'scheduled') {
+        <span class="waiting-live-pill">
+          Scheduled · Join appears once {{ session.instructor_name || 'assigned host' }} goes live
+        </span>
+        }
+
+        @if (isStaff) {
+        <div class="staff-controls">
+          @if (canControlSessionStream(session)) {
+          @if (session.status === 'scheduled') {
+          <button type="button" class="btn-sm-chip" (click)="updateStatus(session, 'live')">Go Live</button>
+          }
+          @if (session.status === 'live') {
+          <button type="button" class="btn-sm-chip" (click)="updateStatus(session, 'completed')">End</button>
+          }
+          } @else if (session.status === 'scheduled') {
+          <span class="host-lock-note">Only {{ session.instructor_name || 'assigned host' }} can start</span>
+          }
+          <button type="button" class="btn-danger btn-sm" (click)="deleteSession(session)">Delete</button>
+        </div>
+        }
+      </div>
+    </article>
+    }
+  </section>
+  }
+
+  @if (showScheduleModal) {
+  <div class="modal-backdrop" (click)="closeScheduler()">
+    <div class="scheduler-modal" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <h3>Schedule Department Live Class</h3>
+          <p>Only approved learners enrolled in the chosen department can see or join this stream.</p>
+        </div>
+        <button type="button" class="btn-close" (click)="closeScheduler()">×</button>
+      </div>
+
+      <form (ngSubmit)="createSession()" class="scheduler-form">
+        <div class="form-row-2">
+          <div class="form-field">
+            <label for="lcDept">Target Department <span>*</span></label>
+            <select id="lcDept" [(ngModel)]="formDepartmentId" name="formDepartmentId" required>
+              <option [ngValue]="null" disabled>Select a Department Track...</option>
+              @for (dept of departments(); track dept.id) {
+              <option [ngValue]="dept.id">{{ dept.name }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label for="lcInstructor">Assigned Teacher / Host <span>*</span></label>
+            <select id="lcInstructor" [(ngModel)]="formInstructorUserId" name="formInstructorUserId" required>
+              @for (host of assignableHosts(); track host.id) {
+              <option [ngValue]="host.id">{{ host.full_name }} ({{ formatHostRole(host.role) }})</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="lcTitle">Session Title <span>*</span></label>
+          <input id="lcTitle" type="text" [(ngModel)]="formTitle" name="formTitle"
+            placeholder="e.g. Async Python Microservices Workshop" required>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-field">
+            <label for="lcStart">Scheduled Date &amp; Time <span>*</span></label>
+            <input id="lcStart" type="datetime-local" [(ngModel)]="formScheduledLocal" name="formScheduledLocal"
+              required>
+          </div>
+          <div class="form-field">
+            <label for="lcDur">Duration (Minutes)</label>
+            <input id="lcDur" type="number" min="5" max="480" [(ngModel)]="formDurationMinutes"
+              name="formDurationMinutes">
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-field">
+            <label for="lcPlatform">Platform</label>
+            <select id="lcPlatform" [(ngModel)]="formPlatform" name="formPlatform">
+              <option value="Jitsi Meet">Jitsi Meet</option>
+              <option value="Google Meet">Google Meet</option>
+              <option value="Microsoft Teams">Microsoft Teams</option>
+              <option value="Zoom">Zoom</option>
+              <option value="Video Call">Custom Video Link</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="lcUrl">Video Call URL <span>*</span></label>
+            <input id="lcUrl" type="url" [(ngModel)]="formMeetingUrl" name="formMeetingUrl"
+              placeholder="https://meet.jit.si/csm-python-cohort" required>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="lcDesc">Session Agenda / Description</label>
+          <textarea id="lcDesc" rows="3" [(ngModel)]="formDescription" name="formDescription"
+            placeholder="Topics covered, preparation links, and expected outcomes..."></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeScheduler()">Cancel</button>
+          <button type="submit" class="btn-primary" [disabled]="saving()">
+            {{ saving() ? 'Scheduling...' : 'Publish Live Class' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  }
+</div>

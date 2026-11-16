@@ -29,8 +29,9 @@
     <header class="exam-header">
       <div class="header-left">
         <div class="exam-badge-row">
-          <span class="exam-tag">OFFICIAL ASSESSMENT</span>
+          <span class="exam-tag">CSM™ OFFICIAL ASSESSMENT</span>
           <span class="exam-type-pill">{{ templateName }}</span>
+          <span class="exam-set-pill">Set {{ activeSetLabel }}</span>
         </div>
         <div class="exam-title-row">
           <h1>{{ templateName }}</h1>
@@ -161,17 +162,47 @@
       <!-- MAIN CONTENT: Current Question Workspace -->
       <main class="exam-workspace" *ngIf="currentQuestion as q">
 
-        <app-question-renderer
-          [question]="q"
-          [questionNumber]="currentIndex + 1"
-          [totalQuestions]="questions.length"
-          mode="exam"
-          [selectedAnswer]="answers[q.id] || ''"
-          [disabled]="submitting || isTerminatedDueToViolation"
-          [showClear]="true"
-          (answerChange)="chooseAnswer(q.id, $event)"
-          (answerClear)="clearAnswer(q.id)">
-        </app-question-renderer>
+        @if (activePassageText; as passage) {
+          <div class="comprehension-split-grid">
+            <aside class="reading-passage-panel" aria-label="Reading Comprehension Passage">
+              <div class="passage-header">
+                <span class="passage-eyebrow">READING COMPREHENSION PASSAGE</span>
+                <span class="passage-badge">Read Carefully</span>
+              </div>
+              <div class="passage-body">
+                @for (para of passage.split('\n\n'); track $index) {
+                  <p>{{ para }}</p>
+                }
+              </div>
+            </aside>
+
+            <div class="passage-question-column">
+              <app-question-renderer
+                [question]="q"
+                [questionNumber]="currentIndex + 1"
+                [totalQuestions]="questions.length"
+                mode="exam"
+                [selectedAnswer]="answers[q.id] || ''"
+                [disabled]="submitting || isTerminatedDueToViolation"
+                [showClear]="true"
+                (answerChange)="chooseAnswer(q.id, $event)"
+                (answerClear)="clearAnswer(q.id)">
+              </app-question-renderer>
+            </div>
+          </div>
+        } @else {
+          <app-question-renderer
+            [question]="q"
+            [questionNumber]="currentIndex + 1"
+            [totalQuestions]="questions.length"
+            mode="exam"
+            [selectedAnswer]="answers[q.id] || ''"
+            [disabled]="submitting || isTerminatedDueToViolation"
+            [showClear]="true"
+            (answerChange)="chooseAnswer(q.id, $event)"
+            (answerClear)="clearAnswer(q.id)">
+          </app-question-renderer>
+        }
 
         <!-- Question Bottom Action Toolbar -->
         <div class="question-actions">

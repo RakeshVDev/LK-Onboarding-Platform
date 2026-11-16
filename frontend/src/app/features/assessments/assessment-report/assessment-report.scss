@@ -76,6 +76,12 @@
   margin-bottom: 24px;
   flex-wrap: wrap;
 
+  .report-brand-strip {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
   .header-left {
     max-width: 680px;
 
@@ -615,5 +621,187 @@
     box-shadow: none !important;
     border: 1px solid #cbd5e1 !important;
     break-inside: avoid;
+  }
+}
+
+// Assessment Intelligence Panels
+.intelligence-radar-panel {
+  .intel-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 14px;
+
+    h2 {
+      margin: 4px 0 0;
+    }
+  }
+
+  .weighted-pill {
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #4338ca;
+    border: 1px solid #c7d2fe;
+    font-size: 12.5px;
+  }
+
+  .dim-badges-grid {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+    gap: 10px;
+  }
+
+  .dim-mini-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+
+  .dim-mini-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .dim-mini-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .dim-mini-score {
+    font-size: 13px;
+    font-weight: 800;
+    color: #4f46e5;
+  }
+
+  .dim-band {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+  }
+}
+
+.domain-intel-panel {
+  .intel-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  .intel-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .intel-box-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+
+    h3 {
+      margin: 0;
+      font-size: 14.5px;
+      font-weight: 750;
+      color: #0f172a;
+    }
+
+    .intel-badge {
+      background: #eef2ff;
+      color: #4338ca;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+  }
+
+  .intel-kv-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12.5px;
+    color: #475569;
+
+    strong {
+      color: #0f172a;
+      text-align: right;
+    }
+  }
+
+  .intel-warn {
+    margin: 2px 0 0;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .diff-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+
+    .diff-pill {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #334155;
+    }
+  }
+
+  .focus-fit-row {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  .focus-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 12px;
+    padding: 14px 16px;
+
+    &.fit-box {
+      background: #ecfdf5;
+      border-color: #a7f3d0;
+    }
+
+    h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 750;
+      color: #0f172a;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.55;
+    }
   }
 }

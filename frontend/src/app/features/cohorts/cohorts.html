@@ -28,8 +28,8 @@
     </div>
 
     <div class="header-right-deck">
-      <!-- Mode Toggle Switcher for Teachers/Admins -->
-      @if (isTeacherRole()) {
+      <!-- Mode Toggle Switcher (SuperAdmin Only) -->
+      @if (isSuperAdminRole()) {
         <div class="role-mode-switcher">
           <span class="switcher-label">View Mode:</span>
           <div class="mode-pill-toggle">
@@ -55,20 +55,20 @@
         <a routerLink="/dashboard" class="btn-dashboard">
           Dashboard <span>→</span>
         </a>
-        <button
-          type="button"
-          class="btn-join-live"
-          [class.live-active]="isLiveClassActive()"
-          (click)="joinLiveClass()"
-          [title]="isLiveClassActive() ? 'Click to join live class' : 'Class is not started yet'">
-          @if (isLiveClassActive()) {
+        @if (isLiveClassActive()) {
+          <button
+            type="button"
+            class="btn-join-live live-active"
+            (click)="joinLiveClass()"
+            title="Click to join live class">
             <span class="live-pulse-indicator"></span>
             <span class="live-btn-text">🔴 Live Now &mdash; Join Live Class</span>
-          } @else {
-            <span class="live-cam-icon">🎥</span>
-            <span class="live-btn-text">Join Live Class</span>
-          }
-        </button>
+          </button>
+        } @else {
+          <span class="no-live-pill" title="Join Live appears only when an instructor starts a live class">
+            ⏳ Class Not Live Yet
+          </span>
+        }
       </div>
     </div>
   </header>
@@ -98,6 +98,18 @@
           [disabled]="hasPendingChangeRequest()">
           🔄 Request Department Change
         </button>
+      </div>
+    </div>
+  } @else if (viewMode() === 'learner') {
+    <div class="learner-department-banner">
+      <div class="dept-badge-col">
+        <span class="dept-badge-pill">
+          <span class="dept-pill-icon">🌐</span>
+          <span class="dept-pill-text">Unlocked Scope: <strong>All / Common Only</strong></span>
+          <span class="pending-change-indicator">
+            {{ departmentAllocationStatus() === 'pending' ? 'Track Request Pending (' + requestedDepartmentName() + ')' : 'Select Your Department Track Below' }}
+          </span>
+        </span>
       </div>
     </div>
   }
@@ -1353,13 +1365,19 @@
                     <button type="button" class="btn-live-pulse-action" (click)="joinLiveClass(sess.meetingUrl, sess.title); $event.stopPropagation()">
                       🔴 Join Live ↗
                     </button>
-                    <button type="button" class="btn-end-sess-btn" (click)="endTrainingSession(sess); $event.stopPropagation()">
-                      ⏹ End
-                    </button>
+                    @if (canStartCohortSession(sess)) {
+                      <button type="button" class="btn-end-sess-btn" (click)="endTrainingSession(sess); $event.stopPropagation()">
+                        ⏹ End
+                      </button>
+                    }
                   } @else if (sess.status === 'upcoming') {
-                    <button type="button" class="btn-start-sess-btn" (click)="startTrainingSession(sess); $event.stopPropagation()">
-                      🔴 Go Live
-                    </button>
+                    @if (canStartCohortSession(sess)) {
+                      <button type="button" class="btn-start-sess-btn" (click)="startTrainingSession(sess); $event.stopPropagation()">
+                        🔴 Go Live
+                      </button>
+                    } @else {
+                      <span class="sess-locked-hint">Only {{ sess.trainer }} can start</span>
+                    }
                   }
                   <button type="button" class="btn-inspect-session" (click)="openSessionPopover(sess); $event.stopPropagation()">
                     Inspect Session →
@@ -1672,7 +1690,7 @@
               </div>
               <div class="status-row">
                 <span class="status-label">Curriculum &amp; Resources:</span>
-                <span class="status-val text-muted">All cohort chapters, live sessions, assignments, and study materials unlock immediately once approved.</span>
+                <span class="status-val text-muted">Showing <strong>All / Common</strong> cohort chapters, live sessions, assignments, and study materials below. Your {{ requestedDepartmentName() }} modules will unlock once approved.</span>
               </div>
             </div>
 
@@ -1732,8 +1750,9 @@
           </div>
         }
       </section>
-    } @else {
-      <!-- 10-Feature Tabbed Navigation Bar -->
+    }
+
+    <!-- 10-Feature Tabbed Navigation Bar (All / Common until approved, then Common + Approved Dept) -->
     <nav class="cohort-tab-bar" aria-label="Cohort Features">
       <button
         type="button"
@@ -1783,7 +1802,7 @@
         (click)="setTab('attendance')">
         <span class="tab-icon">📊</span>
         <span class="tab-title">Attendance Tracking</span>
-        <span class="tab-badge-check">94%</span>
+        <span class="tab-badge-check">{{ attendance().percentage }}%</span>
       </button>
 
       <button
@@ -1827,7 +1846,7 @@
         (click)="setTab('progress')">
         <span class="tab-icon">📈</span>
         <span class="tab-title">Progress Tracking</span>
-        <span class="tab-badge-count">68%</span>
+        <span class="tab-badge-count">{{ progress().overallPercentage }}%</span>
       </button>
 
       <button
@@ -1917,16 +1936,16 @@
 
               <div class="session-action-col">
                 @if (sess.status === 'today') {
-                  <button
-                    type="button"
-                    class="btn-primary-action"
-                    (click)="joinLiveClass(sess.meetingUrl, sess.title)">
-                    @if (isLiveClassActive()) {
+                  @if (isLiveClassActive()) {
+                    <button
+                      type="button"
+                      class="btn-primary-action"
+                      (click)="joinLiveClass(sess.meetingUrl, sess.title)">
                       🔴 Join Live Room ↗
-                    } @else {
-                      🎥 Join Live Room (Check)
-                    }
-                  </button>
+                    </button>
+                  } @else {
+                    <span class="awaiting-live-pill">⏳ Scheduled · Waiting for {{ sess.trainer }} to go live</span>
+                  }
                   @if (attendance().checkedInToday) {
                     <span class="badge-checked-in">✓ Attendance Recorded</span>
                   } @else {
@@ -2643,7 +2662,6 @@
       </section>
     }
   }
-}
 
   <!-- ========================================================================= -->
   <!-- SHARED TEMPLATE: COHORT DETAILS (SYNCED FOR TEACHER & LEARNER)             -->
@@ -2669,17 +2687,17 @@
             <span>Trainer: <strong>{{ activeLiveTrainerName() }}</strong> ({{ getTrainerRole(activeLiveTrainerName()) }})</span>
           </p>
           <div class="spotlight-actions">
-            <button
-              type="button"
-              class="btn-primary-action"
-              (click)="joinLiveClass(activeLiveMeetingUrl(), activeLiveSessionTitle())">
-              @if (isLiveClassActive()) {
+            @if (isLiveClassActive()) {
+              <button
+                type="button"
+                class="btn-primary-action"
+                (click)="joinLiveClass(activeLiveMeetingUrl(), activeLiveSessionTitle())">
                 🔴 Join Live Google Meet Room ↗
-              } @else {
-                🎥 Join Live Room (Check Status)
-              }
-            </button>
-            @if (isTeacherRole() && !isLiveClassActive() && activeSpotlightSession()) {
+              </button>
+            } @else {
+              <span class="awaiting-live-pill">⏳ Upcoming · Join Live appears once {{ activeLiveTrainerName() }} starts</span>
+            }
+            @if (canStartActiveSpotlight() && !isLiveClassActive() && activeSpotlightSession()) {
               <button
                 type="button"
                 class="btn-start-meeting-spotlight"
@@ -2687,7 +2705,7 @@
                 🔴 Start Meeting (Go Live)
               </button>
             }
-            @if (isTeacherRole() && isLiveClassActive() && currentLiveSession()) {
+            @if (canStartActiveSpotlight() && isLiveClassActive() && currentLiveSession()) {
               <button
                 type="button"
                 class="btn-end-meeting-spotlight"
@@ -2815,7 +2833,7 @@
                       (click)="joinLiveClass(sess.meetingUrl, sess.title)">
                       🔴 Join Live Meeting ↗
                     </button>
-                    @if (isTeacherRole()) {
+                    @if (canStartCohortSession(sess)) {
                       <button
                         type="button"
                         class="btn-end-meeting-sm"
@@ -2824,7 +2842,7 @@
                       </button>
                     }
                   } @else if (sess.status === 'upcoming') {
-                    @if (isTeacherRole()) {
+                    @if (canStartCohortSession(sess)) {
                       <button
                         type="button"
                         class="btn-start-meeting-sm"
@@ -2839,12 +2857,7 @@
                         Preview Room ↗
                       </a>
                     } @else {
-                      <button
-                        type="button"
-                        class="btn-upcoming-room-sm"
-                        (click)="joinLiveClass(sess.meetingUrl, sess.title)">
-                        🎥 Join Room
-                      </button>
+                      <span class="awaiting-live-pill">⏳ Upcoming · Waiting for {{ sess.trainer }} to go live</span>
                     }
                   } @else {
                     <span class="completed-note">Session Concluded</span>
@@ -3092,11 +3105,23 @@
 
           <div class="form-row">
             <div class="form-group flex-1">
+              <label for="sessDept">Target Department <span class="required">*</span></label>
+              <select
+                id="sessDept"
+                class="form-select"
+                [(ngModel)]="newSessionDepartmentId">
+                @for (dept of selectableDepartments(); track dept.id) {
+                  <option [ngValue]="dept.id">{{ dept.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="form-group flex-1">
               <label for="sessTrainer">Assigned Instructor / Teacher <span class="required">*</span></label>
               <select
                 id="sessTrainer"
                 class="form-select"
-                [(ngModel)]="newSessionTrainer">
+                [ngModel]="newSessionTrainer"
+                (ngModelChange)="onSessionTrainerSelected($event)">
                 @for (teacher of availableInstructors(); track teacher.id) {
                   <option [value]="teacher.full_name">{{ teacher.full_name }} ({{ teacher.role }})</option>
                 }
@@ -3145,10 +3170,14 @@
 
           <div class="form-group checkbox-group-live">
             <label class="custom-live-switch-label">
-              <input type="checkbox" [(ngModel)]="newSessionIsLiveNow" />
+              <input type="checkbox" [(ngModel)]="newSessionIsLiveNow" [disabled]="!isSelectedTrainerCurrentUser()" />
               <div class="live-switch-info">
                 <strong>🔴 Start Meeting Immediately (Set as Live Session Now)</strong>
-                <p>If checked, this training will immediately broadcast as LIVE NOW in the Cohort Details section and activate the live meeting room for all learners.</p>
+                @if (isSelectedTrainerCurrentUser()) {
+                  <p>If checked, this training will immediately broadcast as LIVE NOW for the selected Department and activate Join Live for its learners.</p>
+                } @else {
+                  <p>Disabled because another instructor is selected — only {{ newSessionTrainer }} can start the live class once scheduled.</p>
+                }
               </div>
             </label>
           </div>
@@ -3221,10 +3250,16 @@
           <button type="button" class="btn-danger" (click)="deleteSession(s.id)">Delete Session</button>
           <div class="footer-right-buttons">
             @if (s.status === 'today') {
-              <button type="button" class="btn-warning" (click)="endTrainingSession(s); closeSessionPopover()">⏹ End Live Session</button>
+              @if (canStartCohortSession(s)) {
+                <button type="button" class="btn-warning" (click)="endTrainingSession(s); closeSessionPopover()">⏹ End Live Session</button>
+              }
               <a [href]="s.meetingUrl" target="_blank" rel="noopener noreferrer" class="btn-primary">🔴 Join Live Room ↗</a>
             } @else if (s.status === 'upcoming') {
-              <button type="button" class="btn-primary" (click)="startTrainingSession(s); closeSessionPopover()">🔴 Start Meeting / Go Live</button>
+              @if (canStartCohortSession(s)) {
+                <button type="button" class="btn-primary" (click)="startTrainingSession(s); closeSessionPopover()">🔴 Start Meeting / Go Live</button>
+              } @else {
+                <span class="sess-locked-hint">Only {{ s.trainer }} can start this class</span>
+              }
               <a [href]="s.meetingUrl" target="_blank" rel="noopener noreferrer" class="btn-secondary">Preview Room ↗</a>
             }
             <button type="button" class="btn-secondary" (click)="closeSessionPopover()">Close</button>
@@ -3751,7 +3786,7 @@
           <button type="button" class="btn-secondary" (click)="isClassNotStartedModalOpen.set(false)">
             Understood
           </button>
-          @if (isTeacherRole()) {
+          @if (canStartActiveSpotlight()) {
             <button type="button" class="btn-start-live-now" (click)="startLiveNowFromModal()">
               📡 Start Class Now
             </button>

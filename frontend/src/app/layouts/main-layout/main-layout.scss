@@ -164,7 +164,7 @@
     transition: color 180ms ease, transform 180ms ease;
   }
 
-  span:last-child {
+  span:first-of-type {
     min-width: 0;
     overflow-wrap: anywhere;
     white-space: nowrap;
@@ -870,5 +870,109 @@
   .profile-dropdown-menu {
     transition: none;
     animation: none;
+  }
+}
+
+/* Assessment Lock State in Sidebar & Dropdown */
+.sidebar-lock-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fde68a;
+
+  .lock-notice-title {
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    color: #fbbf24;
+  }
+
+  small {
+    font-size: 11px;
+    line-height: 1.4;
+    color: #cbd5e1;
+  }
+}
+
+.navigation a.nav-locked,
+.user-card-link.nav-locked,
+.dropdown-item.nav-locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+
+  &:hover {
+    background: transparent !important;
+    transform: none !important;
+    color: #94a3b8 !important;
+  }
+}
+
+.dropdown-item.nav-locked:hover {
+  color: #64748b !important;
+}
+
+.nav-lock-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.nav-pending-pill {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffffff;
+  background: #f59e0b;
+}
+
+.onboarding-stage-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+
+  .stage-strip-copy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    font-size: 13.5px;
+
+    strong {
+      font-weight: 800;
+      color: #1d4ed8;
+    }
+  }
+
+  .btn-stage-cta {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
   }
 }

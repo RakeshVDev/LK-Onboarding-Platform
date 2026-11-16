@@ -97,6 +97,31 @@
           </label>
         </div>
 
+        @if (role === 'teacher' && isSuperadmin) {
+          <div class="teacher-dept-picker">
+            <div class="dept-picker-header">
+              <strong>Assign Teacher Departments (1–4 concrete tracks)</strong>
+              <span class="dept-counter">{{ selectedCreateDeptIds().length }} / 4 selected</span>
+            </div>
+            <div class="dept-chip-grid">
+              @for (dept of assignableDepartments(); track dept.id) {
+                <label
+                  class="dept-check-chip"
+                  [class.selected]="selectedCreateDeptIds().includes(dept.id)"
+                  [class.disabled]="selectedCreateDeptIds().length >= 4 && !selectedCreateDeptIds().includes(dept.id)">
+                  <input
+                    type="checkbox"
+                    [checked]="selectedCreateDeptIds().includes(dept.id)"
+                    [disabled]="selectedCreateDeptIds().length >= 4 && !selectedCreateDeptIds().includes(dept.id)"
+                    (change)="toggleCreateDept(dept.id)" />
+                  <span>{{ dept.name }}</span>
+                </label>
+              }
+            </div>
+            <small class="field-hint">Teachers can schedule live classes and manage materials only for their assigned departments.</small>
+          </div>
+        }
+
         <div class="form-actions">
           <button
             class="secondary-button"
@@ -158,9 +183,10 @@
             <tr>
               <th>User</th>
               <th>Role</th>
-              <th>Status</th>
+              <th>Onboarding Stage</th>
+              <th>Account Status</th>
               <th>Created</th>
-              <th>Action</th>
+              <th>Onboarding &amp; Account Actions</th>
             </tr>
           </thead>
 
@@ -192,6 +218,32 @@
                 </td>
 
                 <td>
+                  <div class="onboarding-cell">
+                    <span
+                      class="stage-pill"
+                      [attr.data-stage]="user.role !== 'learner' ? 'staff' : (user.onboarding_stage || 'assessment_pending')">
+                      {{ onboardingStageLabel(user) }}
+                    </span>
+                    @if (user.role === 'learner') {
+                      <small class="stage-subtext">
+                        Assessments: {{ user.all_assessments_completed ? 'Done' : 'Pending' }}
+                        @if (user.selected_department_name) {
+                          · Track: {{ user.selected_department_name }}
+                        }
+                      </small>
+                    } @else if (user.role === 'teacher') {
+                      <small class="stage-subtext teacher-depts-line">
+                        @if (user.assigned_department_names?.length) {
+                          Depts ({{ user.assigned_department_names!.length }}/4): {{ user.assigned_department_names!.join(', ') }}
+                        } @else {
+                          <span class="unassigned-warn">No departments assigned yet (0/4)</span>
+                        }
+                      </small>
+                    }
+                  </div>
+                </td>
+
+                <td>
                   <span
                     class="status-pill"
                     [class.active]="user.is_active"
@@ -205,22 +257,57 @@
                 </td>
 
                 <td>
-                  @if (
-                    user.id !== currentUser()?.id &&
-                    (isSuperadmin ||
-                      (user.role === 'teacher' || user.role === 'learner'))
-                  ) {
-                    <button
-                      type="button"
-                      class="status-button"
-                      [class.activate-button]="!user.is_active"
-                      [class.deactivate-button]="user.is_active"
-                      (click)="toggleStatus(user)">
-                      {{ user.is_active ? 'Deactivate' : 'Activate' }}
-                    </button>
-                  } @else {
-                    <span class="muted-text">Restricted</span>
-                  }
+                  <div class="action-buttons-row">
+                    @if (user.role === 'learner') {
+                      @if (!user.is_activated_by_admin) {
+                        <button
+                          type="button"
+                          class="btn-onboarding-activate"
+                          [disabled]="!user.all_assessments_completed || !user.is_active || actionUserId() === user.id"
+                          [title]="user.all_assessments_completed ? 'Activate joinee department selection' : 'Waiting for learner to finish all assessments'"
+                          (click)="activateOnboarding(user)">
+                          {{ actionUserId() === user.id ? 'Activating...' : 'Activate' }}
+                        </button>
+                      } @else if (!user.department_approved) {
+                        <button
+                          type="button"
+                          class="btn-onboarding-approve"
+                          [disabled]="!user.selected_department_id || actionUserId() === user.id"
+                          [title]="user.selected_department_id ? 'Approve department selection & unlock platform' : 'Waiting for joinee to pick department'"
+                          (click)="approveDepartment(user)">
+                          {{ actionUserId() === user.id ? 'Approving...' : 'Approve Department' }}
+                        </button>
+                      } @else {
+                        <span class="unlocked-pill">✓ Unlocked</span>
+                      }
+                    }
+
+                    @if (user.role === 'teacher' && isSuperadmin) {
+                      <button
+                        type="button"
+                        class="btn-assign-depts"
+                        (click)="openAssignDepartmentsModal(user)">
+                        Assign Depts ({{ user.assigned_department_ids?.length || 0 }}/4)
+                      </button>
+                    }
+
+                    @if (
+                      user.id !== currentUser()?.id &&
+                      (isSuperadmin ||
+                        (user.role === 'teacher' || user.role === 'learner'))
+                    ) {
+                      <button
+                        type="button"
+                        class="status-button"
+                        [class.activate-button]="!user.is_active"
+                        [class.deactivate-button]="user.is_active"
+                        (click)="toggleStatus(user)">
+                        {{ user.is_active ? 'Disable Login' : 'Enable Login' }}
+                      </button>
+                    } @else if (user.role !== 'learner') {
+                      <span class="muted-text">Restricted</span>
+                    }
+                  </div>
                 </td>
               </tr>
             }
@@ -235,4 +322,52 @@
     Account permissions are enforced by the Identity API. Deactivated accounts
     cannot sign in.
   </p>
+
+  @if (assigningTeacher(); as teacherUser) {
+    <div class="dept-modal-backdrop" (click)="closeAssignDepartmentsModal()">
+      <div class="dept-modal-card" (click)="$event.stopPropagation()">
+        <div class="dept-modal-head">
+          <div>
+            <h3>Assign Teacher Departments</h3>
+            <p>Select 1 to 4 concrete departments for <strong>{{ teacherUser.full_name }}</strong>.</p>
+          </div>
+          <button type="button" class="btn-modal-close" (click)="closeAssignDepartmentsModal()">×</button>
+        </div>
+
+        <div class="dept-picker-header">
+          <span>Available Specialization Tracks</span>
+          <span class="dept-counter">{{ selectedModalDeptIds().length }} / 4 selected</span>
+        </div>
+
+        <div class="dept-chip-grid">
+          @for (dept of assignableDepartments(); track dept.id) {
+            <label
+              class="dept-check-chip"
+              [class.selected]="selectedModalDeptIds().includes(dept.id)"
+              [class.disabled]="selectedModalDeptIds().length >= 4 && !selectedModalDeptIds().includes(dept.id)">
+              <input
+                type="checkbox"
+                [checked]="selectedModalDeptIds().includes(dept.id)"
+                [disabled]="selectedModalDeptIds().length >= 4 && !selectedModalDeptIds().includes(dept.id)"
+                (change)="toggleModalDept(dept.id)" />
+              <span>{{ dept.name }}</span>
+            </label>
+          }
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="secondary-button" (click)="closeAssignDepartmentsModal()">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="primary-button"
+            [disabled]="savingDepartments() || selectedModalDeptIds().length < 1 || selectedModalDeptIds().length > 4"
+            (click)="saveTeacherDepartments()">
+            {{ savingDepartments() ? 'Saving...' : 'Save Assignments' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
 </section>

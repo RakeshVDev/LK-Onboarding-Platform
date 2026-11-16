@@ -1,0 +1,125 @@
+<div class="department-selection-page">
+  <header class="selection-hero">
+    <div>
+      <span class="eyebrow">SEQUENTIAL ONBOARDING · DEPARTMENT SELECTION</span>
+      <h1>Select Your Engineering Department</h1>
+      <p>
+        Choose your primary specialization track. Once an Administrator approves your
+        selection, your department dashboard, courses, and cohorts will unlock.
+      </p>
+    </div>
+
+    <div class="hero-actions">
+      <button class="btn-refresh" type="button" (click)="loadData(true)" [disabled]="loading()">
+        Refresh Approval Status
+      </button>
+      <a class="btn-back" routerLink="/my-assessments">
+        Back to Assessments
+      </a>
+    </div>
+  </header>
+
+  @if (permissions(); as p) {
+    <div class="stepper" aria-label="Onboarding Steps">
+      <div class="step step-done">
+        <span class="step-dot">1</span>
+        <div>
+          <strong>Assessments Completed</strong>
+          <small>Evaluations finalized</small>
+        </div>
+      </div>
+      <div class="step" [class.step-done]="p.is_activated_by_admin">
+        <span class="step-dot">2</span>
+        <div>
+          <strong>Admin Activated</strong>
+          <small>{{ p.is_activated_by_admin ? 'Approved for selection' : 'Awaiting admin activation' }}</small>
+        </div>
+      </div>
+      <div class="step" [class.step-active]="p.onboarding_stage === 'department_selection'" [class.step-done]="p.selected_department_id">
+        <span class="step-dot">3</span>
+        <div>
+          <strong>Department Chosen</strong>
+          <small>{{ p.selected_department_name || 'Pick specialization track' }}</small>
+        </div>
+      </div>
+      <div class="step" [class.step-active]="p.onboarding_stage === 'department_pending_approval'" [class.step-done]="p.department_approved">
+        <span class="step-dot">4</span>
+        <div>
+          <strong>Final Admin Approval</strong>
+          <small>{{ p.department_approved ? 'Platform unlocked' : 'Pending approval' }}</small>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (errorMessage()) {
+    <div class="banner banner-error" role="alert">{{ errorMessage() }}</div>
+  }
+
+  @if (successMessage()) {
+    <div class="banner banner-success" role="status">{{ successMessage() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="state-card">
+      <strong>Loading available departments...</strong>
+      <p>Checking your activation status and active tracks.</p>
+    </div>
+  } @else if (!isActivated()) {
+    <div class="state-card">
+      <strong>Awaiting Administrator Activation</strong>
+      <p>
+        Your onboarding assessments are complete, but an Administrator has not activated
+        department selection for your account yet.
+      </p>
+    </div>
+  } @else {
+    @if (isPendingApproval() && permissions(); as p) {
+      <div class="banner banner-pending" role="status">
+        <div>
+          <strong>Submitted for Review: {{ p.selected_department_name || p.selected_department_id }}</strong>
+          <p>
+            An Administrator or Super Admin will review and approve your department choice.
+            Dashboard, Courses, and Cohorts remain locked until final approval.
+          </p>
+        </div>
+      </div>
+    }
+
+    <div class="dept-grid">
+      @for (dept of selectableDepartments(); track dept.id) {
+        <button
+          type="button"
+          class="dept-card"
+          [class.selected]="selectedDeptId() === dept.id"
+          (click)="chooseDepartment(dept.id)">
+          <div class="dept-card-header">
+            <strong>{{ dept.name }}</strong>
+            <span class="radio-indicator">{{ selectedDeptId() === dept.id ? '✓ Selected' : 'Select' }}</span>
+          </div>
+          <p>{{ dept.description || 'Core specialization track and curriculum.' }}</p>
+        </button>
+      }
+    </div>
+
+    <div class="submission-box">
+      <label for="dept-notes">Optional Preference Notes for Reviewer</label>
+      <textarea
+        id="dept-notes"
+        rows="3"
+        [(ngModel)]="notes"
+        placeholder="Share relevant background or reason for selecting this department..."></textarea>
+
+      <div class="submit-row">
+        <button
+          class="btn-submit"
+          type="button"
+          [disabled]="!selectedDeptId() || submitting()"
+          (click)="submitChoice()">
+          {{ submitting() ? 'Submitting Choice...' : (isPendingApproval() ? 'Update Department Choice' : 'Submit Department Choice') }}
+        </button>
+      </div>
+    </div>
+  }
+</div>
+

@@ -99,6 +99,20 @@
       </div>
     }
 
+    <!-- Cross-Assessment Competency Radar Overview -->
+    @if (competencyRadarAxes().length > 0 && competencyRadarSeries().length > 0) {
+      <section style="margin-bottom: 24px;">
+        <app-assessment-radar-chart
+          title="Holistic Competency Profile"
+          subtitle="Aggregated dimension averages across all your completed assessments vs. 75% readiness benchmark."
+          [axes]="competencyRadarAxes()"
+          [series]="competencyRadarSeries()"
+          [allowBenchmarkToggle]="true"
+          [height]="340">
+        </app-assessment-radar-chart>
+      </section>
+    }
+
     <!-- Report Cards Section -->
     @if (completedResults.length > 0) {
       <div class="section-title">

@@ -1907,3 +1907,119 @@
     }
   }
 }
+
+/* Department-Gated Live Classes Preview Strip */
+.live-classes-preview-strip {
+  margin-top: 18px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+
+  .live-strip-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+
+    h3, h4 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 750;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .live-link-btn {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #0284c7;
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      border: 1px solid #bae6fd;
+      transition: all 0.15s ease;
+
+      &:hover {
+        background: #0284c7;
+        color: #ffffff;
+      }
+    }
+  }
+
+  .live-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+
+  .live-mini-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #0284c7;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    &.is-live {
+      border-left-color: #ef4444;
+      background: #fef2f2;
+    }
+
+    .live-mini-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #0369a1;
+    }
+
+    strong {
+      font-size: 13.5px;
+      color: #0f172a;
+    }
+
+    .live-mini-meta {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .live-mini-teacher {
+      font-size: 12px;
+      color: #334155;
+
+      strong {
+        font-size: 12px;
+        color: #0f172a;
+      }
+    }
+
+    .btn-join-live-mini {
+      margin-top: 4px;
+      align-self: flex-start;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: none;
+      background: #dc2626;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+
+      &:hover {
+        background: #b91c1c;
+      }
+    }
+  }
+}

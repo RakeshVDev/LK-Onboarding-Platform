@@ -116,6 +116,14 @@ export class Courses implements OnInit {
     return this.myDeptRequest()?.department_name || '';
   }
 
+  get isTeacher(): boolean {
+    return this.user()?.role === 'teacher';
+  }
+
+  get hasAssignedDepartments(): boolean {
+    return !this.isTeacher || this.departments().length > 0;
+  }
+
   getDepartmentName(deptId: number): string {
     const dept = this.departments().find(d => d.id === deptId);
     return dept ? dept.name : `Department #${deptId}`;
@@ -126,6 +134,12 @@ export class Courses implements OnInit {
   // ----------------------------------
 
   openCreateModal(): void {
+    if (!this.hasAssignedDepartments) {
+      this.errorMessage.set(
+        'No departments have been assigned to your teacher account yet. Ask a SuperAdmin to assign 1–4 departments.'
+      );
+      return;
+    }
     this.newCourseTitle = '';
     this.newCourseDesc = '';
     this.newCoursePublished = true;

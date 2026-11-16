@@ -87,6 +87,10 @@
             </div>
 
             <div class="top-meta-right">
+              <span
+                [class]="template.assessment_tag === 'Pre-Assessment' ? 'csm-badge-pre' : 'csm-badge-assessment'">
+                {{ template.assessment_tag || 'Assessment' }}
+              </span>
               <span class="type-pill">
                 {{ getTypeLabel(template.assessment_type) }}
               </span>
@@ -149,19 +153,21 @@
           </div>
 
           <div class="card-actions">
-            <button
-              type="button"
-              class="btn-outline btn-edit"
-              (click)="editAssessment(template.id)">
-              ⚙ Edit
-            </button>
+            @if (canEditTemplate(template)) {
+              <button
+                type="button"
+                class="btn-outline btn-edit"
+                (click)="editAssessment(template.id)">
+                ⚙ Edit
+              </button>
 
-            <button
-              type="button"
-              class="btn-outline btn-questions"
-              (click)="manageQuestions(template.id)">
-              📑 Questions
-            </button>
+              <button
+                type="button"
+                class="btn-outline btn-questions"
+                (click)="manageQuestions(template.id)">
+                📑 Questions
+              </button>
+            }
 
             <button
               type="button"
@@ -170,14 +176,16 @@
               👁 Preview
             </button>
 
-            <button
-              type="button"
-              class="btn-outline"
-              [class.deactivate]="template.is_active"
-              [class.activate]="!template.is_active"
-              (click)="toggleStatus(template)">
-              {{ template.is_active ? 'Deactivate' : 'Activate' }}
-            </button>
+            @if (canEditTemplate(template)) {
+              <button
+                type="button"
+                class="btn-outline"
+                [class.deactivate]="template.is_active"
+                [class.activate]="!template.is_active"
+                (click)="toggleStatus(template)">
+                {{ template.is_active ? 'Deactivate' : 'Activate' }}
+              </button>
+            }
           </div>
 
         </div>

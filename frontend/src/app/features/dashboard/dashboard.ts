@@ -25,6 +25,7 @@ import {
 } from '../assessments/services/assessment';
 import { UserManagementService, ManagedUser } from '../../core/services/user-management.service';
 import { LearningService, Department, StudentDepartmentRequest } from '../../core/services/learning.service';
+import { LiveClassesService, LiveClassSession } from '../../core/services/live-classes.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -38,6 +39,7 @@ export class Dashboard implements OnInit {
   private readonly assessmentService = inject(AssessmentService);
   private readonly userService = inject(UserManagementService);
   private readonly learningService = inject(LearningService);
+  private readonly liveClassesService = inject(LiveClassesService);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -138,20 +140,18 @@ export class Dashboard implements OnInit {
   readonly trackSubmitSuccess = signal('');
   readonly trackSubmitError = signal('');
 
+  // Department-gated Live Classes schedule preview
+  readonly upcomingLiveClasses = signal<LiveClassSession[]>([]);
+
   readonly hasCompletedInitialAssessment = computed(() => {
-    return this.assignedAssessments().some(r => {
-      if (r.status !== 'COMPLETED') return false;
-      const t = (r.assessment_type || '').toLowerCase();
-      const n = (r.name || '').toLowerCase();
-      return (
-        t.includes('psychometric') ||
-        n.includes('psychometric') ||
-        t.includes('logical') ||
-        n.includes('logical') ||
-        t.includes('grammar') ||
-        n.includes('grammar')
-      );
-    });
+    const stats = this.assignedStats();
+    const total = this.totalAssignedCount();
+    if (total === 0) return true;
+    return (
+      stats.not_started_count === 0 &&
+      stats.in_progress_count === 0 &&
+      this.completedAssignedCount() > 0
+    );
   });
 
   // Time-based greeting
@@ -269,7 +269,7 @@ export class Dashboard implements OnInit {
   }
 
   private async loadRoleSpecificData(role: UserRole): Promise<void> {
-    const tasks: Promise<any>[] = [this.loadLearningCounts()];
+    const tasks: Promise<any>[] = [this.loadLearningCounts(), this.loadLiveClasses()];
 
     if (role === 'learner') {
       tasks.push(this.loadAssignedAssessments(false), this.loadLearnerDepartmentData());
@@ -282,6 +282,19 @@ export class Dashboard implements OnInit {
     await Promise.allSettled(tasks);
   }
 
+  private async loadLiveClasses(): Promise<void> {
+    try {
+      const res = await firstValueFrom(this.liveClassesService.listSessions());
+      const sessions = Array.isArray(res?.sessions) ? res.sessions : [];
+      this.upcomingLiveClasses.set(
+        sessions.filter(s => s.status !== 'completed' && s.status !== 'cancelled').slice(0, 3)
+      );
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.warn('Could not load live classes preview:', err);
+    }
+  }
+
   private async loadLearnerDepartmentData(): Promise<void> {
     try {
       const [req, depts] = await Promise.all([
@@ -289,7 +302,11 @@ export class Dashboard implements OnInit {
         this.learningService.getDepartments().catch(() => [])
       ]);
       this.myDeptRequest.set(req);
-      const activeDepts = depts.filter(d => d.is_active);
+      const activeDepts = depts.filter(d => {
+        if (!d.is_active) return false;
+        const norm = (d.name || '').trim().toLowerCase();
+        return norm !== 'all / common' && norm !== 'all/common' && norm !== 'common';
+      });
       this.availableDepartments.set(activeDepts);
       if (req?.department_id) {
         this.selectedTrackDeptId = req.department_id;
@@ -503,6 +520,22 @@ export class Dashboard implements OnInit {
       case 'teacher': return 'Instructor / Faculty';
       case 'learner': return 'New Joinee / Learner';
       default: return 'User';
+    }
+  }
+
+  async joinLiveClass(cls: { id: number; status: string; meeting_url?: string }, event?: Event): Promise<void> {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (cls.status !== 'live') {
+      return;
+    }
+    try {
+      const res = await firstValueFrom(this.liveClassesService.joinSession(cls.id));
+      if (res?.meeting_url) {
+        window.open(res.meeting_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      await this.router.navigateByUrl('/live-classes');
     }
   }
 

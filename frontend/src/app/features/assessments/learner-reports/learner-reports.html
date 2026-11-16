@@ -1,0 +1,63 @@
+<div class="learner-reports-page">
+  <header class="page-header">
+    <div>
+      <span class="eyebrow">DIAGNOSTIC INTELLIGENCE</span>
+      <h1>My Assessment Reports</h1>
+      <p>
+        Access individual capability profiles, psychometric &amp; technical breakdowns,
+        and generated report cards for each completed assessment.
+      </p>
+    </div>
+
+    <a class="btn-secondary" routerLink="/my-results">
+      View Score Summary &rarr;
+    </a>
+  </header>
+
+  @if (errorMessage()) {
+    <div class="error-banner" role="alert">{{ errorMessage() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="state-card">
+      <strong>Loading your reports...</strong>
+      <p>Retrieving completed assessment evaluations.</p>
+    </div>
+  } @else if (completedReports().length === 0) {
+    <div class="state-card">
+      <strong>No Diagnostic Reports Yet</strong>
+      <p>Complete your assigned onboarding assessments to generate interactive diagnostic report cards.</p>
+      <button class="btn-primary" type="button" (click)="goToAssessments()">
+        Go to Assessments
+      </button>
+    </div>
+  } @else {
+    <div class="reports-grid">
+      @for (report of completedReports(); track report.session_id) {
+        <article class="report-card">
+          <div class="report-card-top">
+            <span class="type-chip">{{ typeLabel(report.assessment_type) }}</span>
+            <span class="score-pill">{{ report.overall_percentage }}%</span>
+          </div>
+
+          <h3>{{ report.template_name }}</h3>
+
+          <div class="report-meta">
+            <span>Score: {{ report.total_score }} / {{ report.max_score }}</span>
+            @if (report.completed_at) {
+              <span>Completed {{ report.completed_at | date: 'mediumDate' }}</span>
+            }
+          </div>
+
+          <button
+            class="btn-primary"
+            type="button"
+            (click)="openReport(report.session_id)">
+            Open Full Report Card &rarr;
+          </button>
+        </article>
+      }
+    </div>
+  }
+</div>
+

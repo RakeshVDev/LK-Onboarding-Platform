@@ -261,94 +261,61 @@
               <a routerLink="/cohorts" class="btn-track-primary" style="margin-left: 10px;">
                 <span>Open My Cohort Workspace →</span>
               </a>
+              <a routerLink="/live-classes" class="btn-track-primary" style="margin-left: 10px;">
+                <span>Open Department Live Classes →</span>
+              </a>
             </div>
           </div>
         </div>
+
+        @if (upcomingLiveClasses().length > 0) {
+          <div class="live-classes-preview-strip">
+            <div class="live-strip-header">
+              <h4>📡 Upcoming Live Classes ({{ myDeptRequest()?.department_name }})</h4>
+              <a routerLink="/live-classes" class="live-link-btn">View All Live Sessions &rarr;</a>
+            </div>
+            <div class="live-mini-grid">
+              @for (cls of upcomingLiveClasses(); track cls.id) {
+                <div class="live-mini-card" [class.is-live]="cls.status === 'live'">
+                  <div class="live-mini-top">
+                    <span>{{ cls.status === 'live' ? '🔴 LIVE NOW' : '📅 SCHEDULED' }}</span>
+                    <span>{{ cls.platform }}</span>
+                  </div>
+                  <strong>{{ cls.title }}</strong>
+                  <span class="live-mini-meta">{{ cls.scheduled_start | date:'medium' }} · {{ cls.duration_minutes }}m</span>
+                  <span class="live-mini-teacher">Instructor: <strong>{{ cls.instructor_name || 'Assigned Host' }}</strong></span>
+                  @if (cls.status === 'live') {
+                    <button type="button" class="btn-join-live-mini" (click)="joinLiveClass(cls, $event)">
+                      Join Live →
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        }
       }
 
-      <!-- Case 2: Pending Approval -->
-      @else if (myDeptRequest()?.status === 'pending') {
+      <!-- Case 2: Pending Approval or Selection -->
+      @else {
         <div class="track-status-banner track-pending">
           <div class="status-icon-box">⏳</div>
           <div class="status-content">
-            <span class="track-eyebrow">PENDING INSTRUCTOR / ADMIN APPROVAL</span>
-            <h3>Requested Track: {{ myDeptRequest()?.department_name }}</h3>
+            <span class="track-eyebrow">SEQUENTIAL ONBOARDING GATE</span>
+            <h3>
+              {{ myDeptRequest()?.department_name
+                ? 'Requested Track: ' + myDeptRequest()?.department_name + ' (Pending Approval)'
+                : 'Department Allocation Pending Approval' }}
+            </h3>
             <p>
-              Your request to join the <strong>{{ myDeptRequest()?.department_name }}</strong> department has been submitted.
-              Your instructor or superadmin will review your preference. Courses and study materials will unlock as soon as your track is approved.
+              Platform courses and cohorts remain locked until an Administrator activates your onboarding
+              step and approves your department selection.
             </p>
-            @if (myDeptRequest()?.notes) {
-              <div class="notes-quote">"{{ myDeptRequest()?.notes }}"</div>
-            }
-          </div>
-        </div>
-      }
-
-      <!-- Case 3: Initial Assessment Done & Need to Choose Tech Stack -->
-      @else if (hasCompletedInitialAssessment()) {
-        <div class="track-selection-banner">
-          <div class="track-header-row">
-            <div>
-              <span class="track-eyebrow">MILESTONE UNLOCKED: CHOOSE YOUR ENGINEERING SPECIALIZATION</span>
-              <h3>Which tech stack are you most interested in and comfortable with?</h3>
-              <p>
-                Congratulations on completing your initial assessment! Select your desired tech track below.
-                Your request will be sent to the instructor and superadmin panel for final onboarding approval.
-              </p>
+            <div class="approved-actions">
+              <a routerLink="/department-selection" class="btn-track-primary">
+                <span>Open Department Selection &rarr;</span>
+              </a>
             </div>
-          </div>
-
-          <!-- Tech Stack Selection Chips -->
-          <div class="tech-tracks-grid">
-            @for (dept of availableDepartments(); track dept.id) {
-              <button
-                type="button"
-                class="track-chip-card"
-                [class.selected]="selectedTrackDeptId === dept.id"
-                (click)="selectedTrackDeptId = dept.id">
-                <span class="track-icon">{{ getTrackIcon(dept.name) }}</span>
-                <div class="track-info">
-                  <strong>{{ dept.name }}</strong>
-                  <small>{{ dept.description || 'Specialized Track' }}</small>
-                </div>
-                <span class="chip-radio">{{ selectedTrackDeptId === dept.id ? '●' : '○' }}</span>
-              </button>
-            }
-          </div>
-
-          <!-- Notes Input -->
-          <div class="track-notes-group">
-            <label for="trackNotes">Candidate Statement / Prior Comfort Level (Optional):</label>
-            <input
-              id="trackNotes"
-              type="text"
-              [(ngModel)]="trackNotes"
-              placeholder="e.g. I have built projects in Python & FastAPI and would love to join the Python backend track..." />
-          </div>
-
-          <div class="track-submit-row">
-            <button
-              type="button"
-              class="btn-submit-track"
-              [disabled]="!selectedTrackDeptId || submittingTrack()"
-              (click)="submitTrackPreference(selectedTrackDeptId)">
-              <span>{{ submittingTrack() ? 'Submitting Request...' : 'Submit Tech Stack Preference for Approval →' }}</span>
-            </button>
-          </div>
-        </div>
-      }
-
-      <!-- Case 4: Initial Assessment Not Yet Completed -->
-      @else {
-        <div class="track-status-banner track-locked">
-          <div class="status-icon-box">🔒</div>
-          <div class="status-content">
-            <span class="track-eyebrow">STEP 3 PRE-REQUISITE</span>
-            <h3>Tech Stack &amp; Department Selection (Locked)</h3>
-            <p>
-              Complete at least one initial evaluation (Psychometric, Logical Reasoning, or English Grammar) below to unlock your
-              Tech Stack Preference selector. Once approved by your instructor, your department courses will be unlocked.
-            </p>
           </div>
         </div>
       }
@@ -697,7 +664,46 @@
             <span>View Cohorts &rarr;</span>
           </a>
         </article>
+
+        <article class="module-card">
+          <div class="module-top">
+            <span class="module-icon">📡</span>
+            <span class="module-badge">Department Gated</span>
+          </div>
+          <h3>Live Video Classes</h3>
+          <p>Schedule and launch department-restricted live sessions visible strictly to approved track learners.</p>
+          <a routerLink="/live-classes" class="btn-module-action">
+            <span>Open Live Classes &rarr;</span>
+          </a>
+        </article>
       </div>
+
+      @if (upcomingLiveClasses().length > 0) {
+        <div class="live-classes-preview-strip">
+          <div class="live-strip-header">
+            <h4>📡 Upcoming Department Live Sessions</h4>
+            <a routerLink="/live-classes" class="live-link-btn">Manage Sessions &rarr;</a>
+          </div>
+          <div class="live-mini-grid">
+            @for (cls of upcomingLiveClasses(); track cls.id) {
+              <div class="live-mini-card" [class.is-live]="cls.status === 'live'">
+                <div class="live-mini-top">
+                  <span>{{ cls.status === 'live' ? '🔴 LIVE NOW' : '📅 SCHEDULED' }}</span>
+                  <span>{{ cls.department_name || 'Department #' + cls.department_id }}</span>
+                </div>
+                <strong>{{ cls.title }}</strong>
+                <span class="live-mini-meta">{{ cls.scheduled_start | date:'medium' }} · {{ cls.platform }}</span>
+                <span class="live-mini-teacher">Instructor: <strong>{{ cls.instructor_name || 'Assigned Host' }}</strong></span>
+                @if (cls.status === 'live') {
+                  <button type="button" class="btn-join-live-mini" (click)="joinLiveClass(cls, $event)">
+                    Join Live →
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
     </section>
 
   </div>
@@ -876,6 +882,15 @@
           <span class="shortcut-arrow">&rarr;</span>
         </a>
 
+        <a routerLink="/live-classes" class="shortcut-card">
+          <div class="shortcut-icon">📡</div>
+          <div>
+            <h4>Department Live Classes</h4>
+            <p>Schedule and govern department-isolated live video sessions.</p>
+          </div>
+          <span class="shortcut-arrow">&rarr;</span>
+        </a>
+
         <a routerLink="/profile" class="shortcut-card">
           <div class="shortcut-icon">🛡️</div>
           <div>
@@ -885,6 +900,33 @@
           <span class="shortcut-arrow">&rarr;</span>
         </a>
       </div>
+
+      @if (upcomingLiveClasses().length > 0) {
+        <div class="live-classes-preview-strip">
+          <div class="live-strip-header">
+            <h4>📡 Scheduled Platform Live Classes</h4>
+            <a routerLink="/live-classes" class="live-link-btn">Open Live Scheduler &rarr;</a>
+          </div>
+          <div class="live-mini-grid">
+            @for (cls of upcomingLiveClasses(); track cls.id) {
+              <div class="live-mini-card" [class.is-live]="cls.status === 'live'">
+                <div class="live-mini-top">
+                  <span>{{ cls.status === 'live' ? '🔴 LIVE NOW' : '📅 SCHEDULED' }}</span>
+                  <span>{{ cls.department_name || 'Department #' + cls.department_id }}</span>
+                </div>
+                <strong>{{ cls.title }}</strong>
+                <span class="live-mini-meta">{{ cls.scheduled_start | date:'medium' }} · {{ cls.platform }}</span>
+                <span class="live-mini-teacher">Instructor: <strong>{{ cls.instructor_name || 'Assigned Host' }}</strong></span>
+                @if (cls.status === 'live') {
+                  <button type="button" class="btn-join-live-mini" (click)="joinLiveClass(cls, $event)">
+                    Join Live →
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
     </section>
 
   </div>

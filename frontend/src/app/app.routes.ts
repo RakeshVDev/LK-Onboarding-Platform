@@ -43,16 +43,24 @@ export const routes: Routes = [
       // Dashboard
       {
         path: 'dashboard',
-        data: { allowIncompleteAssessment: true },
+        data: { navKey: 'dashboard' },
         component: Dashboard
+      },
+
+      // Department Selection (Sequential Onboarding Stage 4-5)
+      {
+        path: 'department-selection',
+        data: { navKey: 'department_selection' },
+        canActivate: [roleGuard(['learner'])],
+        loadComponent: () =>
+          import('./features/onboarding/department-selection/department-selection')
+            .then(m => m.DepartmentSelection)
       },
 
       // Profile
       {
         path: 'profile',
-        data: {
-          allowIncompleteAssessment: true
-        },
+        data: { navKey: 'profile' },
         loadComponent: () =>
           import('./features/profile/profile')
             .then(m => m.Profile)
@@ -61,6 +69,7 @@ export const routes: Routes = [
       // User Management
       {
         path: 'users',
+        data: { navKey: 'users' },
         canActivate: [roleGuard(['superadmin', 'admin'])],
         loadComponent: () =>
           import('./features/users/users')
@@ -70,6 +79,7 @@ export const routes: Routes = [
       // Departments
       {
         path: 'departments',
+        data: { navKey: 'departments' },
         canActivate: [roleGuard(['superadmin', 'admin', 'teacher'])],
         loadComponent: () =>
           import('./features/departments/departments')
@@ -79,6 +89,7 @@ export const routes: Routes = [
       // Courses
       {
         path: 'courses',
+        data: { navKey: 'courses' },
         canActivate: [
           roleGuard(['superadmin', 'admin', 'teacher', 'learner'])
         ],
@@ -90,12 +101,25 @@ export const routes: Routes = [
       // Cohorts
       {
         path: 'cohorts',
+        data: { navKey: 'cohorts' },
         canActivate: [
           roleGuard(['superadmin', 'admin', 'teacher', 'learner'])
         ],
         loadComponent: () =>
           import('./features/cohorts/cohorts')
             .then(m => m.Cohorts)
+      },
+
+      // Department-Gated Live Classes
+      {
+        path: 'live-classes',
+        data: { navKey: 'live_classes' },
+        canActivate: [
+          roleGuard(['superadmin', 'admin', 'teacher', 'learner'])
+        ],
+        loadComponent: () =>
+          import('./features/live-classes')
+            .then(m => m.LiveClassesPage)
       },
 
       // Assessment Management - Admin and Teacher only
@@ -135,7 +159,8 @@ export const routes: Routes = [
       {
         path: 'my-assessments',
         data: {
-          allowIncompleteAssessment: true
+          allowIncompleteAssessment: true,
+          navKey: 'assessment'
         },
         canActivate: [
           roleGuard(['learner'])
@@ -145,11 +170,12 @@ export const routes: Routes = [
             .then(m => m.LearnerAssessments)
       },
 
-      // Learner Assessment Results & Report Cards
+      // Learner Assessment Results
       {
         path: 'my-results',
         data: {
-          allowIncompleteAssessment: true
+          allowIncompleteAssessment: true,
+          navKey: 'result'
         },
         canActivate: [
           roleGuard(['learner', 'admin', 'teacher', 'superadmin'])
@@ -164,9 +190,25 @@ export const routes: Routes = [
         pathMatch: 'full'
       },
 
+      // Learner Diagnostic Reports Hub
+      {
+        path: 'my-reports',
+        data: {
+          allowIncompleteAssessment: true,
+          navKey: 'report'
+        },
+        canActivate: [
+          roleGuard(['learner', 'admin', 'teacher', 'superadmin'])
+        ],
+        loadComponent: () =>
+          import('./features/assessments/learner-reports/learner-reports')
+            .then(m => m.LearnerReports)
+      },
+
       // Admin & Teacher: Learner Results Panel
       {
         path: 'assessment-results',
+        data: { navKey: 'assessments' },
         canActivate: [
           roleGuard(['admin', 'teacher', 'superadmin'])
         ],
@@ -179,7 +221,8 @@ export const routes: Routes = [
       {
         path: 'assessments/take/:sessionId',
         data: {
-          allowIncompleteAssessment: true
+          allowIncompleteAssessment: true,
+          navKey: 'assessment'
         },
         canActivate: [
           roleGuard(['learner'])
@@ -193,7 +236,8 @@ export const routes: Routes = [
       {
         path: 'assessments/results/:sessionId',
         data: {
-          allowIncompleteAssessment: true
+          allowIncompleteAssessment: true,
+          navKey: 'result'
         },
         canActivate: [
           roleGuard(['learner', 'admin', 'teacher', 'superadmin'])
@@ -207,7 +251,8 @@ export const routes: Routes = [
       {
         path: 'assessments/report/:sessionId',
         data: {
-          allowIncompleteAssessment: true
+          allowIncompleteAssessment: true,
+          navKey: 'report'
         },
         canActivate: [
           roleGuard(['learner', 'admin', 'teacher', 'superadmin'])

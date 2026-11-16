@@ -101,6 +101,7 @@ export interface TrainingSession {
   title: string;
   module: string;
   trainer: string;
+  trainerId?: number;
   date: string;
   time: string;
   duration: string;
@@ -4344,6 +4345,7 @@ export class CohortService {
     title: string;
     module: string;
     trainer: string;
+    trainerId?: number;
     date: string;
     time: string;
     duration: string;
@@ -4361,6 +4363,7 @@ export class CohortService {
       title: session.title,
       module: session.module,
       trainer: session.trainer || this.getCurrentUser().full_name,
+      trainerId: session.trainerId,
       date: session.date,
       time: session.time,
       duration: session.duration || '2 Hours',
@@ -4399,9 +4402,10 @@ export class CohortService {
 
     const updatedSessions = current.sessions.map(s => {
       if (s.id === sessionId) {
+        const assignedTrainer = s.trainer && s.trainer !== 'Current User' ? s.trainer : teacherName;
         startedSession = {
           ...s,
-          trainer: teacherName,
+          trainer: assignedTrainer,
           status: 'today' as const
         };
         return startedSession;
@@ -4418,7 +4422,7 @@ export class CohortService {
       updatedDetails.activeLiveSessionTitle = (startedSession as TrainingSession).title;
       updatedDetails.activeLiveStartTime = (startedSession as TrainingSession).time;
       updatedDetails.activeLiveDuration = (startedSession as TrainingSession).duration;
-      updatedDetails.activeLiveTrainer = teacherName;
+      updatedDetails.activeLiveTrainer = (startedSession as TrainingSession).trainer || teacherName;
       updatedDetails.meetingLink = (startedSession as TrainingSession).meetingUrl;
     }
 

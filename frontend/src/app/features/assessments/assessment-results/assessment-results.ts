@@ -2,6 +2,7 @@ import {
   ChangeDetectorRef,
   Component,
   OnInit,
+  computed,
   inject,
   signal
 } from '@angular/core';
@@ -10,23 +11,34 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { AssessmentStatusService } from '../../../core/services/assessment-status.service';
 
 import {
   AssessmentService,
   AssessmentScoresResponse,
   AssessmentReport
 } from '../services/assessment';
+import {
+  AssessmentIntelligenceResponse,
+  AssessmentIntelligenceService
+} from '../services/assessment-intelligence.service';
+import {
+  AssessmentRadarChartComponent,
+  RadarChartSeries
+} from '../components/assessment-radar-chart/assessment-radar-chart';
 
 @Component({
   selector: 'app-assessment-results',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, AssessmentRadarChartComponent],
   templateUrl: './assessment-results.html',
   styleUrl: './assessment-results.scss'
 })
 export class AssessmentResults implements OnInit {
 
   private readonly api = inject(AssessmentService);
+  private readonly intelligenceService = inject(AssessmentIntelligenceService);
+  private readonly assessmentStatusService = inject(AssessmentStatusService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   public readonly authService = inject(AuthService);
@@ -35,10 +47,66 @@ export class AssessmentResults implements OnInit {
   sessionId = 0;
   readonly results = signal<AssessmentScoresResponse | null>(null);
   readonly report = signal<AssessmentReport | null>(null);
+  readonly intelligence = signal<AssessmentIntelligenceResponse | null>(null);
 
   readonly loading = signal(true);
   readonly reportLoading = signal(false);
   readonly errorMessage = signal('');
+  readonly allCompleted = signal(false);
+
+  readonly radarAxes = computed<string[]>(() => {
+    const intel = this.intelligence();
+    if (intel?.radar_profile?.length) {
+      return intel.radar_profile.map((p) => p.axis_label);
+    }
+    return (this.results()?.categories ?? []).map((c) =>
+      c.category.replaceAll('_', ' ').replace(/\b\w/g, (ch) => ch.toUpperCase())
+    );
+  });
+
+  readonly radarSeries = computed<RadarChartSeries[]>(() => {
+    const intel = this.intelligence();
+    if (intel?.radar_profile?.length) {
+      const series: RadarChartSeries[] = [
+        {
+          id: `session-${this.sessionId}`,
+          label: 'Your Score',
+          values: intel.radar_profile.map((p) => Number(p.candidate_score ?? 0)),
+          borderColor: '#4f46e5',
+          backgroundColor: 'rgba(79, 70, 229, 0.18)',
+          seriesType: 'candidate',
+          overallPercentage: Number(intel.overall_percentage ?? 0),
+        },
+      ];
+      if (intel.radar_profile.some((p) => typeof p.cohort_average === 'number')) {
+        series.push({
+          id: 'cohort-avg',
+          label: 'Cohort Average',
+          values: intel.radar_profile.map((p) => Number(p.cohort_average ?? 0)),
+          borderColor: '#0284c7',
+          backgroundColor: 'rgba(2, 132, 199, 0.10)',
+          dashed: true,
+          seriesType: 'cohort_average',
+        });
+      }
+      return series;
+    }
+
+    const cats = this.results()?.categories ?? [];
+    if (cats.length > 0) {
+      return [
+        {
+          id: `session-${this.sessionId}`,
+          label: 'Your Score',
+          values: cats.map((c) => Number(c.percentage ?? 0)),
+          borderColor: '#4f46e5',
+          backgroundColor: 'rgba(79, 70, 229, 0.18)',
+          seriesType: 'candidate',
+        },
+      ];
+    }
+    return [];
+  });
 
   ngOnInit(): void {
     this.sessionId = Number(
@@ -50,6 +118,15 @@ export class AssessmentResults implements OnInit {
       this.loading.set(false);
       this.cdr.detectChanges();
       return;
+    }
+
+    if (this.authService.hasRole('learner')) {
+      void this.assessmentStatusService.getStatus(true).then(s => {
+        this.allCompleted.set(s.status === 'completed' || s.all_completed === true);
+        this.cdr.detectChanges();
+      }).catch(() => {});
+    } else {
+      this.allCompleted.set(true);
     }
 
     this.loadResults();
@@ -65,7 +142,14 @@ export class AssessmentResults implements OnInit {
         this.loading.set(false);
         this.cdr.detectChanges();
 
-        // If report already exists, retrieve it without forcing regeneration.
+        // Retrieve existing report & intelligence radar preview silently if present
+        this.intelligenceService.getSessionIntelligence(this.sessionId).subscribe({
+          next: (intel) => {
+            this.intelligence.set(intel);
+            this.cdr.detectChanges();
+          },
+          error: () => {},
+        });
         this.api.getReport(this.sessionId).subscribe({
           next: report => {
             this.report.set(report);
@@ -169,6 +253,8 @@ export class AssessmentResults implements OnInit {
   goBack(): void {
     if (this.authService.hasRole('admin', 'teacher', 'superadmin')) {
       void this.router.navigate(['/assessment-results']);
+    } else if (!this.allCompleted()) {
+      void this.router.navigate(['/my-assessments']);
     } else {
       void this.router.navigate(['/my-results']);
     }

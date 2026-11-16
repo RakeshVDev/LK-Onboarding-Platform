@@ -15,6 +15,7 @@ import {
   AssessmentTemplate
 } from '../services/assessment';
 import { AssessmentPreviewModal } from '../components/assessment-preview-modal/assessment-preview-modal';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   selector: 'app-assessment-management',
@@ -26,6 +27,7 @@ import { AssessmentPreviewModal } from '../components/assessment-preview-modal/a
 export class AssessmentManagement implements OnInit {
 
   private readonly assessmentService = inject(AssessmentService);
+  private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
@@ -98,8 +100,12 @@ export class AssessmentManagement implements OnInit {
     switch (type) {
       case 'logical_reasoning': return 'Logical Reasoning';
       case 'english_grammar': return 'English Grammar';
+      case 'comprehension': return 'Reading Comprehension';
       case 'technical': return 'Technical Skills';
       case 'programming': return 'Programming & Coding';
+      case 'cognitive': return 'Cognitive Aptitude';
+      case 'composition': return 'Written Composition';
+      case 'algorithm': return 'Algorithms & Complexity';
       case 'psychometric': return 'Psychometric Profile';
       default: return 'General Assessment';
     }
@@ -109,8 +115,12 @@ export class AssessmentManagement implements OnInit {
     switch (type) {
       case 'logical_reasoning': return '⚡';
       case 'english_grammar': return '✍';
+      case 'comprehension': return '📖';
       case 'technical': return '💻';
       case 'programming': return '⌘';
+      case 'cognitive': return '🧠';
+      case 'composition': return '📝';
+      case 'algorithm': return '⚙';
       case 'psychometric': return '✦';
       default: return '▤';
     }
@@ -150,6 +160,15 @@ export class AssessmentManagement implements OnInit {
 
     });
 
+  }
+
+  canEditTemplate(template: AssessmentTemplate): boolean {
+    if (!this.authService.hasRole('teacher')) {
+      return true;
+    }
+    const snap = this.authService.getCurrentUserSnapshot();
+    const assigned = snap?.assigned_department_ids || [];
+    return template.department_id != null && assigned.includes(Number(template.department_id));
   }
 
   get activeCount(): number {

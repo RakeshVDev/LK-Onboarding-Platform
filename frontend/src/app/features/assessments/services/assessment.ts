@@ -3,6 +3,17 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 import { AssessmentStatusService } from '../../../core/services/assessment-status.service';
 
+export type AssessmentDomainType =
+  | 'psychometric'
+  | 'technical'
+  | 'english_grammar'
+  | 'logical_reasoning'
+  | 'programming'
+  | 'cognitive'
+  | 'composition'
+  | 'algorithm'
+  | 'comprehension';
+
 export interface AssessmentCategory {
   label: string;
   question_count: number;
@@ -13,7 +24,10 @@ export interface AssessmentTemplate {
   name: string;
   department_id?: number | null;
   department_name?: string | null;
-  assessment_type: "psychometric" | "technical" | "english_grammar" | "logical_reasoning" | "programming";
+  assessment_type: AssessmentDomainType;
+  assessment_tag?: 'Assessment' | 'Pre-Assessment' | string;
+  custom_tags?: string[];
+  reading_passage?: string | null;
   description: string | null;
   question_count: number;
   duration_minutes?: number;
@@ -32,7 +46,10 @@ export interface AssessmentTemplate {
 export interface CreateAssessmentTemplate {
   name: string;
   department_id?: number | null;
-  assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning" | "programming";
+  assessment_type?: AssessmentDomainType;
+  assessment_tag?: 'Assessment' | 'Pre-Assessment' | string;
+  custom_tags?: string[];
+  reading_passage?: string | null;
   description: string | null;
   question_count: number;
   category_config: Record<string, AssessmentCategory>;
@@ -45,7 +62,10 @@ export interface CreateAssessmentTemplate {
 export interface UpdateAssessmentTemplate {
   name?: string;
   department_id?: number | null;
-  assessment_type?: "psychometric" | "technical" | "english_grammar" | "logical_reasoning" | "programming";
+  assessment_type?: AssessmentDomainType;
+  assessment_tag?: 'Assessment' | 'Pre-Assessment' | string;
+  custom_tags?: string[];
+  reading_passage?: string | null;
   description?: string | null;
   question_count?: number;
   category_config?: Record<string, AssessmentCategory>;
@@ -107,11 +127,7 @@ export interface StudentAssignedAssessmentItem {
   name: string;
   description?: string | null;
   assessment_type:
-    | 'psychometric'
-    | 'technical'
-    | 'english_grammar'
-    | 'logical_reasoning'
-    | 'programming'
+    | AssessmentDomainType
     | string;
   category_label: string;
   question_count: number;
@@ -159,9 +175,11 @@ export interface AssessmentOption {
 export interface AssessmentQuestion {
   id: number;
   category: string;
+  question_set?: string | null;
   difficulty?: 'Easy' | 'Medium' | 'Hard' | string;
   question_type: string;
   question_text: string;
+  passage_text?: string | null;
   instructions?: string | null;
   options: AssessmentOption[];
   display_order: number;
@@ -179,6 +197,7 @@ export interface AssessmentStartResponse {
   expires_at?: string;
   template_name?: string;
   assessment_type?: string;
+  assigned_set?: string | null;
   questions: AssessmentQuestion[];
 }
 
@@ -192,6 +211,7 @@ export interface AssessmentResumeResponse {
   expires_at?: string;
   template_name?: string;
   assessment_type?: string;
+  assigned_set?: string | null;
   saved_answers?: Record<number, string>;
   marked_for_review?: number[];
   questions: AssessmentQuestion[];
@@ -275,7 +295,7 @@ export interface AssessmentReport {
 
 export interface UserAssessmentResultItem {
   session_id: number;
-  template_id: number;
+  template_id: number | null;
   template_name: string;
   assessment_type: string;
   learner_user_id: number;
@@ -293,12 +313,22 @@ export interface UserAssessmentResultItem {
   tab_switch_count?: number;
 }
 
+export interface AdminAssessmentResultItem extends Omit<UserAssessmentResultItem, 'session_id' | 'started_at'> {
+  session_id: number | null;
+  started_at?: string | null;
+  assignment_scope?: string | null;
+}
+
 export interface AdminAssessmentResultsResponse {
-  results: UserAssessmentResultItem[];
+  results: AdminAssessmentResultItem[];
   total_assessments: number;
   completed_count: number;
   average_score: number;
   unique_learners: number;
+  attended_count?: number;
+  in_progress_count?: number;
+  expired_count?: number;
+  not_started_count?: number;
 }
 
 export interface BankQuestionOption {
@@ -310,9 +340,11 @@ export interface BankQuestion {
   id: number;
   template_id: number;
   category: string;
+  question_set?: 'A' | 'B' | 'C' | string;
   difficulty: 'Easy' | 'Medium' | 'Hard' | string;
   question_type: string;
   question_text: string;
+  passage_text?: string | null;
   instructions?: string | null;
   explanation?: string | null;
   options: BankQuestionOption[];
@@ -325,11 +357,39 @@ export interface BankQuestion {
   correct_option_ids?: string[];
 }
 
+export interface BulkQuestionItemResult {
+  row_number: number;
+  valid: boolean;
+  question_preview: string;
+  category?: string | null;
+  question_set: string;
+  difficulty: string;
+  errors: string[];
+  warnings: string[];
+  bank_question_id?: number | null;
+}
+
+export interface BulkQuestionImportResponse {
+  filename: string;
+  file_format: string;
+  template_id?: number | null;
+  dry_run: boolean;
+  total_detected: number;
+  valid_count: number;
+  inserted_count: number;
+  failed_count: number;
+  detected_categories: Record<string, number>;
+  detected_sets: Record<string, number>;
+  items: BulkQuestionItemResult[];
+}
+
 export interface CreateBankQuestionPayload {
   category: string;
+  question_set?: 'A' | 'B' | 'C' | string;
   difficulty: 'Easy' | 'Medium' | 'Hard' | string;
   question_type?: string;
   question_text: string;
+  passage_text?: string | null;
   instructions?: string | null;
   explanation?: string | null;
   options: BankQuestionOption[];
@@ -342,9 +402,11 @@ export interface CreateBankQuestionPayload {
 
 export interface UpdateBankQuestionPayload {
   category?: string;
+  question_set?: 'A' | 'B' | 'C' | string;
   difficulty?: 'Easy' | 'Medium' | 'Hard' | string;
   question_type?: string;
   question_text?: string;
+  passage_text?: string | null;
   instructions?: string | null;
   explanation?: string | null;
   options?: BankQuestionOption[];
@@ -519,6 +581,43 @@ export class AssessmentService {
   ): Observable<void> {
     return this.http.delete<void>(
       `${this.apiUrl}/templates/${templateId}/questions/${questionId}`
+    );
+  }
+
+  previewBulkUpload(
+    file: File,
+    questionSet = 'A',
+    defaultCategory?: string
+  ): Observable<BulkQuestionImportResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('question_set', questionSet);
+    if (defaultCategory) {
+      formData.append('default_category', defaultCategory);
+    }
+    return this.http.post<BulkQuestionImportResponse>(
+      `${this.apiUrl}/questions/bulk-upload/preview`,
+      formData
+    );
+  }
+
+  bulkUploadQuestions(
+    templateId: number,
+    file: File,
+    questionSet = 'A',
+    defaultCategory?: string,
+    dryRun = false
+  ): Observable<BulkQuestionImportResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('question_set', questionSet);
+    if (defaultCategory) {
+      formData.append('default_category', defaultCategory);
+    }
+    formData.append('dry_run', String(dryRun));
+    return this.http.post<BulkQuestionImportResponse>(
+      `${this.apiUrl}/templates/${templateId}/questions/bulk-upload`,
+      formData
     );
   }
 
@@ -724,6 +823,7 @@ export class AssessmentService {
     template_id?: number;
     status?: string;
     search?: string;
+    include_not_started?: boolean;
   }): Observable<AdminAssessmentResultsResponse> {
     let httpParams = new HttpParams();
     if (params?.template_id) {
@@ -734,6 +834,9 @@ export class AssessmentService {
     }
     if (params?.search) {
       httpParams = httpParams.set('search', params.search);
+    }
+    if (params?.include_not_started) {
+      httpParams = httpParams.set('include_not_started', 'true');
     }
     return this.http.get<AdminAssessmentResultsResponse>(
       `${this.apiUrl}/admin/results`,

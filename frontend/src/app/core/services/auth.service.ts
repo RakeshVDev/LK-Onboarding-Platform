@@ -20,6 +20,14 @@ export interface CurrentUser {
   email: string;
   role: UserRole;
   is_active: boolean;
+  all_assessments_completed?: boolean;
+  is_activated_by_admin?: boolean;
+  selected_department_id?: string | null;
+  selected_department_name?: string | null;
+  assigned_department_ids?: number[];
+  assigned_department_names?: string[];
+  department_approved?: boolean;
+  onboarding_stage?: string;
   created_at?: string;
 }
 
@@ -48,6 +56,14 @@ export class AuthService {
             email: user.email,
             role: user.role,
             is_active: user.is_active,
+            all_assessments_completed: Boolean(user.all_assessments_completed),
+            is_activated_by_admin: Boolean(user.is_activated_by_admin),
+            selected_department_id: user.selected_department_id ?? null,
+            selected_department_name: user.selected_department_name ?? null,
+            assigned_department_ids: Array.isArray(user.assigned_department_ids) ? user.assigned_department_ids : [],
+            assigned_department_names: Array.isArray(user.assigned_department_names) ? user.assigned_department_names : [],
+            department_approved: Boolean(user.department_approved),
+            onboarding_stage: user.onboarding_stage ?? null,
             created_at: user.created_at
           })
         );

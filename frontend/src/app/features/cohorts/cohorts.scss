@@ -1410,6 +1410,18 @@
       cursor: pointer;
       &:hover { background: #fecaca; }
     }
+
+    .btn-warning {
+      padding: 9px 16px;
+      border-radius: 10px;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      color: #b45309;
+      font-size: 12.5px;
+      font-weight: 750;
+      cursor: pointer;
+      &:hover { background: #fde68a; }
+    }
   }
 }
 
@@ -4744,3 +4756,5 @@
     margin-bottom: 18px;
   }
 }
+
+.no-live-pill,.awaiting-live-pill,.sess-locked-hint{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:99px;background:#f1f5f9;border:1px solid #cbd5e1;color:#475569;font-size:12px;font-weight:600}

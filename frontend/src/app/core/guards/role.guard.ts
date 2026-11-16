@@ -21,6 +21,11 @@ export const roleGuard = (allowedRoles: UserRole[]): CanActivateFn => {
       }
 
       if (!allowedRoles.includes(user.role) && !(user.role === 'superadmin' && allowedRoles.includes('admin'))) {
+        if (user.role === 'learner' && !user.department_approved) {
+          return router.createUrlTree([
+            user.is_activated_by_admin ? '/department-selection' : '/my-assessments'
+          ]);
+        }
         return router.createUrlTree(['/dashboard']);
       }
 
