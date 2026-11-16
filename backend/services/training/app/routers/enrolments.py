@@ -12,6 +12,7 @@ from services.training.app.schemas.learning import (
     EnrollmentStatusUpdate,
 )
 from services.identity.app.dependencies.auth import get_current_user
+from services.training.app.routers.assessments import get_learner_allowed_dept_ids
 
 router = APIRouter(prefix="/courses", tags=["Course Enrolments"])
 
@@ -57,6 +58,12 @@ def create_enrollment(
             raise HTTPException(
                 status_code=403,
                 detail="You can only enrol yourself",
+            )
+        allowed_dept_ids = get_learner_allowed_dept_ids(db, current_user.id)
+        if not allowed_dept_ids or course.department_id not in allowed_dept_ids:
+            raise HTTPException(
+                status_code=403,
+                detail="Courses unlock only after your department selection is approved.",
             )
         if not course.is_published:
             raise HTTPException(
@@ -104,9 +111,18 @@ def list_enrollments(
     )
 
     if role == "learner":
+        allowed_dept_ids = get_learner_allowed_dept_ids(db, current_user.id)
+        if not allowed_dept_ids or course.department_id not in allowed_dept_ids:
+            raise HTTPException(
+                status_code=403,
+                detail="Courses unlock only after your department selection is approved.",
+            )
         query = query.where(CourseEnrollment.user_id == current_user.id)
     elif role not in {"superadmin", "admin", "teacher"}:
         raise HTTPException(status_code=403, detail="Not allowed")
+    elif role == "teacher":
+        from services.training.app.services.teacher_scope import require_teacher_department_access
+        require_teacher_department_access(db, current_user, course.department_id)
 
     return db.scalars(query.order_by(CourseEnrollment.id)).all()
 

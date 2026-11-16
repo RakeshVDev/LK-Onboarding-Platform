@@ -14,6 +14,7 @@ class UserCreateRequest(BaseModel):
     email: str = Field(min_length=5, max_length=255)
     password: str = Field(min_length=10, max_length=128)
     role: ManagedRole = "learner"
+    assigned_department_ids: list[int] | None = None
 
     @field_validator("email")
     @classmethod
@@ -33,3 +34,7 @@ class UserCreateRequest(BaseModel):
 
 class UserStatusUpdateRequest(BaseModel):
     is_active: bool
+
+
+class TeacherDepartmentsUpdateRequest(BaseModel):
+    department_ids: list[int] = Field(min_length=1, max_length=4)

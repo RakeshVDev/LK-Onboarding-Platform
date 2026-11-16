@@ -19,6 +19,9 @@ CATEGORY_LABELS = {
     "synonyms_antonyms": "Synonyms & Antonyms",
     "idioms_collocations": "Idioms & Professional Collocations",
     "reading_comprehension": "Reading Comprehension & Analysis",
+    "analytical_deduction": "Analytical Deduction & Evidence",
+    "inference_evidence": "Contextual Inference & Evidence",
+    "vocabulary_in_context": "Vocabulary in Context",
 
     # Logical Reasoning Categories
     "logical_reasoning": "Logical Reasoning & Deductive Logic",
@@ -82,6 +85,9 @@ CATEGORY_RECOMMENDATIONS = {
     "synonyms_antonyms": "Build vocabulary depth by learning contextual word nuances and collocations.",
     "idioms_collocations": "Review standard professional idioms and common business collocations.",
     "reading_comprehension": "Practise speed reading and contextual inference from engineering and industry passages.",
+    "analytical_deduction": "Verify each conclusion strictly against explicit statements inside the provided passage.",
+    "inference_evidence": "Distinguish author-supported implications from external assumptions during reading analysis.",
+    "vocabulary_in_context": "Determine unfamiliar terms using surrounding sentence logic and tone cues.",
 
     # Logical Reasoning
     "logical_reasoning": "Solve analytical reasoning problems, logical deductions, and structured case puzzles.",

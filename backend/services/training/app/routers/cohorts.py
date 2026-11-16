@@ -19,6 +19,12 @@ from services.identity.app.dependencies.auth import (
     get_current_user,
     require_permissions,
 )
+from services.training.app.routers.assessments import get_learner_allowed_dept_ids
+from services.training.app.services.teacher_scope import (
+    get_teacher_assigned_dept_ids,
+    require_teacher_department_access,
+    role_str,
+)
 
 router = APIRouter(prefix="/cohorts", tags=["Cohorts"])
 
@@ -40,28 +46,9 @@ def validate_department(db: Session, department_id: int):
 
 def get_learner_approved_dept_ids(db: Session, user_id: int) -> set[int] | None:
     """
-    Returns set of allowed department IDs (the student's approved department + All/Common department).
-    If the learner has no approved department allocation, returns None.
+    Returns allowed department IDs for a learner (All / Common once assessments complete, plus approved department).
     """
-    approved_req = db.scalar(
-        select(StudentDepartmentRequest).where(
-            StudentDepartmentRequest.user_id == user_id,
-            StudentDepartmentRequest.status == "approved",
-        )
-    )
-    if not approved_req:
-        return None
-
-    allowed_ids = {approved_req.department_id}
-    common_dept = db.scalar(
-        select(Department).where(
-            Department.name.in_(["All / Common", "All/Common", "Common"])
-        )
-    )
-    if common_dept:
-        allowed_ids.add(common_dept.id)
-
-    return allowed_ids
+    return get_learner_allowed_dept_ids(db, user_id)
 
 
 @router.post("", response_model=CohortResponse, status_code=status.HTTP_201_CREATED)
@@ -72,6 +59,7 @@ def create_cohort(
         require_permissions(Permission.MANAGE_COHORTS)
     ),
 ):
+    require_teacher_department_access(db, current_user, payload.department_id)
     dept = validate_department(db, payload.department_id)
 
     if (
@@ -124,6 +112,16 @@ def list_cohorts(
         if not allowed_dept_ids:
             return []
         query = query.where(Cohort.department_id.in_(allowed_dept_ids))
+    elif role_str(current_user) == Role.TEACHER.value:
+        allowed_teacher_depts = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if not allowed_teacher_depts:
+            return []
+        if department_id is not None:
+            if int(department_id) not in allowed_teacher_depts:
+                return []
+            query = query.where(Cohort.department_id == department_id)
+        else:
+            query = query.where(Cohort.department_id.in_(allowed_teacher_depts))
     elif department_id is not None:
         query = query.where(Cohort.department_id == department_id)
 
@@ -171,6 +169,8 @@ def get_cohort(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to cohorts outside your approved department.",
             )
+    else:
+        require_teacher_department_access(db, current_user, cohort.department_id)
 
     dept = db.get(Department, cohort.department_id)
     return CohortResponse(
@@ -197,9 +197,11 @@ def update_cohort(
     if not cohort:
         raise HTTPException(status_code=404, detail="Cohort not found")
 
+    require_teacher_department_access(db, current_user, cohort.department_id)
     changes = payload.model_dump(exclude_unset=True)
 
     if changes.get("department_id") is not None:
+        require_teacher_department_access(db, current_user, changes["department_id"])
         validate_department(db, changes["department_id"])
 
     new_start = changes.get("start_date", cohort.start_date)
@@ -243,11 +245,16 @@ def update_cohort(
 
 
 @router.delete("/{cohort_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_cohort(cohort_id: int, db: Session = Depends(get_db)):
+def delete_cohort(
+    cohort_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permissions(Permission.MANAGE_COHORTS)),
+):
     cohort = db.get(Cohort, cohort_id)
     if not cohort:
         raise HTTPException(status_code=404, detail="Cohort not found")
 
+    require_teacher_department_access(db, current_user, cohort.department_id)
     db.delete(cohort)
     try:
         db.commit()
@@ -277,6 +284,16 @@ def list_cohort_members(
     if not cohort:
         raise HTTPException(status_code=404, detail="Cohort not found")
 
+    if current_user.role == Role.LEARNER:
+        allowed_dept_ids = get_learner_approved_dept_ids(db, current_user.id)
+        if not allowed_dept_ids or cohort.department_id not in allowed_dept_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to view members of this cohort",
+            )
+    else:
+        require_teacher_department_access(db, current_user, cohort.department_id)
+
     return db.scalars(
         select(CohortMember)
         .where(CohortMember.cohort_id == cohort_id)
@@ -301,6 +318,7 @@ def add_cohort_member(
     if not cohort:
         raise HTTPException(status_code=404, detail="Cohort not found")
 
+    require_teacher_department_access(db, current_user, cohort.department_id)
     existing = db.scalar(
         select(CohortMember).where(
             CohortMember.cohort_id == cohort_id,
@@ -340,6 +358,10 @@ def remove_cohort_member(
         require_permissions(Permission.MANAGE_COHORTS)
     ),
 ):
+    cohort = db.get(Cohort, cohort_id)
+    if cohort:
+        require_teacher_department_access(db, current_user, cohort.department_id)
+
     member = db.scalar(
         select(CohortMember).where(
             CohortMember.cohort_id == cohort_id,

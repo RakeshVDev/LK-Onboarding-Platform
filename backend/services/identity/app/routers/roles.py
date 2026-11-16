@@ -9,7 +9,7 @@ from services.identity.app.dependencies.auth import (
     get_db,
     require_roles,
 )
-from services.identity.app.models.user import User
+from services.identity.app.models.user import User, UserDepartment
 from services.identity.app.schemas.roles import (
     RoleUpdateRequest,
     RoleUpdateResponse,
@@ -51,7 +51,7 @@ def update_user_role(
             .select_from(User)
             .where(
                 User.role == Role.SUPERADMIN.value,
-                User.is_active.is_(True),
+                User.is_active == True,
             )
         ) or 0
 
@@ -62,6 +62,11 @@ def update_user_role(
             )
 
     user.role = payload.role.value
+    if user.role != Role.TEACHER.value:
+        for row in db.scalars(
+            select(UserDepartment).where(UserDepartment.user_id == user.id)
+        ).all():
+            db.delete(row)
     db.commit()
     db.refresh(user)
 

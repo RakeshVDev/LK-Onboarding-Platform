@@ -14,10 +14,19 @@ from services.training.app.schemas.training import (
     StudentDepartmentRequestReview,
 )
 
-from services.identity.app.core.roles import Role
-from services.identity.app.dependencies.auth import get_current_user
+from services.identity.app.core.roles import Permission, Role
+from services.identity.app.dependencies.auth import (
+    get_current_user,
+    require_permissions,
+)
 from services.identity.app.db.session import SessionLocal as IdentitySessionLocal
 from services.identity.app.models.user import User as IdentityUser
+from services.training.app.routers.assessments import compute_learner_assessment_status
+from services.training.app.services.teacher_scope import (
+    get_teacher_assigned_dept_ids,
+    require_teacher_department_access,
+    role_str,
+)
 
 router = APIRouter(prefix="/departments", tags=["Departments"])
 
@@ -104,6 +113,11 @@ def submit_my_department_request(
         raise HTTPException(status_code=404, detail="Department not found")
     if not department.is_active:
         raise HTTPException(status_code=400, detail="This department is not currently active")
+    if department.name.strip().lower() in {"all / common", "all/common", "common"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Please choose a specialization department rather than All / Common",
+        )
 
     # Check if learner already has an approved allocation in this SAME department
     existing_approved = db.scalar(
@@ -112,6 +126,40 @@ def submit_my_department_request(
             StudentDepartmentRequest.status == "approved",
         )
     )
+    if current_user.role == Role.LEARNER:
+        with IdentitySessionLocal() as idb:
+            id_user = idb.get(IdentityUser, current_user.id)
+            if id_user is not None:
+                if not bool(id_user.all_assessments_completed):
+                    assessment_status = compute_learner_assessment_status(db, current_user.id)
+                    if not (assessment_status.all_completed and assessment_status.total_assigned > 0):
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Complete all assigned assessments before choosing a department.",
+                        )
+                    id_user.all_assessments_completed = True
+                    idb.commit()
+                if not bool(id_user.is_activated_by_admin):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Your account must be activated by an administrator before choosing a department.",
+                    )
+                if bool(id_user.department_approved):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Your department selection is already approved.",
+                    )
+            else:
+                if not existing_approved:
+                    assessment_status = compute_learner_assessment_status(db, current_user.id)
+                    if not assessment_status.all_completed:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail=(
+                                f"Complete all assigned assessments ({assessment_status.completed_count}/"
+                                f"{assessment_status.total_assigned}) before choosing a department."
+                            ),
+                        )
     if existing_approved and existing_approved.department_id == payload.department_id:
         raise HTTPException(
             status_code=400,
@@ -145,6 +193,15 @@ def submit_my_department_request(
 
     db.commit()
     db.refresh(req)
+
+    try:
+        with IdentitySessionLocal() as idb:
+            id_user = idb.get(IdentityUser, current_user.id)
+            if id_user is not None:
+                id_user.selected_department_id = str(department.id)
+                idb.commit()
+    except Exception as exc:
+        print(f"  [Onboarding Sync] Unable to persist selected_department_id for user {current_user.id}: {exc}")
 
     users_map = get_users_map({current_user.id})
     return build_request_response(
@@ -216,6 +273,11 @@ def list_department_requests(
     query = select(StudentDepartmentRequest).order_by(
         StudentDepartmentRequest.created_at.desc()
     )
+    if role_str(current_user) == Role.TEACHER.value:
+        allowed_dept_ids = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if not allowed_dept_ids:
+            return []
+        query = query.where(StudentDepartmentRequest.department_id.in_(allowed_dept_ids))
     if status_filter:
         query = query.where(StudentDepartmentRequest.status == status_filter)
 
@@ -249,10 +311,10 @@ def review_department_request(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if current_user.role not in [Role.SUPERADMIN, Role.ADMIN, Role.TEACHER]:
+    if current_user.role not in [Role.SUPERADMIN, Role.ADMIN]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only teachers and administrators can review department allocation requests",
+            detail="Only administrators can approve or reject department allocation requests",
         )
 
     req = db.get(StudentDepartmentRequest, request_id)
@@ -265,6 +327,15 @@ def review_department_request(
         raise HTTPException(status_code=404, detail="Department not found")
 
     if payload.status == "approved":
+        with IdentitySessionLocal() as idb:
+            id_user = idb.get(IdentityUser, req.user_id)
+            if id_user is not None and id_user.role == Role.LEARNER.value:
+                if not bool(id_user.all_assessments_completed) or not bool(id_user.is_activated_by_admin):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Learner must complete assessments and be activated by an admin before department approval",
+                    )
+
         req.department_id = target_dept_id
         # Mark other requests of the same learner as superseded
         db.execute(
@@ -286,6 +357,20 @@ def review_department_request(
     db.commit()
     db.refresh(req)
 
+    try:
+        with IdentitySessionLocal() as idb:
+            id_user = idb.get(IdentityUser, req.user_id)
+            if id_user is not None:
+                if payload.status == "approved":
+                    id_user.selected_department_id = str(dept.id)
+                    id_user.department_approved = True
+                elif payload.status == "rejected":
+                    id_user.selected_department_id = None
+                    id_user.department_approved = False
+                idb.commit()
+    except Exception as exc:
+        print(f"  [Onboarding Sync] Unable to update identity department approval for user {req.user_id}: {exc}")
+
     users_map = get_users_map({req.user_id, current_user.id})
     return build_request_response(req, dept, users_map)
 
@@ -299,7 +384,11 @@ def review_department_request(
     response_model=DepartmentResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_department(payload: DepartmentCreate, db: Session = Depends(get_db)):
+def create_department(
+    payload: DepartmentCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permissions(Permission.MANAGE_DEPARTMENTS)),
+):
     existing = db.scalar(
         select(Department).where(Department.name == payload.name)
     )
@@ -314,17 +403,29 @@ def create_department(payload: DepartmentCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[DepartmentResponse])
-def list_departments(db: Session = Depends(get_db)):
-    return db.scalars(
-        select(Department).order_by(Department.id)
-    ).all()
+def list_departments(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    query = select(Department).order_by(Department.id)
+    if role_str(current_user) == Role.TEACHER.value:
+        allowed = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if not allowed:
+            return []
+        query = query.where(Department.id.in_(allowed))
+    return db.scalars(query).all()
 
 
 @router.get("/{department_id}", response_model=DepartmentResponse)
-def get_department(department_id: int, db: Session = Depends(get_db)):
+def get_department(
+    department_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     department = db.get(Department, department_id)
     if not department:
         raise HTTPException(status_code=404, detail="Department not found")
+    require_teacher_department_access(db, current_user, department.id)
     return department
 
 
@@ -333,6 +434,7 @@ def update_department(
     department_id: int,
     payload: DepartmentUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(require_permissions(Permission.MANAGE_DEPARTMENTS)),
 ):
     department = db.get(Department, department_id)
     if not department:
@@ -361,7 +463,11 @@ def update_department(
 
 
 @router.delete("/{department_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_department(department_id: int, db: Session = Depends(get_db)):
+def delete_department(
+    department_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permissions(Permission.MANAGE_DEPARTMENTS)),
+):
     department = db.get(Department, department_id)
     if not department:
         raise HTTPException(status_code=404, detail="Department not found")

@@ -1,12 +1,10 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from services.identity.app.core.security import (
     create_access_token,
-    hash_password,
     verify_password,
 )
 from services.identity.app.dependencies.auth import get_current_user, get_db
@@ -14,44 +12,17 @@ from services.identity.app.models.user import User
 from services.identity.app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
-    RegisterRequest,
     TokenResponse,
     UserProfileUpdateRequest,
     UserResponse,
 )
+from services.identity.app.services.onboarding import (
+    TrainingOnboardingBridge,
+    get_training_bridge,
+    serialize_user_with_onboarding,
+)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
-
-
-@router.post(
-    "/register",
-    response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    email = payload.email.strip().lower()
-
-    existing = db.scalar(select(User).where(User.email == email))
-    if existing:
-        raise HTTPException(status_code=409, detail="Email is already registered")
-
-    user = User(
-        full_name=payload.full_name.strip(),
-        email=email,
-        password_hash=hash_password(payload.password),
-        role="learner",
-        is_active=True,
-    )
-
-    db.add(user)
-    try:
-        db.commit()
-        db.refresh(user)
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Email is already registered")
-
-    return user
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -74,8 +45,16 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+def get_me(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    bridge: TrainingOnboardingBridge = Depends(get_training_bridge),
+):
+    return serialize_user_with_onboarding(
+        current_user,
+        bridge.get_department_map(),
+        db=db,
+    )
 
 
 @router.put("/profile", response_model=UserResponse)
@@ -83,11 +62,16 @@ def update_profile(
     payload: UserProfileUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    bridge: TrainingOnboardingBridge = Depends(get_training_bridge),
 ):
     current_user.full_name = payload.full_name.strip()
     db.commit()
     db.refresh(current_user)
-    return current_user
+    return serialize_user_with_onboarding(
+        current_user,
+        bridge.get_department_map(),
+        db=db,
+    )
 
 
 @router.post("/change-password")

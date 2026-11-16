@@ -25,8 +25,14 @@ class AssessmentTemplateCreate(BaseModel):
     description: str | None = None
     assessment_type: str = Field(
         default="psychometric",
-        pattern="^(psychometric|technical|english_grammar|logical_reasoning|programming)$",
+        pattern="^(psychometric|technical|english_grammar|logical_reasoning|programming|cognitive|composition|algorithm|comprehension)$",
     )
+    assessment_tag: str = Field(
+        default="Assessment",
+        pattern="^(Assessment|Pre-Assessment)$",
+    )
+    custom_tags: list[str] = Field(default_factory=list)
+    reading_passage: str | None = None
 
     question_count: int = Field(default=20, gt=0, le=200)
 
@@ -51,6 +57,9 @@ class AssessmentTemplateResponse(BaseModel):
     department_id: int | None = None
     department_name: str | None = None
     assessment_type: str = "psychometric"
+    assessment_tag: str = "Assessment"
+    custom_tags: list[str] = Field(default_factory=list)
+    reading_passage: str | None = None
     description: str | None
     question_count: int
     category_config: dict[str, Any]
@@ -82,9 +91,11 @@ class AssessmentOptionResponse(BaseModel):
 class AssessmentQuestionResponse(BaseModel):
     id: int
     category: str
+    question_set: str = "A"
     difficulty: str = "Medium"
     question_type: str
     question_text: str
+    passage_text: str | None = None
     instructions: str | None = None
     options: list[AssessmentOptionResponse]
     display_order: int
@@ -111,6 +122,9 @@ class AssessmentStartResponse(BaseModel):
     expires_at: datetime | None = None
     template_name: str | None = None
     assessment_type: str | None = None
+    assessment_tag: str | None = "Assessment"
+    assigned_set: str = "A"
+    reading_passage: str | None = None
     questions: list[AssessmentQuestionResponse]
 
     @field_serializer("started_at", "expires_at", mode="plain", check_fields=False)
@@ -228,7 +242,7 @@ class AssessmentReportResponse(BaseModel):
 
 class UserAssessmentResultItem(BaseModel):
     session_id: int
-    template_id: int
+    template_id: int | None = None
     template_name: str
     assessment_type: str
     learner_user_id: int
@@ -250,12 +264,22 @@ class UserAssessmentResultItem(BaseModel):
         return serialize_utc_datetime(dt)
 
 
+class AdminAssessmentResultItem(UserAssessmentResultItem):
+    session_id: int | None = None
+    started_at: datetime | None = None
+    assignment_scope: str | None = None
+
+
 class AdminAssessmentResultsResponse(BaseModel):
-    results: list[UserAssessmentResultItem]
+    results: list[AdminAssessmentResultItem]
     total_assessments: int
     completed_count: int
     average_score: float
     unique_learners: int
+    attended_count: int = 0
+    in_progress_count: int = 0
+    expired_count: int = 0
+    not_started_count: int = 0
 
 
 # --------------------------------------------------
@@ -266,7 +290,7 @@ class AssessmentSessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    template_id: int
+    template_id: int | None = None
     learner_user_id: int
     status: str
     question_count: int
@@ -278,8 +302,14 @@ class AssessmentSessionResponse(BaseModel):
 class AssessmentTemplateUpdate(BaseModel):
     assessment_type: str | None = Field(
         default=None,
-        pattern="^(psychometric|technical|english_grammar|logical_reasoning|programming)$",
+        pattern="^(psychometric|technical|english_grammar|logical_reasoning|programming|cognitive|composition|algorithm|comprehension)$",
     )
+    assessment_tag: str | None = Field(
+        default=None,
+        pattern="^(Assessment|Pre-Assessment)$",
+    )
+    custom_tags: list[str] | None = None
+    reading_passage: str | None = None
     name: str | None = Field(default=None, min_length=3, max_length=200)
     department_id: int | None = None
     description: str | None = None
@@ -346,6 +376,8 @@ class StudentAssignedAssessmentItem(BaseModel):
     name: str
     description: str | None = None
     assessment_type: str
+    assessment_tag: str = "Assessment"
+    custom_tags: list[str] = Field(default_factory=list)
     category_label: str
     question_count: int
     duration_minutes: int
@@ -395,6 +427,17 @@ class StudentAssignedAssessmentsResponse(BaseModel):
 class LearnerAssessmentStatusResponse(BaseModel):
     status: str
     session_id: int | None = None
+    total_assigned: int = 0
+    completed_count: int = 0
+    pending_count: int = 0
+    all_completed: bool = False
+    pre_assessments_completed: bool = False
+    has_chosen_department: bool = False
+    has_approved_department: bool = False
+    is_activated_by_admin: bool = False
+    selected_department_id: str | None = None
+    department_approved: bool = False
+    onboarding_stage: str = "assessment_pending"
 
 
 class AssessmentResumeResponse(BaseModel):
@@ -407,6 +450,9 @@ class AssessmentResumeResponse(BaseModel):
     expires_at: datetime | None = None
     template_name: str | None = None
     assessment_type: str | None = None
+    assessment_tag: str | None = "Assessment"
+    assigned_set: str = "A"
+    reading_passage: str | None = None
     saved_answers: dict[int, str] = Field(default_factory=dict)
     marked_for_review: list[int] = Field(default_factory=list)
     questions: list[AssessmentQuestionResponse]
@@ -431,12 +477,14 @@ class AssessmentAnswerSaveResponse(BaseModel):
 
 class AssessmentBankQuestionCreate(BaseModel):
     category: str = Field(min_length=2, max_length=100)
+    question_set: str = Field(default="A", pattern="^[ABCabc]$")
     difficulty: str = Field(default="Medium", max_length=20)
     question_type: str = Field(default="multiple_choice", max_length=50)
     question_text: str = Field(min_length=5, max_length=3000)
+    passage_text: str | None = Field(default=None, max_length=12000)
     instructions: str | None = Field(default=None, max_length=2000)
     explanation: str | None = Field(default=None, max_length=3000)
-    options: list[AssessmentOptionResponse] = Field(min_length=2, max_length=10)
+    options: list[AssessmentOptionResponse] = Field(default_factory=list, max_length=10)
     correct_option_id: str | None = Field(default=None, max_length=20)
     correct_option_ids: list[str] | None = None
     max_score: float = Field(default=1.0, gt=0, le=100)
@@ -446,12 +494,14 @@ class AssessmentBankQuestionCreate(BaseModel):
 
 class AssessmentBankQuestionUpdate(BaseModel):
     category: str | None = Field(default=None, min_length=2, max_length=100)
+    question_set: str | None = Field(default=None, pattern="^[ABCabc]$")
     difficulty: str | None = Field(default=None, max_length=20)
     question_type: str | None = Field(default=None, max_length=50)
     question_text: str | None = Field(default=None, min_length=5, max_length=3000)
+    passage_text: str | None = Field(default=None, max_length=12000)
     instructions: str | None = Field(default=None, max_length=2000)
     explanation: str | None = Field(default=None, max_length=3000)
-    options: list[AssessmentOptionResponse] | None = Field(default=None, min_length=2, max_length=10)
+    options: list[AssessmentOptionResponse] | None = Field(default=None, max_length=10)
     correct_option_id: str | None = Field(default=None, max_length=20)
     correct_option_ids: list[str] | None = None
     max_score: float | None = Field(default=None, gt=0, le=100)
@@ -465,9 +515,11 @@ class AssessmentBankQuestionResponse(BaseModel):
     id: int
     template_id: int
     category: str
+    question_set: str = "A"
     difficulty: str = "Medium"
     question_type: str
     question_text: str
+    passage_text: str | None = None
     instructions: str | None = None
     explanation: str | None = None
     options: list[AssessmentOptionResponse]
@@ -488,9 +540,11 @@ class AssessmentPreviewQuestionItem(BaseModel):
     id: int
     source: str = "bank"
     category: str
+    question_set: str = "A"
     difficulty: str = "Medium"
     question_type: str
     question_text: str
+    passage_text: str | None = None
     instructions: str | None = None
     options: list[AssessmentOptionResponse]
     display_order: int
@@ -505,6 +559,9 @@ class AssessmentTemplatePreviewResponse(BaseModel):
     template_id: int
     template_name: str
     assessment_type: str
+    assessment_tag: str = "Assessment"
+    assigned_set: str = "A"
+    reading_passage: str | None = None
     description: str | None = None
     instructions: str
     mode: str

@@ -1,10 +1,21 @@
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import inspect, text
+from services.training.app.core.config import settings
 from services.training.app.db.session import engine, SessionLocal
 from services.training.app.models.assessment import AssessmentAssignment
 from services.training.app.models.entities import Department
+from services.assessment_intelligence.models import (
+    ScoringVersion,
+    CandidateDimensionScore,
+)
+from services.assessment_intelligence.router import router as assessment_intelligence_router
+from app.infrastructure.training.models import LiveClassSession
+from app.interfaces.training.live_classes_router import router as live_classes_router
+from app.interfaces.training.question_ingestion_router import router as question_ingestion_router
 
 from services.training.app.routers import (
     departments,
@@ -41,11 +52,16 @@ def _ensure_column(conn, table_name: str, column_name: str, ddl_sql: str) -> boo
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Safe auto-creation for assessment_assignments if migrations have not run yet
+    # Safe auto-creation for assessment_assignments and intelligence tables if migrations have not run yet
     try:
         AssessmentAssignment.__table__.create(bind=engine, checkfirst=True)
     except Exception:
         pass
+    for intel_model in (ScoringVersion, CandidateDimensionScore, LiveClassSession):
+        try:
+            intel_model.__table__.create(bind=engine, checkfirst=True)
+        except Exception:
+            pass
 
     # Safe auto-migration for runtime schema columns across MSSQL/MySQL/SQLite
     try:
@@ -55,6 +71,10 @@ async def lifespan(app: FastAPI):
 
             if "assessment_templates" in tables:
                 _ensure_column(conn, "assessment_templates", "department_id", "INT NULL")
+                _ensure_column(conn, "assessment_templates", "assessment_tag", "VARCHAR(40) NOT NULL DEFAULT 'Assessment'")
+                _ensure_column(conn, "assessment_templates", "custom_tags", "TEXT NULL")
+                _ensure_column(conn, "assessment_templates", "reading_passage", "TEXT NULL")
+                _ensure_column(conn, "assessment_templates", "due_at", "DATETIME NULL")
 
             if "student_department_requests" not in tables:
                 dialect = conn.dialect.name.lower()
@@ -79,14 +99,112 @@ async def lifespan(app: FastAPI):
             if "assessment_sessions" in tables:
                 _ensure_column(conn, "assessment_sessions", "tab_switch_count", "INTEGER NOT NULL DEFAULT 0")
                 _ensure_column(conn, "assessment_sessions", "expires_at", "DATETIME NULL")
+                _ensure_column(conn, "assessment_sessions", "assigned_set", "VARCHAR(10) NOT NULL DEFAULT 'A'")
+                _ensure_column(conn, "assessment_sessions", "template_name_snapshot", "VARCHAR(200) NULL")
+                _ensure_column(conn, "assessment_sessions", "assessment_type_snapshot", "VARCHAR(40) NULL")
+                _ensure_column(conn, "assessment_sessions", "assessment_tag_snapshot", "VARCHAR(40) NULL")
+                _ensure_column(conn, "assessment_sessions", "department_id_snapshot", "INT NULL")
+
+                if conn.dialect.name.lower() == "mssql":
+                    for tbl_name, fk_suffix in (
+                        ("assessment_sessions", "template_id"),
+                        ("candidate_dimension_scores", "template_id"),
+                    ):
+                        if tbl_name in tables:
+                            conn.execute(text(f"""
+                                DECLARE @fk NVARCHAR(128);
+                                SELECT TOP 1 @fk = fk.name
+                                FROM sys.foreign_keys fk
+                                JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+                                JOIN sys.columns c ON fkc.parent_object_id = c.object_id AND fkc.parent_column_id = c.column_id
+                                WHERE fk.parent_object_id = OBJECT_ID('{tbl_name}')
+                                  AND c.name = 'template_id'
+                                  AND fk.delete_referential_action <> 2;
+                                IF @fk IS NOT NULL
+                                BEGIN
+                                    EXEC('ALTER TABLE {tbl_name} DROP CONSTRAINT [' + @fk + ']');
+                                END
+                            """))
+                            is_not_null = conn.execute(text("""
+                                SELECT CASE WHEN is_nullable = 0 THEN 1 ELSE 0 END
+                                FROM sys.columns
+                                WHERE object_id = OBJECT_ID(:tbl) AND name = 'template_id'
+                            """), {"tbl": tbl_name}).scalar()
+                            if is_not_null:
+                                conn.execute(text(f"ALTER TABLE {tbl_name} ALTER COLUMN template_id INT NULL"))
+                            has_fk = conn.execute(text("""
+                                SELECT COUNT(1) FROM sys.foreign_keys fk
+                                JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+                                JOIN sys.columns c ON fkc.parent_object_id = c.object_id AND fkc.parent_column_id = c.column_id
+                                WHERE fk.parent_object_id = OBJECT_ID(:tbl) AND c.name = 'template_id'
+                            """), {"tbl": tbl_name}).scalar()
+                            if not has_fk:
+                                conn.execute(text(
+                                    f"ALTER TABLE {tbl_name} ADD CONSTRAINT fk_{tbl_name}_{fk_suffix}_setnull "
+                                    f"FOREIGN KEY (template_id) REFERENCES assessment_templates(id) ON DELETE SET NULL"
+                                ))
+
+                if "assessment_templates" in tables:
+                    conn.execute(text("""
+                        UPDATE assessment_sessions
+                        SET template_name_snapshot = (
+                            SELECT t.name FROM assessment_templates t WHERE t.id = assessment_sessions.template_id
+                        )
+                        WHERE template_name_snapshot IS NULL AND template_id IS NOT NULL
+                    """))
+                    conn.execute(text("""
+                        UPDATE assessment_sessions
+                        SET assessment_type_snapshot = (
+                            SELECT t.assessment_type FROM assessment_templates t WHERE t.id = assessment_sessions.template_id
+                        )
+                        WHERE assessment_type_snapshot IS NULL AND template_id IS NOT NULL
+                    """))
+                    conn.execute(text("""
+                        UPDATE assessment_sessions
+                        SET assessment_tag_snapshot = (
+                            SELECT t.assessment_tag FROM assessment_templates t WHERE t.id = assessment_sessions.template_id
+                        )
+                        WHERE assessment_tag_snapshot IS NULL AND template_id IS NOT NULL
+                    """))
+                    conn.execute(text("""
+                        UPDATE assessment_sessions
+                        SET department_id_snapshot = (
+                            SELECT t.department_id FROM assessment_templates t WHERE t.id = assessment_sessions.template_id
+                        )
+                        WHERE department_id_snapshot IS NULL AND template_id IS NOT NULL
+                    """))
+                    if "assessment_assignments" in tables:
+                        conn.execute(text("""
+                            UPDATE assessment_templates
+                            SET due_at = (
+                                SELECT MAX(a.due_at)
+                                FROM assessment_assignments a
+                                WHERE a.template_id = assessment_templates.id
+                                  AND a.is_active = 1
+                                  AND a.due_at IS NOT NULL
+                            )
+                            WHERE due_at IS NULL
+                        """))
 
             if "assessment_responses" in tables:
                 _ensure_column(conn, "assessment_responses", "is_marked_for_review", "BOOLEAN NOT NULL DEFAULT 0")
+                if conn.dialect.name.lower() == "mssql":
+                    # SQL Server 1-arg ISJSON(col) rejects JSON scalar strings like '"A"', blocking MCQ submissions
+                    conn.execute(text("""
+                        IF EXISTS (
+                            SELECT 1 FROM sys.check_constraints
+                            WHERE name = 'CK_assessment_responses_answer_json'
+                              AND parent_object_id = OBJECT_ID('assessment_responses')
+                        )
+                            ALTER TABLE assessment_responses DROP CONSTRAINT CK_assessment_responses_answer_json
+                    """))
 
             if "assessment_questions" in tables:
                 _ensure_column(conn, "assessment_questions", "difficulty", "VARCHAR(20) NOT NULL DEFAULT 'Medium'")
                 _ensure_column(conn, "assessment_questions", "instructions", "TEXT NULL")
                 _ensure_column(conn, "assessment_questions", "negative_marks", "FLOAT NOT NULL DEFAULT 0")
+                _ensure_column(conn, "assessment_questions", "question_set", "VARCHAR(10) NOT NULL DEFAULT 'A'")
+                _ensure_column(conn, "assessment_questions", "passage_text", "TEXT NULL")
 
             if "assessment_question_bank" in tables:
                 _ensure_column(conn, "assessment_question_bank", "difficulty", "VARCHAR(20) NOT NULL DEFAULT 'Medium'")
@@ -95,6 +213,8 @@ async def lifespan(app: FastAPI):
                 _ensure_column(conn, "assessment_question_bank", "negative_marks", "FLOAT NOT NULL DEFAULT 0")
                 _ensure_column(conn, "assessment_question_bank", "display_order", "INTEGER NULL")
                 _ensure_column(conn, "assessment_question_bank", "in_assessment", "BOOLEAN NOT NULL DEFAULT 1")
+                _ensure_column(conn, "assessment_question_bank", "question_set", "VARCHAR(10) NOT NULL DEFAULT 'A'")
+                _ensure_column(conn, "assessment_question_bank", "passage_text", "TEXT NULL")
 
                 # Ensure active assigned rows have consecutive 1..N display_order if uninitialized
                 rows = conn.execute(
@@ -140,6 +260,7 @@ async def lifespan(app: FastAPI):
                 if not exists:
                     db.add(Department(name=name, description=desc, is_active=True))
             db.commit()
+            assessments.purge_expired_assessments(db)
     except Exception as exc:
         print(f"  [Seed] Warning seeding default departments: {exc}")
 
@@ -167,6 +288,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Register API routers
 app.include_router(departments.router, prefix="/api/v1")
 app.include_router(courses.router, prefix="/api/v1")
@@ -174,6 +303,18 @@ app.include_router(cohorts.router, prefix="/api/v1")
 app.include_router(enrolments.router, prefix="/api/v1")
 app.include_router(syllabus.router, prefix="/api/v1")
 app.include_router(assessments.router, prefix="/api/v1")
+app.include_router(assessment_intelligence_router, prefix="/api/v1")
+app.include_router(question_ingestion_router, prefix="/api/v1")
+app.include_router(live_classes_router, prefix="/api/v1")
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
 
 
 @app.get("/health", tags=["Health"])
@@ -182,6 +323,19 @@ def health_check():
         "status": "healthy",
         "service": "training",
     }
+
+
+@app.get("/health/ready", tags=["Health"])
+def readiness_check():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "ready", "service": "training", "database": "connected"}
+    except Exception:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "unavailable", "service": "training", "database": "unreachable"},
+        )
 
 
 @app.get("/", tags=["Root"])

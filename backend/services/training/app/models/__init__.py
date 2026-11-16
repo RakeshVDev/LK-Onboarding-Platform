@@ -22,6 +22,10 @@ from services.training.app.models.assessment import (
     AssessmentQuestionBank,
     AssessmentAssignment,
 )
+from services.assessment_intelligence.models import (
+    ScoringVersion,
+    CandidateDimensionScore,
+)
 
 __all__ = [
     "Department",
@@ -42,4 +46,6 @@ __all__ = [
     "AssessmentReport",
     "AssessmentQuestionBank",
     "AssessmentAssignment",
+    "ScoringVersion",
+    "CandidateDimensionScore",
 ]
