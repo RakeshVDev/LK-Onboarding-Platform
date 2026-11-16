@@ -14,6 +14,8 @@ import {
   AssessmentQuestion,
   AssessmentAnswer
 } from '../services/assessment';
+import { AssessmentStatusService } from '../../../core/services/assessment-status.service';
+import { OnboardingService } from '../../../core/services/onboarding.service';
 import { QuestionRenderer } from '../components/question-renderer/question-renderer';
 
 @Component({
@@ -26,6 +28,8 @@ import { QuestionRenderer } from '../components/question-renderer/question-rende
 export class AssessmentTaking implements OnInit, OnDestroy {
 
   private readonly api = inject(AssessmentService);
+  private readonly assessmentStatusService = inject(AssessmentStatusService);
+  private readonly onboardingService = inject(OnboardingService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -37,6 +41,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   sessionId = 0;
   templateName = 'Logical Reasoning Assessment';
   assessmentType = 'logical_reasoning';
+  assignedSet = '';
   durationSeconds = 30 * 60; // 30 minutes default
   startedAt = '';
   expiresAt = '';
@@ -85,6 +90,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
       remainingSeconds?: number;
       templateName?: string;
       assessmentType?: string;
+      assignedSet?: string;
     };
 
     if (
@@ -95,6 +101,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
     ) {
       if (state.templateName) this.templateName = state.templateName;
       if (state.assessmentType) this.assessmentType = state.assessmentType;
+      if (state.assignedSet) this.assignedSet = state.assignedSet;
       this.initializeAssessment(
         state.questions,
         state.startedAt,
@@ -145,6 +152,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
 
       if (session.template_name) this.templateName = session.template_name;
       if (session.assessment_type) this.assessmentType = session.assessment_type;
+      if (session.assigned_set) this.assignedSet = session.assigned_set;
 
       if (session.saved_answers) {
         this.answers = { ...session.saved_answers };
@@ -489,6 +497,15 @@ export class AssessmentTaking implements OnInit, OnDestroy {
     return this.questions[this.currentIndex];
   }
 
+  get activePassageText(): string | null {
+    const raw = (this.currentQuestion?.passage_text || '').trim();
+    return raw.length > 0 ? raw : null;
+  }
+
+  get activeSetLabel(): string {
+    return (this.assignedSet || this.currentQuestion?.question_set || 'A').toUpperCase();
+  }
+
   get totalMaxScore(): number {
     if (!this.questions.length) return 0;
     const total = this.questions.reduce((sum, q) => sum + (Number(q.max_score ?? 1) || 1), 0);
@@ -725,16 +742,46 @@ export class AssessmentTaking implements OnInit, OnDestroy {
       return;
     }
 
-    // Step 2: Generate official report card & redirect
+    // Step 2: Generate official report card (best-effort) & enforce completion flow
     try {
       await firstValueFrom(this.api.generateReport(this.sessionId));
+    } catch {
+      // Report generation failure must not block post-submission navigation
+    }
+
+    try {
+      const statusRes = await this.assessmentStatusService.getStatus(true);
+      const allDone =
+        statusRes.status === 'completed' || statusRes.all_completed === true;
+
+      if (allDone) {
+        try {
+          await this.onboardingService.completeAssessments();
+        } catch {
+          // Backend submit_assessment already syncs completion when eligible
+        }
+      }
+
+      const perms = await this.onboardingService.getPermissions(true);
       this.submitting = false;
       this.cdr.detectChanges();
-      await this.router.navigate(['/assessments/report', this.sessionId]);
+
+      if (!allDone) {
+        await this.router.navigate(['/my-assessments']);
+        return;
+      }
+
+      if (perms.is_unlocked || statusRes.has_approved_department) {
+        await this.router.navigate(['/assessments/report', this.sessionId]);
+      } else if (perms.can_select_department) {
+        await this.router.navigate(['/department-selection']);
+      } else {
+        await this.router.navigate(['/assessments/results', this.sessionId]);
+      }
     } catch {
       this.submitting = false;
       this.cdr.detectChanges();
-      await this.router.navigate(['/assessments/results', this.sessionId]);
+      await this.router.navigate(['/my-assessments']);
     }
   }
 }

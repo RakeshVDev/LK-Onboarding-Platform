@@ -13,14 +13,18 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   AssessmentService,
   AssessmentTemplate,
-  UserAssessmentResultItem,
+  AdminAssessmentResultItem,
   AdminAssessmentResultsResponse
 } from '../services/assessment';
 
 @Component({
   selector: 'app-admin-results',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterModule
+  ],
   templateUrl: './admin-results.html',
   styleUrl: './admin-results.scss'
 })
@@ -29,7 +33,7 @@ export class AdminResults implements OnInit {
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
-  readonly results = signal<UserAssessmentResultItem[]>([]);
+  readonly results = signal<AdminAssessmentResultItem[]>([]);
   templates: AssessmentTemplate[] = [];
 
   readonly loading = signal(true);
@@ -39,10 +43,15 @@ export class AdminResults implements OnInit {
   searchQuery = '';
   selectedTemplateId: number | null = null;
   selectedStatus = 'all';
+  includeNotStarted = true;
 
   // Summary stats
   totalAssessments = 0;
+  attendedCount = 0;
   completedCount = 0;
+  inProgressCount = 0;
+  expiredCount = 0;
+  notStartedCount = 0;
   averageScore = 0;
   uniqueLearners = 0;
 
@@ -69,7 +78,10 @@ export class AdminResults implements OnInit {
       template_id?: number;
       status?: string;
       search?: string;
-    } = {};
+      include_not_started?: boolean;
+    } = {
+      include_not_started: this.includeNotStarted || this.selectedStatus === 'not_started'
+    };
 
     if (this.selectedTemplateId) {
       params.template_id = this.selectedTemplateId;
@@ -86,6 +98,10 @@ export class AdminResults implements OnInit {
         this.results.set(data.results || []);
         this.totalAssessments = data.total_assessments;
         this.completedCount = data.completed_count;
+        this.inProgressCount = data.in_progress_count ?? 0;
+        this.expiredCount = data.expired_count ?? 0;
+        this.notStartedCount = data.not_started_count ?? 0;
+        this.attendedCount = data.attended_count ?? (this.completedCount + this.inProgressCount + this.expiredCount);
         this.averageScore = data.average_score;
         this.uniqueLearners = data.unique_learners;
         this.loading.set(false);
@@ -102,6 +118,9 @@ export class AdminResults implements OnInit {
   }
 
   onFilterChange(): void {
+    if (this.selectedStatus === 'not_started') {
+      this.includeNotStarted = true;
+    }
     this.loadResults();
   }
 
@@ -109,15 +128,28 @@ export class AdminResults implements OnInit {
     this.searchQuery = '';
     this.selectedTemplateId = null;
     this.selectedStatus = 'all';
+    this.includeNotStarted = true;
     this.loadResults();
   }
 
-  viewReport(sessionId: number): void {
+  viewReport(sessionId: number | null): void {
+    if (!sessionId) return;
     void this.router.navigate(['/assessments/report', sessionId]);
   }
 
-  viewScores(sessionId: number): void {
+  viewScores(sessionId: number | null): void {
+    if (!sessionId) return;
     void this.router.navigate(['/assessments/results', sessionId]);
+  }
+
+  statusLabel(status: string): string {
+    switch (status) {
+      case 'completed': return 'Completed';
+      case 'in_progress': return 'In Progress';
+      case 'expired': return 'Expired';
+      case 'not_started': return 'Not Attended';
+      default: return status;
+    }
   }
 
   typeLabel(type: string): string {

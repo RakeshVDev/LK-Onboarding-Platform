@@ -1,0 +1,117 @@
+<section class="radar-card" [class.compact]="compact()">
+  @if (!compact() || title()) {
+    <header class="radar-header">
+      <div class="radar-headings">
+        @if (title()) {
+          <h3>{{ title() }}</h3>
+        }
+        @if (subtitle()) {
+          <p class="radar-sub">{{ subtitle() }}</p>
+        }
+      </div>
+
+      <div class="radar-toolbar">
+        @if (allowBenchmarkToggle() && hasEnoughAxes()) {
+          <button
+            type="button"
+            class="tool-chip"
+            [class.active]="showBenchmark()"
+            (click)="toggleBenchmarkOverlay()">
+            {{ showBenchmark() ? 'Hide 75% Target' : 'Show 75% Target' }}
+          </button>
+        }
+        @if (hasEnoughAxes() && series().length > 0) {
+          <div class="mode-switch" role="group" aria-label="Chart visualization mode">
+            <button
+              type="button"
+              class="mode-btn"
+              [class.active]="viewMode() === 'radar'"
+              (click)="setViewMode('radar')">
+              Radar
+            </button>
+            <button
+              type="button"
+              class="mode-btn"
+              [class.active]="viewMode() === 'table'"
+              (click)="setViewMode('table')">
+              Data Table
+            </button>
+          </div>
+        }
+      </div>
+    </header>
+  }
+
+  @if (axes().length === 0 || series().length === 0) {
+    <div class="radar-empty" role="status">
+      <span>{{ emptyMessage() }}</span>
+    </div>
+  } @else {
+    @if (showLegendToggles() && effectiveSeries().length > 0) {
+      <div class="legend-strip" role="list" aria-label="Chart series legend">
+        @for (item of effectiveSeries(); track item.id) {
+          <button
+            type="button"
+            class="legend-pill"
+            role="listitem"
+            [class.is-hidden]="isHidden(item.id)"
+            [attr.aria-pressed]="!isHidden(item.id)"
+            (click)="toggleSeries(item.id)">
+            <span
+              class="swatch"
+              [class.dashed]="item.dashed"
+              [style.backgroundColor]="item.dashed ? 'transparent' : item.borderColor"
+              [style.borderColor]="item.borderColor">
+            </span>
+            <span class="legend-text">{{ item.label }}</span>
+            @if (item.overallPercentage !== undefined && item.overallPercentage !== null && item.seriesType === 'candidate') {
+              <span class="legend-score">{{ item.overallPercentage | number:'1.0-0' }}%</span>
+            }
+          </button>
+        }
+      </div>
+    }
+
+    @if (viewMode() === 'radar' && hasEnoughAxes() && !canvasUnavailable()) {
+      <div class="canvas-stage" [style.height.px]="height()">
+        <canvas
+          #radarCanvas
+          [attr.aria-label]="title() || 'Assessment competency radar chart'"
+          role="img">
+        </canvas>
+      </div>
+    } @else {
+      <!-- Fallback bar breakdown for <3 axes, Data Table mode, or headless/non-canvas environments -->
+      <div class="fallback-table-wrap">
+        @if (!hasEnoughAxes() && !compact()) {
+          <p class="axis-note">
+            Showing comparative dimension bars (radar polygon requires at least 3 distinct dimensions).
+          </p>
+        }
+        <div class="dimension-bar-list">
+          @for (row of axisRows(); track row.axis) {
+            <div class="dim-bar-row">
+              <div class="dim-axis-name">{{ row.axis }}</div>
+              <div class="dim-series-bars">
+                @for (entry of row.entries; track entry.id) {
+                  <div class="series-line">
+                    <span class="series-mini-name">{{ entry.label }}</span>
+                    <div class="bar-track">
+                      <div
+                        class="bar-fill"
+                        [style.width.%]="entry.score"
+                        [style.backgroundColor]="entry.color">
+                      </div>
+                    </div>
+                    <span class="series-val">{{ entry.score | number:'1.0-1' }}%</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  }
+</section>
+

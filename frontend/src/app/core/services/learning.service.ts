@@ -18,9 +18,29 @@ export interface Department {
 export interface Course {
   id: number;
   department_id: number;
+  department_name?: string | null;
   title: string;
   description: string | null;
   is_published: boolean;
+}
+
+export interface StudentDepartmentRequest {
+  id: number;
+  user_id: number;
+  user_name?: string | null;
+  user_email?: string | null;
+  department_id: number;
+  department_name?: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'superseded';
+  notes?: string | null;
+  reviewed_by_user_id?: number | null;
+  reviewed_by_name?: string | null;
+  reviewed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  current_approved_department_id?: number | null;
+  current_approved_department_name?: string | null;
+  is_change_request?: boolean;
 }
 
 export interface SyllabusItem {
@@ -79,7 +99,7 @@ export class LearningService {
   constructor(
     private readonly http: HttpClient,
     private readonly authService: AuthService
-  ) {}
+  ) { }
 
   private getHeaders(): HttpHeaders {
     const token = this.authService.getToken();
@@ -99,6 +119,85 @@ export class LearningService {
     return firstValueFrom(
       this.http.get<Department[]>(
         `${this.apiUrl}/departments`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  createDepartment(payload: { name: string; description?: string | null }): Promise<Department> {
+    return firstValueFrom(
+      this.http.post<Department>(
+        `${this.apiUrl}/departments`,
+        payload,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  updateDepartment(
+    departmentId: number,
+    payload: { name?: string | null; description?: string | null; is_active?: boolean }
+  ): Promise<Department> {
+    return firstValueFrom(
+      this.http.patch<Department>(
+        `${this.apiUrl}/departments/${departmentId}`,
+        payload,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  deleteDepartment(departmentId: number): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(
+        `${this.apiUrl}/departments/${departmentId}`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  // ---------- STUDENT DEPARTMENT ALLOCATION REQUESTS ----------
+
+  getMyDepartmentRequest(): Promise<StudentDepartmentRequest | null> {
+    return firstValueFrom(
+      this.http.get<StudentDepartmentRequest | null>(
+        `${this.apiUrl}/departments/my-request`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  submitDepartmentRequest(departmentId: number, notes?: string): Promise<StudentDepartmentRequest> {
+    return firstValueFrom(
+      this.http.post<StudentDepartmentRequest>(
+        `${this.apiUrl}/departments/my-request`,
+        { department_id: departmentId, notes: notes || null },
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  getDepartmentRequests(statusFilter?: string): Promise<StudentDepartmentRequest[]> {
+    let params = new HttpParams();
+    if (statusFilter) {
+      params = params.set('status', statusFilter);
+    }
+    return firstValueFrom(
+      this.http.get<StudentDepartmentRequest[]>(
+        `${this.apiUrl}/departments/requests`,
+        { headers: this.getHeaders(), params }
+      )
+    );
+  }
+
+  reviewDepartmentRequest(
+    requestId: number,
+    payload: { status: 'approved' | 'rejected'; department_id?: number; notes?: string }
+  ): Promise<StudentDepartmentRequest> {
+    return firstValueFrom(
+      this.http.post<StudentDepartmentRequest>(
+        `${this.apiUrl}/departments/requests/${requestId}/review`,
+        payload,
         { headers: this.getHeaders() }
       )
     );
@@ -391,7 +490,7 @@ export class LearningService {
   getErrorMessage(error: unknown): string {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 0) {
-        return 'Cannot connect to the Training API. Check that it is running on port 8001.';
+        return 'Cannot connect to the Training API. Check that it is running on port 8002.';
       }
 
       if (error.status === 401) {

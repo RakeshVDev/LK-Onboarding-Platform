@@ -24,7 +24,13 @@ class AssessmentTemplate(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    department_id: Mapped[int | None] = mapped_column(
+        ForeignKey("departments.id"), nullable=True, index=True
+    )
     assessment_type: Mapped[str] = mapped_column(String(40), default="psychometric", nullable=False, index=True)
+    assessment_tag: Mapped[str] = mapped_column(String(40), default="Assessment", nullable=False, index=True)
+    custom_tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    reading_passage: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     question_count: Mapped[int] = mapped_column(
@@ -36,6 +42,10 @@ class AssessmentTemplate(Base):
 
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
+    )
+
+    due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
     )
 
     created_by_user_id: Mapped[int] = mapped_column(
@@ -68,11 +78,15 @@ class AssessmentSession(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    template_id: Mapped[int] = mapped_column(
-        ForeignKey("assessment_templates.id"),
-        nullable=False,
+    template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("assessment_templates.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
+    template_name_snapshot: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    assessment_type_snapshot: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    assessment_tag_snapshot: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    department_id_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     # Identity user ID is an external reference.
     learner_user_id: Mapped[int] = mapped_column(
@@ -81,6 +95,10 @@ class AssessmentSession(Base):
 
     status: Mapped[str] = mapped_column(
         String(30), default="in_progress", nullable=False, index=True
+    )
+
+    assigned_set: Mapped[str] = mapped_column(
+        String(10), default="A", nullable=False
     )
 
     question_count: Mapped[int] = mapped_column(
@@ -147,6 +165,10 @@ class AssessmentQuestion(Base):
         String(100), nullable=False, index=True
     )
 
+    question_set: Mapped[str] = mapped_column(
+        String(10), default="A", nullable=False
+    )
+
     difficulty: Mapped[str] = mapped_column(
         String(20), default="Medium", nullable=False
     )
@@ -157,6 +179,10 @@ class AssessmentQuestion(Base):
 
     question_text: Mapped[str] = mapped_column(
         Text, nullable=False
+    )
+
+    passage_text: Mapped[str | None] = mapped_column(
+        Text, nullable=True
     )
 
     instructions: Mapped[str | None] = mapped_column(
@@ -350,9 +376,11 @@ class AssessmentQuestionBank(Base):
         index=True,
     )
     category: Mapped[str] = mapped_column(String(100), nullable=False)
+    question_set: Mapped[str] = mapped_column(String(10), default="A", nullable=False, index=True)
     difficulty: Mapped[str] = mapped_column(String(20), default="Medium", nullable=False)
     question_type: Mapped[str] = mapped_column(String(50), default="multiple_choice", nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    passage_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     options: Mapped[list] = mapped_column(JSON, nullable=False)

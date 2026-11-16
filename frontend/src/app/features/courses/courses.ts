@@ -1,6 +1,7 @@
 import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 
 import { AuthService, CurrentUser } from '../../core/services/auth.service';
 import {
@@ -8,13 +9,14 @@ import {
   Course,
   Department,
   SyllabusItem,
-  LearningMaterial
+  LearningMaterial,
+  StudentDepartmentRequest
 } from '../../core/services/learning.service';
 
 @Component({
   selector: 'app-courses',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './courses.html',
   styleUrl: './courses.scss'
 })
@@ -28,6 +30,7 @@ export class Courses implements OnInit {
   readonly courses = signal<Course[]>([]);
   readonly departments = signal<Department[]>([]);
   readonly selectedCourse = signal<Course | null>(null);
+  readonly myDeptRequest = signal<StudentDepartmentRequest | null>(null);
 
   readonly loading = signal(false);
   readonly saving = signal(false);
@@ -77,12 +80,15 @@ export class Courses implements OnInit {
     this.errorMessage.set('');
 
     try {
-      const [courses, depts] = await Promise.all([
+      const isLearner = this.user()?.role === 'learner';
+      const [courses, depts, deptReq] = await Promise.all([
         this.learningService.getCourses(),
-        this.learningService.getDepartments().catch(() => [])
+        this.learningService.getDepartments().catch(() => []),
+        isLearner ? this.learningService.getMyDepartmentRequest().catch(() => null) : Promise.resolve(null)
       ]);
       this.courses.set(courses);
       this.departments.set(depts);
+      this.myDeptRequest.set(deptReq);
       if (depts.length > 0) {
         this.newCourseDeptId = depts[0].id;
       }
@@ -91,6 +97,31 @@ export class Courses implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  get isLearner(): boolean {
+    return this.user()?.role === 'learner';
+  }
+
+  get isApprovedForDepartment(): boolean {
+    if (!this.isLearner) return true;
+    return this.myDeptRequest()?.status === 'approved';
+  }
+
+  get departmentStatus(): string {
+    return this.myDeptRequest()?.status || 'none';
+  }
+
+  get requestedDepartmentName(): string {
+    return this.myDeptRequest()?.department_name || '';
+  }
+
+  get isTeacher(): boolean {
+    return this.user()?.role === 'teacher';
+  }
+
+  get hasAssignedDepartments(): boolean {
+    return !this.isTeacher || this.departments().length > 0;
   }
 
   getDepartmentName(deptId: number): string {
@@ -103,6 +134,12 @@ export class Courses implements OnInit {
   // ----------------------------------
 
   openCreateModal(): void {
+    if (!this.hasAssignedDepartments) {
+      this.errorMessage.set(
+        'No departments have been assigned to your teacher account yet. Ask a SuperAdmin to assign 1–4 departments.'
+      );
+      return;
+    }
     this.newCourseTitle = '';
     this.newCourseDesc = '';
     this.newCoursePublished = true;

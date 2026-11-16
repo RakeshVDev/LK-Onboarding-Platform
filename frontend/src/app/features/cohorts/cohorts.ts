@@ -3,6 +3,7 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { firstValueFrom } from 'rxjs';
 import {
   CohortService,
   CohortFullData,
@@ -25,6 +26,8 @@ import {
 } from '../../core/services/cohort.service';
 import { AuthService } from '../../core/services/auth.service';
 import { UserManagementService, ManagedUser } from '../../core/services/user-management.service';
+import { LearningService, Department, StudentDepartmentRequest } from '../../core/services/learning.service';
+import { AssignableHost, LiveClassesService } from '../../core/services/live-classes.service';
 
 export type CohortTab =
   | 'overview'
@@ -55,10 +58,17 @@ export class Cohorts implements OnInit {
   private readonly cohortService = inject(CohortService);
   private readonly authService = inject(AuthService);
   private readonly userManagementService = inject(UserManagementService);
+  private readonly learningService = inject(LearningService);
+  private readonly liveClassesService = inject(LiveClassesService);
   private readonly destroyRef = inject(DestroyRef);
 
   // Role & View Mode
   readonly isTeacherRole = computed(() => this.authService.hasRole('teacher', 'admin', 'superadmin'));
+  readonly canAssignOtherInstructor = computed(() => this.authService.hasRole('superadmin', 'admin', 'teacher'));
+  readonly isAdminOrSuperAdmin = computed(() => this.authService.hasRole('superadmin', 'admin'));
+  readonly isSuperAdminRole = computed(() => this.authService.hasRole('superadmin'));
+  readonly currentUserId = computed<number | null>(() => this.authService.getCurrentUserSnapshot()?.id ?? null);
+  readonly assignableLiveHosts = signal<AssignableHost[]>([]);
   readonly viewMode = signal<'teacher' | 'learner'>('teacher');
 
   readonly activeTab = signal<CohortTab>('overview');
@@ -67,6 +77,78 @@ export class Cohorts implements OnInit {
   // Alerts & Notifications
   readonly toastMessage = signal<string>('');
   readonly toastType = signal<'success' | 'info' | 'warning'>('success');
+
+  // Department & Tech Track Gating
+  readonly availableDepartments = signal<Department[]>([]);
+  readonly selectableDepartments = computed<Department[]>(() =>
+    this.availableDepartments().filter(d => !this.isCommonDepartmentName(d.name))
+  );
+  readonly myDeptRequest = signal<StudentDepartmentRequest | null>(null);
+  readonly loadingDeptStatus = signal<boolean>(true);
+  readonly teacherDeptFilter = signal<string>('all');
+  newBatchDepartmentName = 'Python';
+  newBatchDepartmentId: number | null = 8;
+
+  readonly isLearnerApproved = computed<boolean>(() => {
+    if (this.isTeacherRole()) return true;
+    const req = this.myDeptRequest();
+    return req?.status === 'approved' || !!req?.current_approved_department_id;
+  });
+
+  readonly approvedDepartmentName = computed<string>(() => {
+    const req = this.myDeptRequest();
+    if (!req) return '';
+    if (req.status === 'approved') return req.department_name || '';
+    return req.current_approved_department_name || '';
+  });
+
+  readonly requestedDepartmentName = computed<string>(() => {
+    const req = this.myDeptRequest();
+    return req?.department_name || '';
+  });
+
+  readonly departmentAllocationStatus = computed<'none' | 'pending' | 'approved' | 'rejected'>(() => {
+    const req = this.myDeptRequest();
+    if (!req) return 'none';
+    if (req.status === 'approved') return 'approved';
+    if (req.status === 'pending') {
+      return req.current_approved_department_id ? 'approved' : 'pending';
+    }
+    return req.status as any;
+  });
+
+  readonly hasPendingChangeRequest = computed<boolean>(() => {
+    const req = this.myDeptRequest();
+    return !!req && req.status === 'pending' && !!req.is_change_request;
+  });
+
+  readonly pendingTargetDepartmentName = computed<string>(() => {
+    const req = this.myDeptRequest();
+    if (req && req.status === 'pending') return req.department_name || '';
+    return '';
+  });
+
+  readonly availableTargetDepartments = computed<Department[]>(() => {
+    const currentDeptName = this.approvedDepartmentName().toLowerCase();
+    return this.availableDepartments().filter(
+      d => d.name.toLowerCase() !== currentDeptName && !d.name.toLowerCase().includes('common')
+    );
+  });
+
+  // Learner Initial Department Request
+  selectedInitialDeptId: number | null = null;
+  initialTrackNotes = '';
+  readonly isSubmittingInitialTrack = signal<boolean>(false);
+
+  // Learner Department Change Request Modal
+  readonly isChangeDeptModalOpen = signal<boolean>(false);
+  selectedTargetDeptId: number | null = null;
+  changeDeptNotes = '';
+  readonly isSubmittingChangeDept = signal<boolean>(false);
+
+  // Teacher Review of Track Allocation Requests
+  readonly pendingTrackRequests = signal<StudentDepartmentRequest[]>([]);
+  readonly isReviewingRequest = signal<number | null>(null);
 
   // Teacher Screenshot 1: Batches Filter & Search
   readonly batchFilter = signal<'current' | 'alumni' | 'all'>('current');
@@ -146,6 +228,8 @@ export class Cohorts implements OnInit {
   readonly selectedSessionDetails = signal<TrainingSession | null>(null);
   readonly isCreatingSession = signal<boolean>(false);
   newSessionTitle = '';
+  newSessionDepartmentId: number | null = null;
+  newSessionTrainerId: number | null = null;
   newSessionTrainer = 'Priya Sharma';
   newSessionModule = 'Module 3: Frontend Mastery';
   newSessionDate = 'Tomorrow, 10:00 AM IST';
@@ -215,19 +299,32 @@ export class Cohorts implements OnInit {
   readonly details = computed<CohortDetail>(() => this.cohortData()?.details || ({} as CohortDetail));
   readonly sessions = computed<TrainingSession[]>(() => this.cohortData()?.sessions || []);
 
+  readonly visibleRoleSessions = computed<TrainingSession[]>(() => {
+    const all = this.sessions();
+    if (this.viewMode() === 'learner') {
+      return all.filter(s => this.matchesSessionDepartment(s));
+    }
+    return all;
+  });
+
   readonly currentLiveSession = computed<TrainingSession | undefined>(() => {
-    return this.sessions().find(s => s.status === 'today');
+    return this.visibleRoleSessions().find(s => s.status === 'today');
   });
 
   readonly nextUpcomingSession = computed<TrainingSession | undefined>(() => {
-    return this.sessions().find(s => s.status === 'upcoming');
+    return this.visibleRoleSessions().find(s => s.status === 'upcoming');
   });
 
   readonly activeSpotlightSession = computed<TrainingSession | undefined>(() => {
-    return this.currentLiveSession() || this.nextUpcomingSession() || this.sessions()[0];
+    return this.currentLiveSession() || this.nextUpcomingSession() || this.visibleRoleSessions()[0];
   });
 
-  readonly isLiveClassActive = computed<boolean>(() => !!this.details().isLiveActive || !!this.currentLiveSession());
+  readonly isLiveClassActive = computed<boolean>(() => {
+    if (this.viewMode() === 'learner') {
+      return !!this.currentLiveSession();
+    }
+    return !!this.details().isLiveActive || !!this.currentLiveSession();
+  });
   readonly activeLiveSessionTitle = computed<string>(() => this.activeSpotlightSession()?.title || this.details().activeLiveSessionTitle || 'Live Interactive Hands-on Session');
   readonly activeLiveTiming = computed<string>(() => this.activeSpotlightSession()?.time || this.details().activeLiveStartTime || '10:00 AM – 12:00 PM IST');
   readonly activeLiveDuration = computed<string>(() => this.activeSpotlightSession()?.duration || this.details().activeLiveDuration || '2 Hours');
@@ -245,7 +342,7 @@ export class Cohorts implements OnInit {
           return parsed.full_name.trim();
         }
       }
-    } catch { }
+    } catch {}
     const lead = this.details()?.leadTrainer?.name;
     if (lead && lead !== 'Current User' && lead.trim().length > 0) return lead.trim();
     const firstTeacher = this.availableInstructors()[0]?.full_name;
@@ -353,25 +450,119 @@ export class Cohorts implements OnInit {
     return Math.round(total / subs.length);
   }
 
+  private isCommonDepartmentName(deptName?: string | null): boolean {
+    const norm = (deptName || '').trim().toLowerCase();
+    return norm === 'all / common' || norm === 'all/common' || norm === 'common';
+  }
+
+  private matchesLearnerDepartment(itemDeptName?: string | null): boolean {
+    if (this.isCommonDepartmentName(itemDeptName)) {
+      return true;
+    }
+    const approvedDept = this.approvedDepartmentName().trim().toLowerCase();
+    if (!approvedDept) {
+      return false;
+    }
+    const itemNorm = (itemDeptName || '').trim().toLowerCase();
+    return itemNorm === approvedDept || !itemNorm;
+  }
+
+  private matchesSessionDepartment(sess: TrainingSession): boolean {
+    const approvedDept = this.approvedDepartmentName().trim().toLowerCase();
+    if (!approvedDept) {
+      return false;
+    }
+    const sessDept = (sess.departmentName || '').trim().toLowerCase();
+    if (!sessDept || this.isCommonDepartmentName(sessDept)) {
+      return false;
+    }
+    return sessDept === approvedDept;
+  }
+
+  canStartCohortSession(sess?: TrainingSession | null): boolean {
+    if (!sess || !this.isTeacherRole()) return false;
+    const uid = this.currentUserId();
+    if (sess.trainerId !== undefined && sess.trainerId !== null && uid !== null) {
+      return sess.trainerId === uid;
+    }
+    return (sess.trainer || '').trim().toLowerCase() === this.getCurrentTeacherName().trim().toLowerCase();
+  }
+
+  canStartActiveSpotlight(): boolean {
+    const spotlight = this.activeSpotlightSession();
+    if (spotlight) {
+      return this.canStartCohortSession(spotlight);
+    }
+    return (
+      this.isTeacherRole() &&
+      this.activeLiveTrainerName().trim().toLowerCase() === this.getCurrentTeacherName().trim().toLowerCase()
+    );
+  }
+
+  isSelectedTrainerCurrentUser(): boolean {
+    const uid = this.currentUserId();
+    if (this.newSessionTrainerId !== null && uid !== null) {
+      return Number(this.newSessionTrainerId) === uid;
+    }
+    return (this.newSessionTrainer || '').trim().toLowerCase() === this.getCurrentTeacherName().trim().toLowerCase();
+  }
+
+  onSessionTrainerSelected(trainerName: string): void {
+    this.newSessionTrainer = trainerName;
+    const match = this.availableInstructors().find(
+      i => i.full_name.trim().toLowerCase() === (trainerName || '').trim().toLowerCase()
+    );
+    this.newSessionTrainerId = typeof match?.id === 'number' ? match.id : null;
+    if (!this.isSelectedTrainerCurrentUser()) {
+      this.newSessionIsLiveNow = false;
+    }
+  }
+
   // Filtered Batches (Screenshot 1)
   readonly filteredBatches = computed<CohortBatchCard[]>(() => {
     let list = this.batches();
-    const filter = this.batchFilter();
-    const search = this.batchSearch().toLowerCase().trim();
+    const isLearner = this.viewMode() === 'learner';
 
-    if (filter === 'current') {
-      list = list.filter(b => b.status === 'current');
-    } else if (filter === 'alumni') {
-      list = list.filter(b => b.status === 'alumni');
+    if (isLearner) {
+      list = list.filter(b => this.matchesLearnerDepartment(b.departmentName));
+    } else {
+      const deptFilter = this.teacherDeptFilter();
+      if (deptFilter !== 'all') {
+        list = list.filter(b => (b.departmentName || '').toLowerCase() === deptFilter.toLowerCase());
+      }
+      const filter = this.batchFilter();
+      if (filter === 'current') {
+        list = list.filter(b => b.status === 'current');
+      } else if (filter === 'alumni') {
+        list = list.filter(b => b.status === 'alumni');
+      }
     }
 
+    const search = this.batchSearch().toLowerCase().trim();
     if (search) {
       list = list.filter(b =>
         b.name.toLowerCase().includes(search) ||
-        (b.track && b.track.toLowerCase().includes(search))
+        (b.track && b.track.toLowerCase().includes(search)) ||
+        (b.departmentName && b.departmentName.toLowerCase().includes(search))
       );
     }
     return list;
+  });
+
+  // Filtered Curriculum for Learner vs Teacher
+  readonly filteredCurriculum = computed<CurriculumChapter[]>(() => {
+    const all = this.curriculum();
+    if (this.viewMode() === 'learner') {
+      return all
+        .filter(chap => this.matchesLearnerDepartment(chap.departmentName))
+        .map(chap => ({
+          ...chap,
+          lessons: chap.lessons.filter(les =>
+            this.matchesLearnerDepartment(les.departmentName || chap.departmentName)
+          )
+        }));
+    }
+    return all;
   });
 
   // Available Super Admin Learners for Batch Inclusion
@@ -472,61 +663,93 @@ export class Cohorts implements OnInit {
 
   // Pending assignments count
   readonly pendingAssignmentsCount = computed<number>(() => {
-    return this.assignments().filter(a => a.status === 'pending').length;
+    return this.filteredAssignments().filter(a => a.status === 'pending').length;
   });
 
   // Available quizzes count
   readonly availableQuizzesCount = computed<number>(() => {
-    return this.quizzes().filter(q => q.status === 'available').length;
+    return this.filteredQuizzes().filter(q => q.status === 'available').length;
+  });
+
+  // Sessions for Cohort Details Overview (Filtered for learner, all for teacher)
+  readonly overviewSessions = computed<TrainingSession[]>(() => {
+    return this.viewMode() === 'learner' ? this.filteredSessions() : this.sessions();
   });
 
   // Filtered Sessions
   readonly filteredSessions = computed<TrainingSession[]>(() => {
-    const list = this.sessions();
+    let list = this.visibleRoleSessions();
     const filter = this.sessionFilter();
     if (filter === 'all') return list;
     return list.filter(s => s.status === filter);
   });
 
-  // Available Instructors fetched dynamically from super admin created teachers
-  readonly availableInstructors = computed<Array<{ id: number | string; full_name: string; role: string; email: string }>>(() => {
-    const list: Array<{ id: number | string; full_name: string; role: string; email: string }> = [];
+  // Available Instructors filtered strictly by creator role:
+  // SuperAdmin -> superadmin + admin + teacher; Admin -> admin + teacher; Teacher -> teacher
+  readonly availableInstructors = computed<Array<{ id: number | string; full_name: string; role: string; rawRole?: string; email: string }>>(() => {
+    const selfSnap = this.authService.getCurrentUserSnapshot();
+
+    const allowedRawRoles = this.isSuperAdminRole()
+      ? new Set(['superadmin', 'admin', 'teacher'])
+      : this.authService.hasRole('admin')
+        ? new Set(['admin', 'teacher'])
+        : new Set(['teacher']);
+
+    const list: Array<{ id: number | string; full_name: string; role: string; rawRole?: string; email: string }> = [];
     const seenNames = new Set<string>();
 
+    const formatRoleLabel = (raw?: string): string => {
+      switch ((raw || '').toLowerCase()) {
+        case 'superadmin': return 'SuperAdmin';
+        case 'admin': return 'Admin';
+        case 'teacher': return 'Teacher';
+        default: return raw || 'Instructor';
+      }
+    };
+
     const addInstructor = (t: { id: number | string; full_name?: string; role?: string; email?: string }) => {
+      const rawRole = (t.role || 'teacher').toLowerCase();
+      if (!allowedRawRoles.has(rawRole)) {
+        return;
+      }
       const norm = t.full_name?.toLowerCase().trim();
       if (norm && !seenNames.has(norm)) {
         seenNames.add(norm);
         list.push({
           id: t.id,
           full_name: t.full_name!,
-          role: t.role === 'teacher' ? 'Instructor' : (t.role === 'admin' ? 'Staff Admin' : (t.role || 'Instructor')),
+          role: formatRoleLabel(rawRole),
+          rawRole,
           email: t.email || ''
         });
       }
     };
 
-    // 1. Teachers fetched dynamically from Super Admin created users (signal)
+    // 1. Live-class assignable hosts fetched from identity directory via backend RBAC endpoint
+    for (const host of this.assignableLiveHosts()) {
+      addInstructor(host);
+    }
+
+    // 2. Fallback active staff fetched via UserManagementService
     for (const t of this.superAdminTeachers()) {
       addInstructor(t);
     }
 
-    // 2. Teachers registered in UserManagementService (local store)
+    // 3. Cached teachers if offline
     for (const t of this.userManagementService.getTeachers()) {
       addInstructor(t);
     }
 
-    // 3. Always include cohort lead trainer if not already listed
-    const lead = this.details().leadTrainer;
-    if (lead && lead.name && !seenNames.has(lead.name.toLowerCase().trim())) {
-      seenNames.add(lead.name.toLowerCase().trim());
-      list.unshift({
-        id: 'lead-trainer',
-        full_name: lead.name,
-        role: 'Lead Technical Instructor',
-        email: lead.email || 'lead@lk.com'
-      });
+    // 4. Always ensure logged-in user appears in list if their role is within their host scope
+    if (selfSnap && allowedRawRoles.has((selfSnap.role || '').toLowerCase())) {
+      addInstructor(selfSnap);
     }
+
+    const roleRank: Record<string, number> = { superadmin: 0, admin: 1, teacher: 2 };
+    list.sort((a, b) => {
+      const rDiff = (roleRank[a.rawRole || 'teacher'] ?? 9) - (roleRank[b.rawRole || 'teacher'] ?? 9);
+      return rDiff !== 0 ? rDiff : a.full_name.localeCompare(b.full_name);
+    });
 
     return list;
   });
@@ -554,6 +777,9 @@ export class Cohorts implements OnInit {
   // Filtered Materials
   readonly filteredMaterials = computed<LearningMaterialItem[]>(() => {
     let list = this.materials();
+    if (this.viewMode() === 'learner') {
+      list = list.filter(m => this.matchesLearnerDepartment(m.departmentName));
+    }
     const mod = this.materialModuleFilter();
     const type = this.materialTypeFilter();
     const search = this.materialSearch().toLowerCase().trim();
@@ -568,8 +794,27 @@ export class Cohorts implements OnInit {
       list = list.filter(m =>
         m.title.toLowerCase().includes(search) ||
         m.description.toLowerCase().includes(search) ||
-        m.author.toLowerCase().includes(search)
+        m.author.toLowerCase().includes(search) ||
+        (m.departmentName && m.departmentName.toLowerCase().includes(search))
       );
+    }
+    return list;
+  });
+
+  // Filtered Assignments for Learner vs Teacher
+  readonly filteredAssignments = computed<CohortAssignment[]>(() => {
+    let list = this.assignments();
+    if (this.viewMode() === 'learner') {
+      list = list.filter(a => this.matchesLearnerDepartment(a.departmentName));
+    }
+    return list;
+  });
+
+  // Filtered Quizzes for Learner vs Teacher
+  readonly filteredQuizzes = computed<CohortQuiz[]>(() => {
+    let list = this.quizzes();
+    if (this.viewMode() === 'learner') {
+      list = list.filter(q => this.matchesLearnerDepartment(q.departmentName));
     }
     return list;
   });
@@ -630,6 +875,9 @@ export class Cohorts implements OnInit {
     this.loadSuperAdminTeachers();
     this.loadSuperAdminLearners();
 
+    // Load active engineering departments and student track allocation
+    void this.loadDepartmentContext();
+
     if (typeof window !== 'undefined') {
       const handleUsersChanged = () => {
         void this.loadSuperAdminTeachers();
@@ -657,12 +905,182 @@ export class Cohorts implements OnInit {
       });
   }
 
-  async loadSuperAdminTeachers(): Promise<void> {
+  async loadDepartmentContext(): Promise<void> {
+    this.loadingDeptStatus.set(true);
     try {
-      const teachers = await this.userManagementService.listTeachers();
-      this.superAdminTeachers.set(teachers);
-      if (!this.newSessionTrainer && teachers.length > 0) {
-        this.newSessionTrainer = teachers[0].full_name;
+      const [depts, myReq] = await Promise.all([
+        this.learningService.getDepartments().catch(() => []),
+        this.isTeacherRole() ? Promise.resolve(null) : this.learningService.getMyDepartmentRequest().catch(() => null)
+      ]);
+      const activeDepts = depts.filter(d => d.is_active);
+      this.availableDepartments.set(activeDepts);
+      this.myDeptRequest.set(myReq);
+      const selectableDepts = activeDepts.filter(d => !this.isCommonDepartmentName(d.name));
+      if (selectableDepts.length > 0) {
+        this.selectedInitialDeptId = selectableDepts[0].id;
+        this.newBatchDepartmentId = selectableDepts[0].id;
+        this.newBatchDepartmentName = selectableDepts[0].name;
+        this.newBatchTrack = `${selectableDepts[0].name} Engineering Track`;
+      }
+      if (this.isTeacherRole()) {
+        void this.loadPendingTrackRequests();
+      }
+    } finally {
+      this.loadingDeptStatus.set(false);
+    }
+  }
+
+  async loadPendingTrackRequests(): Promise<void> {
+    if (!this.isTeacherRole()) return;
+    try {
+      const reqs = await this.learningService.getDepartmentRequests('pending');
+      this.pendingTrackRequests.set(reqs);
+    } catch {
+      this.pendingTrackRequests.set([]);
+    }
+  }
+
+  async approveTrackRequest(req: StudentDepartmentRequest): Promise<void> {
+    this.isReviewingRequest.set(req.id);
+    try {
+      await this.learningService.reviewDepartmentRequest(req.id, {
+        status: 'approved',
+        department_id: req.department_id
+      });
+      this.showToast(`Approved ${req.user_name || 'student'} for ${req.department_name} track!`, 'success');
+      await this.loadPendingTrackRequests();
+    } catch (err: any) {
+      this.showToast(err.error?.detail || 'Failed to approve request.', 'warning');
+    } finally {
+      this.isReviewingRequest.set(null);
+    }
+  }
+
+  async rejectTrackRequest(req: StudentDepartmentRequest): Promise<void> {
+    this.isReviewingRequest.set(req.id);
+    try {
+      await this.learningService.reviewDepartmentRequest(req.id, {
+        status: 'rejected'
+      });
+      this.showToast(`Rejected request for ${req.user_name || 'student'}.`, 'info');
+      await this.loadPendingTrackRequests();
+    } catch (err: any) {
+      this.showToast(err.error?.detail || 'Failed to reject request.', 'warning');
+    } finally {
+      this.isReviewingRequest.set(null);
+    }
+  }
+
+  async submitInitialTrackPreference(): Promise<void> {
+    if (!this.selectedInitialDeptId) return;
+    this.isSubmittingInitialTrack.set(true);
+    try {
+      const res = await this.learningService.submitDepartmentRequest(
+        this.selectedInitialDeptId,
+        this.initialTrackNotes
+      );
+      this.myDeptRequest.set(res);
+      this.showToast('Department request submitted! Awaiting instructor approval.', 'success');
+    } catch (err: any) {
+      this.showToast(err.error?.detail || 'Failed to submit department request.', 'warning');
+    } finally {
+      this.isSubmittingInitialTrack.set(false);
+    }
+  }
+
+  openChangeDepartmentModal(): void {
+    const targets = this.availableTargetDepartments();
+    if (targets.length > 0) {
+      this.selectedTargetDeptId = targets[0].id;
+    } else {
+      this.selectedTargetDeptId = null;
+    }
+    this.changeDeptNotes = '';
+    this.isChangeDeptModalOpen.set(true);
+  }
+
+  closeChangeDepartmentModal(): void {
+    this.isChangeDeptModalOpen.set(false);
+  }
+
+  async submitDepartmentChangeRequest(): Promise<void> {
+    if (!this.selectedTargetDeptId) return;
+    this.isSubmittingChangeDept.set(true);
+    try {
+      const res = await this.learningService.submitDepartmentRequest(
+        this.selectedTargetDeptId,
+        this.changeDeptNotes
+      );
+      this.myDeptRequest.set(res);
+      this.isChangeDeptModalOpen.set(false);
+      this.showToast(
+        `Department change request for ${res.department_name} submitted to instructors/admins.`,
+        'success'
+      );
+    } catch (err: any) {
+      this.showToast(err.error?.detail || 'Failed to submit department change request.', 'warning');
+    } finally {
+      this.isSubmittingChangeDept.set(false);
+    }
+  }
+
+  onBatchDeptSelect(deptName: string): void {
+    this.newBatchDepartmentName = deptName;
+    const found = this.availableDepartments().find(d => d.name === deptName);
+    this.newBatchDepartmentId = found ? found.id : null;
+    this.newBatchTrack = `${deptName} Engineering Track`;
+  }
+
+  async openAddBatchModal(): Promise<void> {
+    if (this.isTeacherRole() && this.availableDepartments().length === 0) {
+      this.showToast(
+        'No departments have been assigned to your teacher account yet. Ask a SuperAdmin to assign 1–4 departments.',
+        'warning'
+      );
+      return;
+    }
+    await this.loadSuperAdminLearners();
+    this.isCreatingBatch.set(true);
+    this.newBatchName = '';
+    this.newBatchStartDate = '01 Dec 2026';
+    this.newBatchEndDate = '01 Mar 2027';
+    if (this.availableDepartments().length > 0) {
+      this.newBatchDepartmentName = this.availableDepartments()[0].name;
+      this.newBatchDepartmentId = this.availableDepartments()[0].id;
+      this.newBatchTrack = `${this.newBatchDepartmentName} Engineering Track`;
+    } else {
+      this.newBatchDepartmentName = '';
+      this.newBatchDepartmentId = null;
+      this.newBatchTrack = '';
+    }
+    this.batchLearnerSearch.set('');
+
+    // Pre-select all available learners created by super admin
+    const learners = this.availableSuperAdminLearners();
+    const idSet = new Set<number | string>(learners.map(l => l.id));
+    this.selectedBatchLearnerIds.set(idSet);
+    this.newBatchLearnerCount = idSet.size;
+  }
+
+  async loadSuperAdminTeachers(): Promise<void> {
+    if (this.isTeacherRole() && this.liveClassesService.getAssignableHosts) {
+      try {
+        const hosts = await firstValueFrom(this.liveClassesService.getAssignableHosts());
+        this.assignableLiveHosts.set(Array.isArray(hosts) ? hosts : []);
+      } catch {
+        // fallback handled via superAdminTeachers
+      }
+    }
+    try {
+      const users = this.isAdminOrSuperAdmin()
+        ? await this.userManagementService.listUsers()
+        : await this.userManagementService.listTeachers();
+      const activeStaff = (Array.isArray(users) ? users : []).filter(
+        u => u.is_active !== false && ['teacher', 'admin', 'superadmin'].includes((u.role || '').toLowerCase())
+      );
+      this.superAdminTeachers.set(activeStaff);
+      if (!this.newSessionTrainer && activeStaff.length > 0) {
+        this.newSessionTrainer = activeStaff[0].full_name;
       }
     } catch {
       const local = this.userManagementService.getTeachers();
@@ -682,6 +1100,9 @@ export class Cohorts implements OnInit {
 
   // ---------------- VIEW MODE SWITCHER ----------------
   toggleViewMode(mode: 'teacher' | 'learner'): void {
+    if (!this.isSuperAdminRole()) {
+      return;
+    }
     this.viewMode.set(mode);
     if (mode === 'teacher') {
       this.activeTab.set('teacher_batches');
@@ -705,22 +1126,6 @@ export class Cohorts implements OnInit {
   }
 
   // ---------------- TEACHER: BATCH MANAGEMENT (SCREENSHOT 1) ----------------
-  async openAddBatchModal(): Promise<void> {
-    await this.loadSuperAdminLearners();
-    this.isCreatingBatch.set(true);
-    this.newBatchName = '';
-    this.newBatchStartDate = '01 Dec 2026';
-    this.newBatchEndDate = '01 Mar 2027';
-    this.newBatchTrack = 'Associate Software Engineer Track';
-    this.batchLearnerSearch.set('');
-
-    // Pre-select all available learners created by super admin
-    const learners = this.availableSuperAdminLearners();
-    const idSet = new Set<number | string>(learners.map(l => l.id));
-    this.selectedBatchLearnerIds.set(idSet);
-    this.newBatchLearnerCount = idSet.size;
-  }
-
   toggleBatchLearner(learnerId: number | string): void {
     const current = new Set(this.selectedBatchLearnerIds());
     if (current.has(learnerId)) {
@@ -771,7 +1176,9 @@ export class Cohorts implements OnInit {
       this.newBatchTrack,
       selectedIds.length,
       selectedIds,
-      learnerNames
+      learnerNames,
+      this.newBatchDepartmentName,
+      this.newBatchDepartmentId || undefined
     );
 
     this.isCreatingBatch.set(false);
@@ -1116,8 +1523,8 @@ export class Cohorts implements OnInit {
   // Publish Curriculum Modal Actions
   openPublishCurriculumModal(): void {
     const chap = this.selectedChapter();
-    this.publishModalTitle = chap?.title
-      ? `Live Session: ${chap.title}`
+    this.publishModalTitle = chap?.title 
+      ? `Live Session: ${chap.title}` 
       : 'Live Interactive Curriculum Delivery';
     this.publishModalDate = new Date().toISOString().split('T')[0];
     this.publishModalTime = '10:00 AM – 12:00 PM IST';
@@ -1176,18 +1583,23 @@ export class Cohorts implements OnInit {
   }
 
   startLiveNowFromModal(): void {
+    const spotlight = this.activeSpotlightSession();
+    const assignedTrainer = spotlight?.trainer || this.activeLiveTrainerName();
+    if (!this.canStartActiveSpotlight()) {
+      this.showToast(`Only the assigned teacher (${assignedTrainer}) can start this live class.`, 'warning');
+      return;
+    }
     this.isClassNotStartedModalOpen.set(false);
-    const teacherName = this.getCurrentTeacherName();
     this.cohortService.setLiveClassStatus(
       true,
       this.activeLiveSessionTitle(),
       this.activeLiveMeetingUrl(),
       this.activeLiveTiming(),
       this.activeLiveDuration(),
-      teacherName
+      assignedTrainer
     );
-    this.showToast(`Class is now LIVE with instructor ${teacherName}! Opening session room...`, 'success');
-    window.open(this.activeLiveMeetingUrl(), '_blank');
+    this.showToast(`Class is now LIVE with instructor ${assignedTrainer}! Opening session room...`, 'success');
+    window.open(this.activeLiveMeetingUrl(), '_blank', 'noopener,noreferrer');
   }
 
   deleteLesson(chapterId: string, lessonId: string, event: Event): void {
@@ -1223,8 +1635,16 @@ export class Cohorts implements OnInit {
     this.newSessionMeetingUrl = this.details().meetingLink || 'https://meet.google.com/ase-cohort-live';
     this.newSessionTopicsText = 'Angular Signals, Reactive state, RxJS interop';
     this.newSessionIsLiveNow = false;
-    const firstTrainer = this.availableInstructors()[0]?.full_name || this.details().leadTrainer?.name || 'Priya Sharma';
-    this.newSessionTrainer = firstTrainer;
+    const selectableDepts = this.selectableDepartments();
+    const matchedDept = selectableDepts.find(
+      d => d.name.trim().toLowerCase() === (this.details().department || '').trim().toLowerCase()
+    );
+    this.newSessionDepartmentId = matchedDept?.id ?? selectableDepts[0]?.id ?? null;
+
+    const hosts = this.availableInstructors();
+    const selfHost = hosts.find(h => typeof h.id === 'number' && h.id === this.currentUserId()) || hosts[0];
+    this.newSessionTrainer = selfHost?.full_name || this.getCurrentTeacherName();
+    this.newSessionTrainerId = typeof selfHost?.id === 'number' ? selfHost.id : null;
   }
 
   saveNewSession(): void {
@@ -1233,47 +1653,96 @@ export class Cohorts implements OnInit {
       return;
     }
 
+    const selectedDept = this.selectableDepartments().find(
+      d => Number(d.id) === Number(this.newSessionDepartmentId)
+    );
+    if (!selectedDept) {
+      this.showToast('Please select a target Department for this live class.', 'warning');
+      return;
+    }
+
     const topics = this.newSessionTopicsText
       .split('\n')
       .map(t => t.trim())
       .filter(t => t.length > 0);
 
-    const trainerName = this.newSessionTrainer || this.availableInstructors()[0]?.full_name || this.details().leadTrainer?.name || 'Priya Sharma';
+    const trainerName =
+      this.newSessionTrainer || this.availableInstructors()[0]?.full_name || this.getCurrentTeacherName();
+
+    const matchedHost = this.availableInstructors().find(
+      i => i.full_name.trim().toLowerCase() === trainerName.trim().toLowerCase()
+    );
+    const trainerId =
+      typeof matchedHost?.id === 'number' ? matchedHost.id : this.newSessionTrainerId ?? undefined;
+
+    const allowImmediateLive = this.newSessionIsLiveNow && this.isSelectedTrainerCurrentUser();
 
     this.cohortService.addSession({
       title: this.newSessionTitle.trim(),
       module: this.newSessionModule,
       trainer: trainerName,
+      trainerId,
+      departmentId: selectedDept.id,
+      departmentName: selectedDept.name,
       date: this.newSessionDate,
       time: this.newSessionTime,
       duration: this.newSessionDuration,
       location: this.newSessionLocation,
       meetingUrl: this.newSessionMeetingUrl,
       topics,
-      isLiveNow: this.newSessionIsLiveNow
+      isLiveNow: allowImmediateLive
     });
 
+    // Also mirror scheduled session into backend department-gated live_class_sessions when valid URL & title
+    const cleanUrl = (this.newSessionMeetingUrl || '').trim();
+    if (this.newSessionTitle.trim().length >= 3 && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))) {
+      const startIso = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      void firstValueFrom(
+        this.liveClassesService.createSession({
+          title: this.newSessionTitle.trim(),
+          description: topics.join(', ') || null,
+          department_id: selectedDept.id,
+          instructor_user_id: trainerId ?? null,
+          scheduled_start: startIso,
+          duration_minutes: 60,
+          meeting_url: cleanUrl,
+          platform: 'Video Call'
+        })
+      ).then(async created => {
+        if (allowImmediateLive && created?.id) {
+          await firstValueFrom(this.liveClassesService.updateSession(created.id, { status: 'live' })).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
     this.isCreatingSession.set(false);
-    if (this.newSessionIsLiveNow) {
-      this.showToast(`Training session "${this.newSessionTitle}" is now LIVE with instructor ${trainerName}!`, 'success');
+    if (allowImmediateLive) {
+      this.showToast(`Training session "${this.newSessionTitle}" is now LIVE with instructor ${trainerName} (${selectedDept.name})!`, 'success');
       if (this.newSessionMeetingUrl) {
         window.open(this.newSessionMeetingUrl, '_blank', 'noopener,noreferrer');
       }
     } else {
-      this.showToast(`Training session "${this.newSessionTitle}" scheduled as Upcoming with instructor ${trainerName}!`, 'success');
+      this.showToast(`Training session "${this.newSessionTitle}" scheduled as Upcoming for ${selectedDept.name} with instructor ${trainerName}!`, 'success');
     }
   }
 
   startTrainingSession(sess: TrainingSession): void {
-    const teacherName = this.getCurrentTeacherName();
-    this.cohortService.startSession(sess.id, teacherName);
-    this.showToast(`Training "${sess.title}" is now LIVE with instructor ${teacherName}! Learners can join now.`, 'success');
+    if (!this.canStartCohortSession(sess)) {
+      this.showToast(`Only the assigned teacher (${sess.trainer}) can start this live class.`, 'warning');
+      return;
+    }
+    this.cohortService.startSession(sess.id, sess.trainer);
+    this.showToast(`Training "${sess.title}" is now LIVE with instructor ${sess.trainer}! Learners can join now.`, 'success');
     if (sess.meetingUrl) {
       window.open(sess.meetingUrl, '_blank', 'noopener,noreferrer');
     }
   }
 
   endTrainingSession(sess: TrainingSession): void {
+    if (!this.canStartCohortSession(sess)) {
+      this.showToast(`Only the assigned teacher (${sess.trainer}) can end this live class.`, 'warning');
+      return;
+    }
     this.cohortService.endSession(sess.id);
     this.showToast(`Live training "${sess.title}" has concluded.`, 'info');
   }

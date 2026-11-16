@@ -1,0 +1,158 @@
+:host {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.csm-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.csm-logo-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.csm-logo-img {
+  display: block;
+  width: auto;
+  height: 24px;
+  object-fit: contain;
+}
+
+/* Sizes */
+.csm-brand[data-size='sm'] {
+  gap: 9px;
+
+  .csm-logo-pill {
+    padding: 5px 10px;
+    border-radius: 9px;
+  }
+
+  .csm-logo-img {
+    height: 19px;
+  }
+}
+
+.csm-brand[data-size='md'] {
+  .csm-logo-pill {
+    padding: 6px 12px;
+  }
+
+  .csm-logo-img {
+    height: 23px;
+  }
+}
+
+.csm-brand[data-size='lg'] {
+  gap: 14px;
+
+  .csm-logo-pill {
+    padding: 8px 14px;
+    border-radius: 13px;
+  }
+
+  .csm-logo-img {
+    height: 28px;
+  }
+}
+
+.csm-brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.csm-brand-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.csm-platform-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.csm-brand-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csm-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #4f46e5;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+}
+
+/* Dark surface variant (Sidebar / Auth dark hero) */
+.csm-brand[data-variant='dark'] {
+  .csm-logo-pill {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-color: rgba(255, 255, 255, 0.28);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  }
+
+  .csm-platform-name {
+    color: #ffffff;
+  }
+
+  .csm-brand-sub {
+    color: #94a3b8;
+  }
+
+  .csm-brand-badge {
+    color: #c7d2fe;
+    background: rgba(99, 102, 241, 0.22);
+    border-color: rgba(165, 180, 252, 0.35);
+  }
+}
+
+/* Compact (Top navbar / breadcrumb pill) */
+.csm-brand[data-variant='compact'] {
+  .csm-logo-pill {
+    background: #f8fafc;
+    box-shadow: none;
+  }
+}
+
+/* Print / PDF header variant */
+.csm-brand[data-variant='print'] {
+  .csm-logo-pill {
+    box-shadow: none;
+    border: none;
+    padding-left: 0;
+  }
+
+  .csm-logo-img {
+    height: 28px;
+  }
+}
+

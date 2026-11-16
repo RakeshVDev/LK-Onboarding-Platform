@@ -1,5 +1,389 @@
-<section class="feature-page">
-  <p class="eyebrow">WORKSPACE</p>
-  <h1>Department Management</h1>
-  <p>This module is ready for API integration.</p>
-</section>
+<div class="departments-page">
+
+  <!-- Header -->
+  <header class="page-header">
+    <div class="header-left">
+      <span class="eyebrow">ACADEMIC &amp; LEARNING INFRASTRUCTURE</span>
+      <h1>Department &amp; Track Management</h1>
+      <p>
+        Configure engineering disciplines, technology tracks (PHP, .NET, Python, Java, Database, All/Common),
+        and approve new joinees for their chosen department before courses and study materials unlock.
+      </p>
+    </div>
+
+    @if (authService.hasRole('superadmin', 'admin')) {
+      <button class="btn-primary" type="button" (click)="openCreateModal()">
+        <span>＋</span> Create Department
+      </button>
+    }
+  </header>
+
+  <!-- Notification Banners -->
+  @if (errorMessage) {
+    <div class="alert-banner error-banner" role="alert">
+      <span>⚠</span> {{ errorMessage }}
+    </div>
+  }
+
+  @if (successMessage) {
+    <div class="alert-banner success-banner" role="alert">
+      <span>✓</span> {{ successMessage }}
+    </div>
+  }
+
+  <!-- View Mode Tab Bar -->
+  <div class="view-tabs-bar">
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === 'departments'"
+      (click)="activeTab = 'departments'">
+      <span>🏢</span> Department Tracks ({{ departments.length }})
+    </button>
+
+    <button
+      type="button"
+      class="tab-btn"
+      [class.active]="activeTab === 'requests'"
+      (click)="activeTab = 'requests'">
+      <span>👥</span> Joinee Track Requests
+      @if (pendingRequestsCount > 0) {
+        <span class="tab-badge-pending">{{ pendingRequestsCount }} Pending</span>
+      }
+    </button>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- TAB 1: DEPARTMENTS & TECH TRACKS                          -->
+  <!-- ========================================================= -->
+  @if (activeTab === 'departments') {
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon purple">🏢</div>
+        <div class="stat-body">
+          <span class="stat-label">Total Departments</span>
+          <h2 class="stat-val">{{ departments.length }}</h2>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon green">✓</div>
+        <div class="stat-body">
+          <span class="stat-label">Active Tracks</span>
+          <h2 class="stat-val">{{ activeCount }}</h2>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon gray">⏸</div>
+        <div class="stat-body">
+          <span class="stat-label">Inactive Tracks</span>
+          <h2 class="stat-val">{{ inactiveCount }}</h2>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search and Actions Bar -->
+    <div class="toolbar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input
+          type="text"
+          [(ngModel)]="searchQuery"
+          placeholder="Filter departments by title or description..."
+        />
+        @if (searchQuery) {
+          <button class="btn-clear" type="button" (click)="searchQuery = ''">✕</button>
+        }
+      </div>
+      <span class="counter-badge">{{ filteredDepartments.length }} department{{ filteredDepartments.length === 1 ? '' : 's' }}</span>
+    </div>
+
+    <!-- Content State -->
+    @if (loading) {
+      <div class="state-card loading-state">
+        <div class="spinner"></div>
+        <strong>Loading departments...</strong>
+        <p>Retrieving technology tracks from the Training service.</p>
+      </div>
+    } @else if (filteredDepartments.length === 0) {
+      <div class="state-card empty-state">
+        <div class="empty-icon">📂</div>
+        <h3>No departments found</h3>
+        <p>
+          @if (searchQuery) {
+            No department matched your search query "{{ searchQuery }}".
+          } @else {
+            No departments have been configured yet.
+          }
+        </p>
+        @if (authService.hasRole('superadmin', 'admin')) {
+          <button class="btn-primary" type="button" (click)="openCreateModal()">
+            ＋ Create First Department
+          </button>
+        }
+      </div>
+    } @else {
+      <!-- Departments Grid -->
+      <div class="dept-grid">
+        @for (dept of filteredDepartments; track dept.id) {
+          <article class="dept-card" [class.card-inactive]="!dept.is_active">
+            <!-- Top Accent Bar -->
+            <div class="card-accent" [ngClass]="getDeptBadgeClass(dept.name)"></div>
+
+            <div class="card-content">
+              <div class="card-topbar">
+                <div class="dept-icon-box" [ngClass]="getDeptBadgeClass(dept.name)">
+                  {{ getDeptIcon(dept.name) }}
+                </div>
+
+                <div class="top-status">
+                  <span class="track-badge" [ngClass]="getDeptBadgeClass(dept.name)">
+                    Department #{{ dept.id }}
+                  </span>
+                  <span class="status-pill" [class.active]="dept.is_active" [class.inactive]="!dept.is_active">
+                    {{ dept.is_active ? 'Active' : 'Inactive' }}
+                  </span>
+                </div>
+              </div>
+
+              <h3 class="dept-name">{{ dept.name }}</h3>
+              <p class="dept-desc">
+                {{ dept.description || 'No description provided for this department track.' }}
+              </p>
+
+              @if (authService.hasRole('superadmin', 'admin')) {
+                <div class="card-actions">
+                  <button
+                    type="button"
+                    class="btn-action btn-edit"
+                    (click)="openEditModal(dept)"
+                    title="Edit Department">
+                    ✏ Edit
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn-action"
+                    [class.btn-deactivate]="dept.is_active"
+                    [class.btn-activate]="!dept.is_active"
+                    (click)="toggleStatus(dept)"
+                    title="{{ dept.is_active ? 'Deactivate track' : 'Activate track' }}">
+                    {{ dept.is_active ? 'Deactivate' : 'Activate' }}
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn-action btn-delete"
+                    (click)="deleteDepartment(dept)"
+                    [disabled]="deletingId === dept.id"
+                    title="Delete Department">
+                    🗑 Delete
+                  </button>
+                </div>
+              }
+            </div>
+          </article>
+        }
+      </div>
+    }
+  }
+
+  <!-- ========================================================= -->
+  <!-- TAB 2: JOINEE TECH TRACK REQUESTS & APPROVAL              -->
+  <!-- ========================================================= -->
+  @if (activeTab === 'requests') {
+    <div class="requests-panel">
+
+      <!-- Filter Bar -->
+      <div class="requests-filter-bar">
+        <div class="filter-pills">
+          <button
+            type="button"
+            class="pill-btn"
+            [class.active]="requestStatusFilter === 'pending'"
+            (click)="requestStatusFilter = 'pending'">
+            ⏳ Pending Approval ({{ pendingRequestsCount }})
+          </button>
+          <button
+            type="button"
+            class="pill-btn"
+            [class.active]="requestStatusFilter === 'approved'"
+            (click)="requestStatusFilter = 'approved'">
+            ✓ Approved Joinees
+          </button>
+          <button
+            type="button"
+            class="pill-btn"
+            [class.active]="requestStatusFilter === 'rejected'"
+            (click)="requestStatusFilter = 'rejected'">
+            ✕ Rejected
+          </button>
+          <button
+            type="button"
+            class="pill-btn"
+            [class.active]="requestStatusFilter === 'all'"
+            (click)="requestStatusFilter = 'all'">
+            All Requests ({{ requests.length }})
+          </button>
+        </div>
+
+        <button type="button" class="btn-refresh" (click)="loadRequests()" [disabled]="loadingRequests">
+          <span>↻ Refresh</span>
+        </button>
+      </div>
+
+      @if (loadingRequests) {
+        <div class="state-card loading-state">
+          <div class="spinner"></div>
+          <strong>Loading joinee requests...</strong>
+          <p>Retrieving pending department allocation requests.</p>
+        </div>
+      } @else if (filteredRequests.length === 0) {
+        <div class="state-card empty-state">
+          <div class="empty-icon">✓</div>
+          <h3>No requests in this view</h3>
+          <p>
+            @if (requestStatusFilter === 'pending') {
+              All new joinees have been allocated to their departments! No pending requests.
+            } @else {
+              No {{ requestStatusFilter }} department requests found.
+            }
+          </p>
+        </div>
+      } @else {
+        <div class="requests-grid">
+          @for (req of filteredRequests; track req.id) {
+            <article class="request-card" [attr.data-status]="req.status">
+              <div class="req-header">
+                <div class="req-user-info">
+                  <div class="user-avatar-circle">
+                    {{ (req.user_name || 'U').charAt(0).toUpperCase() }}
+                  </div>
+                  <div>
+                    <h4>{{ req.user_name || ('Joinee #' + req.user_id) }}</h4>
+                    <span class="user-email-text">{{ req.user_email || 'No email registered' }}</span>
+                  </div>
+                </div>
+
+                <span class="req-status-pill" [attr.data-status]="req.status">
+                  {{ req.status | uppercase }}
+                </span>
+              </div>
+
+              <div class="req-body">
+                <div class="dept-pref-row">
+                  <span class="meta-label">Requested Track:</span>
+                  <span class="pref-dept-badge" [ngClass]="getDeptBadgeClass(req.department_name || '')">
+                    {{ getDeptIcon(req.department_name || '') }}
+                    <strong>{{ req.department_name || ('Department #' + req.department_id) }}</strong>
+                  </span>
+                </div>
+
+                @if (req.notes) {
+                  <div class="candidate-notes-box">
+                    <span class="notes-label">Candidate Statement / Comfort Stack:</span>
+                    <p class="notes-text">"{{ req.notes }}"</p>
+                  </div>
+                }
+
+                <div class="req-timestamp-row">
+                  <span>Submitted on {{ req.created_at | date:'medium' }}</span>
+                  @if (req.reviewed_at && req.reviewed_by_name) {
+                    <span>· Reviewed by {{ req.reviewed_by_name }} ({{ req.reviewed_at | date:'shortDate' }})</span>
+                  }
+                </div>
+              </div>
+
+              <!-- Action Controls for Teacher & Admins -->
+              <div class="req-actions-bar">
+                <div class="reassign-select-group">
+                  <label [for]="'reassign-' + req.id">Assign Track:</label>
+                  <select [id]="'reassign-' + req.id" [(ngModel)]="reassignDeptMap[req.id]" class="reassign-select">
+                    @for (dept of departments; track dept.id) {
+                      <option [value]="dept.id">{{ dept.name }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="action-buttons-group">
+                  <button
+                    type="button"
+                    class="btn-approve"
+                    (click)="approveRequest(req, reassignDeptMap[req.id])"
+                    [disabled]="processingRequestId === req.id">
+                    <span>✓ {{ req.status === 'approved' ? 'Reassign' : 'Approve Joinee' }}</span>
+                  </button>
+
+                  @if (req.status !== 'rejected') {
+                    <button
+                      type="button"
+                      class="btn-reject"
+                      (click)="rejectRequest(req)"
+                      [disabled]="processingRequestId === req.id">
+                      <span>✕ Reject</span>
+                    </button>
+                  }
+                </div>
+              </div>
+            </article>
+          }
+        </div>
+      }
+    </div>
+  }
+
+</div>
+
+<!-- CREATE / EDIT MODAL -->
+@if (showModal) {
+  <div class="modal-backdrop" (click)="closeModal()">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">DEPARTMENT CONFIGURATION</span>
+          <h2>{{ isEditing ? 'Edit Department' : 'Create New Department' }}</h2>
+        </div>
+        <button class="btn-close" type="button" (click)="closeModal()">✕</button>
+      </div>
+
+      <form [formGroup]="form" (ngSubmit)="saveDepartment()">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="dept-name">Department Track Name <span>*</span></label>
+            <input
+              id="dept-name"
+              type="text"
+              formControlName="name"
+              placeholder="e.g. PHP, Python, .NET, Database Engineer"
+              autofocus
+            />
+            @if (form.controls.name.touched && form.controls.name.invalid) {
+              <small class="field-error">Department name is required (minimum 2 characters).</small>
+            }
+          </div>
+
+          <div class="form-group">
+            <label for="dept-desc">Description &amp; Curriculum Scope</label>
+            <textarea
+              id="dept-desc"
+              rows="4"
+              formControlName="description"
+              placeholder="Describe technologies, target competencies, frameworks, or domain requirements..."
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-modal-cancel" type="button" (click)="closeModal()">
+            Cancel
+          </button>
+          <button class="btn-modal-submit" type="submit" [disabled]="saving">
+            {{ saving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Create Department') }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}

@@ -1,4 +1,5 @@
 
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -45,6 +46,7 @@ class CourseResponse(BaseModel):
 
     id: int
     department_id: int
+    department_name: str | None = None
     title: str
     description: str | None
     is_published: bool
@@ -67,3 +69,38 @@ class LearningMaterialResponse(BaseModel):
     material_type: str
     storage_key: str
     is_active: bool
+
+
+# ---------- Student Department Allocation Request schemas ----------
+
+class StudentDepartmentRequestCreate(BaseModel):
+    department_id: int = Field(gt=0)
+    notes: str | None = None
+
+
+class StudentDepartmentRequestReview(BaseModel):
+    status: str = Field(pattern="^(approved|rejected)$")
+    department_id: int | None = Field(default=None, gt=0)
+    notes: str | None = None
+
+
+class StudentDepartmentRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    user_name: str | None = None
+    user_email: str | None = None
+    department_id: int
+    department_name: str | None = None
+    status: str
+    notes: str | None = None
+    reviewed_by_user_id: int | None = None
+    reviewed_by_name: str | None = None
+    reviewed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    current_approved_department_id: int | None = None
+    current_approved_department_name: str | None = None
+    is_change_request: bool = False
+

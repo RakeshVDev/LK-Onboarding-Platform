@@ -27,12 +27,56 @@
         <span>{{ syncing() ? 'Syncing...' : '↻ Sync Status' }}</span>
       </button>
 
-      <a class="btn-results-link" routerLink="/my-results">
-        <span class="btn-icon">▥</span>
-        <span>View My Results &amp; Report Cards &rarr;</span>
-      </a>
+      @if (allCompleted()) {
+        <a class="btn-results-link" routerLink="/my-results">
+          <span class="btn-icon">▥</span>
+          <span>View My Results &amp; Report Cards &rarr;</span>
+        </a>
+      } @else {
+        <span class="btn-results-locked" title="Complete all assigned assessments to unlock sidebar navigation & results">
+          <span>🔒 Navigation Locked ({{ completedCount() }}/{{ assessments().length }})</span>
+        </span>
+      }
     </div>
   </header>
+
+  @if (!loading() && assessments().length > 0 && !allCompleted()) {
+    <div class="onboarding-gate-banner gate-pending" role="status">
+      <div>
+        <strong>Mandatory Onboarding Evaluation: {{ completedCount() }} of {{ assessments().length }} Completed</strong>
+        <p>
+          Complete every remaining assessment ({{ pendingCount() }} left). Only Assessment, Result, and Report are accessible until all assessments finish and an administrator activates your next step.
+        </p>
+      </div>
+    </div>
+  } @else if (!loading() && assessments().length > 0 && allCompleted() && !hasApprovedDepartment()) {
+    <div class="onboarding-gate-banner gate-complete" role="status">
+      <div>
+        @if (hasChosenDepartment()) {
+          <strong>Department Request Submitted — Common Assessments Unlocked</strong>
+          <p>
+            Your Pre-Assessments are complete and your department request is awaiting SuperAdmin/Admin approval. Common assessments are now unlocked below, while department-specific courses &amp; assessments unlock on approval.
+          </p>
+        } @else {
+          <strong>All Pre-Assessments Complete!</strong>
+          @if (canSelectDepartment()) {
+            <p>
+              Your account has been activated by an Administrator. Proceed to Department Selection to submit your preferred track and unlock Common assessments.
+            </p>
+          } @else {
+            <p>
+              All assigned Pre-Assessments are submitted. Waiting for an Administrator to activate your department selection in User Management.
+            </p>
+          }
+        }
+      </div>
+      @if (canSelectDepartment() && !hasChosenDepartment()) {
+        <a class="btn-results-link" routerLink="/department-selection">
+          <span>Select Department &rarr;</span>
+        </a>
+      }
+    </div>
+  }
 
   @if (errorMessage()) {
     <div class="error-banner" role="alert">

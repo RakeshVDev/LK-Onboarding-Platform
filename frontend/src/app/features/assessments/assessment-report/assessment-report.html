@@ -23,7 +23,7 @@
     <!-- Top Action Bar -->
     <div class="top-nav-bar no-print">
       <button class="btn-back-link" type="button" (click)="goBack()">
-        ← Back to Results
+        ← {{ authService.hasRole('learner') && !allCompleted() ? 'Back to My Assessments' : 'Back to Results' }}
       </button>
 
       <div class="top-actions">
@@ -39,8 +39,16 @@
     <!-- Official Report Header -->
     <header class="report-header">
       <div class="header-left">
+        <div class="report-brand-strip">
+          <app-brand-logo
+            variant="print"
+            size="md"
+            badgeText="OFFICIAL"
+            subtitle="Enterprise Evaluation & Psychometric Report">
+          </app-brand-logo>
+        </div>
         <div class="badge-row">
-          <span class="eyebrow">ASE ASSESSMENT TOOL · LEARNER DEVELOPMENT &amp; EVALUATION</span>
+          <span class="eyebrow">CSM™ ENTERPRISE ASSESSMENT · LEARNER DEVELOPMENT &amp; EVALUATION</span>
           <span class="type-tag" [attr.data-type]="report.assessment_type">{{ report.assessment_type ? (report.assessment_type.replace('_', ' ') | titlecase) : 'Official' }}</span>
         </div>
         <h1>{{ reportTitle }}</h1>
@@ -143,6 +151,210 @@
         </div>
       </div>
     </section>
+
+    <!-- Offline ML Competency Radar & Intelligence Diagnostics -->
+    @if (radarAxes().length > 0 && radarSeries().length > 0) {
+      <section class="panel intelligence-radar-panel">
+        <div class="intel-section-head">
+          <div>
+            <span class="eyebrow">COMPETENCY SPIDER PROFILE · {{ scoringVersionLabel }}</span>
+            <h2>Multi-Dimensional Assessment Radar</h2>
+          </div>
+          @if (weightedScorePct !== null) {
+            <span class="weighted-pill">
+              Weighted Mastery: <strong>{{ weightedScorePct | number:'1.0-1' }}%</strong>
+            </span>
+          }
+        </div>
+
+        <app-assessment-radar-chart
+          title=""
+          subtitle="Candidate dimension profile compared against cohort baseline & 75% readiness target."
+          [axes]="radarAxes()"
+          [series]="radarSeries()"
+          [benchmarkValues]="radarBenchmarkValues()"
+          [allowBenchmarkToggle]="true"
+          [height]="360">
+        </app-assessment-radar-chart>
+
+        @if (intelligenceDimensions.length > 0) {
+          <div class="dim-badges-grid">
+            @for (dim of intelligenceDimensions; track dim.dimension_key) {
+              <div class="dim-mini-card">
+                <div class="dim-mini-top">
+                  <span class="dim-mini-title">{{ dim.dimension_label }}</span>
+                  <span class="dim-mini-score">{{ dim.normalized_score | number:'1.0-1' }}%</span>
+                </div>
+                <span class="dim-band">{{ dim.percentile_band }}</span>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
+
+    <!-- Domain-Specific Offline ML Telemetry Cards -->
+    @if (psychometricMeta || cognitiveMeta || nlpMeta || programmingMeta || roleReadinessFit.length > 0 || detailedFocusAreas.length > 0) {
+      <section class="panel domain-intel-panel">
+        <span class="eyebrow">DOMAIN-SPECIFIC OFFLINE ML TELEMETRY</span>
+        <h2>Deep Diagnostic Insights</h2>
+
+        <div class="intel-cards-grid">
+          @if (psychometricMeta; as psy) {
+            <article class="intel-box">
+              <div class="intel-box-head">
+                <h3>Psychometric Behavioral Profile</h3>
+                <span class="intel-badge">{{ psy['archetype_label'] }}</span>
+              </div>
+              <div class="intel-kv-row">
+                <span>Response Consistency Index</span>
+                <strong>{{ psy['consistency_index'] | number:'1.0-1' }}%</strong>
+              </div>
+              <div class="intel-kv-row">
+                <span>Option Entropy</span>
+                <strong>{{ psy['response_validity']?.option_entropy ?? 0 }}</strong>
+              </div>
+              @if (psy['response_validity']?.is_straight_lined) {
+                <p class="intel-warn">Straight-line response pattern flagged on dominant option.</p>
+              }
+              @for (note of psy['response_validity']?.contradiction_notes || []; track note) {
+                <p class="intel-warn">{{ note }}</p>
+              }
+            </article>
+          }
+
+          @if (cognitiveMeta; as cog) {
+            <article class="intel-box">
+              <div class="intel-box-head">
+                <h3>Cognitive Speed & Accuracy Fluency</h3>
+                <span class="intel-badge">{{ cog['efficiency_quadrant'] }}</span>
+              </div>
+              <div class="intel-kv-row">
+                <span>Time Efficiency Index</span>
+                <strong>{{ cog['time_efficiency_score'] | number:'1.0-1' }}%</strong>
+              </div>
+              @if (cog['seconds_per_question'] !== null && cog['seconds_per_question'] !== undefined) {
+                <div class="intel-kv-row">
+                  <span>Pace</span>
+                  <strong>{{ cog['seconds_per_question'] }}s / question</strong>
+                </div>
+              }
+              @if (difficultyEntries.length > 0) {
+                <div class="diff-pills">
+                  @for (d of difficultyEntries; track d.level) {
+                    <span class="diff-pill">{{ d.level }}: {{ d.percentage | number:'1.0-0' }}% ({{ d.correct }}/{{ d.total }})</span>
+                  }
+                </div>
+              }
+            </article>
+          }
+
+          @if (nlpMeta; as nlp) {
+            <article class="intel-box">
+              <div class="intel-box-head">
+                <h3>Offline NLP Coherence & Grammar</h3>
+                <span class="intel-badge">{{ nlp['mode'] === 'composition_nlp' ? 'Composition TF-IDF' : 'Syntactic Clustering' }}</span>
+              </div>
+              @if (nlp['summary']?.word_count) {
+                <div class="intel-kv-row">
+                  <span>Word Count / Sentences</span>
+                  <strong>{{ nlp['summary'].word_count }} words · {{ nlp['summary'].sentence_count }} sent.</strong>
+                </div>
+                <div class="intel-kv-row">
+                  <span>TF-IDF Topic Relevance</span>
+                  <strong>{{ nlp['summary'].topic_relevance | number:'1.0-1' }}%</strong>
+                </div>
+                <div class="intel-kv-row">
+                  <span>Sentence Coherence</span>
+                  <strong>{{ nlp['summary'].coherence_cohesion | number:'1.0-1' }}%</strong>
+                </div>
+                <div class="intel-kv-row">
+                  <span>Grammar Mechanics</span>
+                  <strong>{{ nlp['summary'].grammar_mechanics | number:'1.0-1' }}%</strong>
+                </div>
+              }
+              @for (issue of nlp['summary']?.issues || []; track issue) {
+                <p class="intel-warn">{{ issue }}</p>
+              }
+            </article>
+          }
+
+          @if (programmingMeta; as prog) {
+            <article class="intel-box">
+              <div class="intel-box-head">
+                <h3>Code AST, Complexity & Sandbox Tests</h3>
+                <span class="intel-badge">{{ prog['mode'] === 'code_ast_sandbox' ? 'Python AST Sandbox' : 'Tech Domain Clustering' }}</span>
+              </div>
+              @if (prog['summary']; as ps) {
+                <div class="intel-kv-row">
+                  <span>Code Submissions Evaluated</span>
+                  <strong>{{ ps.code_submissions }}</strong>
+                </div>
+                @if (ps.estimated_big_o && ps.estimated_big_o !== 'N/A') {
+                  <div class="intel-kv-row">
+                    <span>Estimated Complexity</span>
+                    <strong>{{ ps.estimated_big_o }} (Cyclomatic: {{ ps.avg_cyclomatic_complexity }})</strong>
+                  </div>
+                }
+                @if (ps.tests_total > 0) {
+                  <div class="intel-kv-row">
+                    <span>Deterministic Unit Tests Passed</span>
+                    <strong>{{ ps.tests_passed }} / {{ ps.tests_total }}</strong>
+                  </div>
+                }
+                @for (sec of ps.security_flags || []; track sec) {
+                  <p class="intel-warn">Security AST Block: {{ sec }}</p>
+                }
+              }
+            </article>
+          }
+
+          @if (timingMeta && !cognitiveMeta) {
+            <article class="intel-box">
+              <div class="intel-box-head">
+                <h3>Completion Pacing Telemetry</h3>
+                <span class="intel-badge">{{ timingMeta['efficiency_quadrant'] }}</span>
+              </div>
+              <div class="intel-kv-row">
+                <span>Time Efficiency Index</span>
+                <strong>{{ timingMeta['time_efficiency_score'] | number:'1.0-1' }}%</strong>
+              </div>
+              @if (timingMeta['seconds_per_question']) {
+                <div class="intel-kv-row">
+                  <span>Average Pace</span>
+                  <strong>{{ timingMeta['seconds_per_question'] }}s / question</strong>
+                </div>
+              }
+            </article>
+          }
+        </div>
+
+        @if (detailedFocusAreas.length > 0 || roleReadinessFit.length > 0) {
+          <div class="focus-fit-row">
+            @if (detailedFocusAreas.length > 0) {
+              <div class="focus-box">
+                <h4>Targeted Focus Areas</h4>
+                <ul>
+                  @for (area of detailedFocusAreas; track area) {
+                    <li>{{ area }}</li>
+                  }
+                </ul>
+              </div>
+            }
+            @if (roleReadinessFit.length > 0) {
+              <div class="focus-box fit-box">
+                <h4>Recommended Onboarding Readiness & Role Fit</h4>
+                <ul>
+                  @for (fit of roleReadinessFit; track fit) {
+                    <li>{{ fit }}</li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
 
     <!-- Category Performance Analysis -->
     @if (categoryScores.length) {
@@ -253,6 +465,37 @@
         </summary>
         <pre>{{ report.report_text }}</pre>
       </details>
+    }
+
+    <!-- Next Step Milestone: Choose Tech Track OR Finish Remaining Assessments -->
+    @if (authService.hasRole('learner')) {
+      <section class="panel tech-track-next-step-panel no-print">
+        @if (allCompleted()) {
+          <div class="next-step-content">
+            <span class="eyebrow">NEXT ONBOARDING MILESTONE</span>
+            <h2>Ready to Choose Your Engineering Specialization?</h2>
+            <p>
+              All your initial onboarding assessments are complete! Submit the tech stack you are most interested in
+              (Python, .NET, Java, PHP, Database Engineer). Your instructor and superadmin will review and unlock your specialized curriculum.
+            </p>
+            <a routerLink="/dashboard" class="btn-track-cta">
+              <span>Select Tech Track on Dashboard →</span>
+            </a>
+          </div>
+        } @else {
+          <div class="next-step-content">
+            <span class="eyebrow">ASSESSMENTS IN PROGRESS</span>
+            <h2>Complete Your Remaining Assessments to Unlock Track Selection</h2>
+            <p>
+              You still have {{ pendingCount() > 0 ? pendingCount() + ' remaining' : 'pending' }} assigned assessment(s) to complete.
+              Finish every assigned assessment to unlock navigation and choose your department specialization.
+            </p>
+            <a routerLink="/my-assessments" class="btn-track-cta">
+              <span>Return to Assigned Assessments →</span>
+            </a>
+          </div>
+        }
+      </section>
     }
 
     <!-- Official Report Footer -->

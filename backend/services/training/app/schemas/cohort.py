@@ -25,6 +25,7 @@ class CohortResponse(BaseModel):
 
     id: int
     department_id: int
+    department_name: str | None = None
     name: str
     start_date: datetime | None
     end_date: datetime | None

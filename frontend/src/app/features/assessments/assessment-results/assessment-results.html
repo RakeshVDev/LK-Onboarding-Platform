@@ -2,7 +2,7 @@
   <header class="page-header">
     <div>
       <button class="back-button" type="button" (click)="goBack()">
-        ← {{ authService.hasRole('admin', 'teacher', 'superadmin') ? 'Back to Learner Results' : 'Back to My Results' }}
+        ← {{ authService.hasRole('admin', 'teacher', 'superadmin') ? 'Back to Learner Results' : (allCompleted() ? 'Back to My Results' : 'Back to My Assessments') }}
       </button>
       <span class="eyebrow">ASSESSMENT COMPLETED</span>
       <h1>{{ results()?.template_name ? (results()?.template_name + ' Results') : 'Your Assessment Results' }}</h1>
@@ -101,6 +101,20 @@
         </article>
       }
     </section>
+
+    @if (radarAxes().length > 0 && radarSeries().length > 0) {
+      <section class="radar-preview-wrap" style="margin: 22px 0;">
+        <app-assessment-radar-chart
+          title="Competency Spider Preview"
+          subtitle="Normalized dimension scores vs. cohort baseline"
+          [axes]="radarAxes()"
+          [series]="radarSeries()"
+          [compact]="true"
+          [allowBenchmarkToggle]="true"
+          [height]="290">
+        </app-assessment-radar-chart>
+      </section>
+    }
 
     <section class="report-section">
       <div class="report-copy">

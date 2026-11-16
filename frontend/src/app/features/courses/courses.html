@@ -8,7 +8,7 @@
       <p>Explore specialized technical and onboarding courses, download course PDFs, and access recommended learning links.</p>
     </div>
 
-    @if (canManage()) {
+    @if (canManage() && hasAssignedDepartments) {
     <div class="header-actions">
       <button type="button" class="btn-create-course" (click)="openCreateModal()">
         <span>+ Create New Course</span>
@@ -16,6 +16,12 @@
     </div>
     }
   </header>
+
+  @if (!loading() && isTeacher && !hasAssignedDepartments) {
+  <div class="alert-banner alert-error">
+    <span>⚠</span> No departments have been assigned to your teacher account yet. A SuperAdmin must assign 1–4 departments before you can manage courses or study materials.
+  </div>
+  }
 
   <!-- Alerts -->
   @if (errorMessage()) {
@@ -35,6 +41,40 @@
     <div class="spinner"></div>
     <p>Loading course directory...</p>
   </div>
+  }
+
+  <!-- Learner Department Track Allocation Notice -->
+  @if (!loading() && isLearner) {
+    @if (!isApprovedForDepartment) {
+      <div class="locked-department-banner">
+        <div class="lock-icon-box">🔒</div>
+        <div class="lock-content">
+          @if (departmentStatus === 'pending') {
+            <h3>Track Allocation Pending Approval (Showing All / Common)</h3>
+            <p>
+              You have requested to join the <strong>{{ requestedDepartmentName }}</strong> department track.
+              While your instructor or superadmin reviews your request, only <strong>All / Common</strong> courses are available below.
+              Specialized {{ requestedDepartmentName }} courses and materials will unlock automatically once approved.
+            </p>
+          } @else {
+            <h3>Choose Your Department Track (Showing All / Common)</h3>
+            <p>
+              Only <strong>All / Common</strong> foundational courses are shown until your chosen department is approved.
+              Submit your preferred engineering specialization on the Dashboard (Python, .NET, Java, PHP, Database Engineer).
+            </p>
+            <a routerLink="/dashboard" class="btn-goto-assessments">
+              <span>Choose Department on Dashboard →</span>
+            </a>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="approved-track-pill-banner">
+        <span class="track-check">✓</span>
+        <span>Allocated Department Track: <strong>{{ requestedDepartmentName }}</strong></span>
+        <span class="track-subtitle">· Showing courses and study materials approved for your technical specialization</span>
+      </div>
+    }
   }
 
   <!-- Courses Grid -->
@@ -79,7 +119,7 @@
     <div class="empty-icon">▣</div>
     <h3>No courses available</h3>
     <p>There are currently no training courses created in this workspace.</p>
-    @if (canManage()) {
+    @if (canManage() && hasAssignedDepartments) {
     <button type="button" class="btn-create-course" (click)="openCreateModal()">
       <span>Create Your First Course</span>
     </button>

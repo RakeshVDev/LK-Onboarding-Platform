@@ -16,6 +16,7 @@ import { firstValueFrom } from 'rxjs';
 
 import {
   AssessmentService,
+  AssessmentDomainType,
   AssessmentTemplate,
   AssessmentCategory,
   BankQuestion,
@@ -24,10 +25,30 @@ import {
   UpdateBankQuestionPayload,
   PreviewQuestionItem,
   AssignableCohortItem,
-  AssignableLearnerItem
+  AssignableLearnerItem,
+  BulkQuestionImportResponse
 } from '../services/assessment';
 import { QuestionRenderer, RenderableQuestion } from '../components/question-renderer/question-renderer';
 import { AssessmentPreviewModal, PreviewDraftOverrides } from '../components/assessment-preview-modal/assessment-preview-modal';
+import { LearningService, Department } from '../../../core/services/learning.service';
+import { AuthService } from '../../../core/services/auth.service';
+
+export type BankQuestionFormatType =
+  | 'multiple_choice'
+  | 'multiple_select'
+  | 'true_false'
+  | 'likert'
+  | 'short_answer'
+  | 'essay'
+  | 'composition'
+  | 'code_submission';
+
+const OPEN_ENDED_FORMAT_SET = new Set<string>([
+  'short_answer',
+  'essay',
+  'composition',
+  'code_submission',
+]);
 
 export interface CategoryOption {
   key: string;
@@ -46,6 +67,13 @@ const CATEGORY_MAP: Record<string, CategoryOption[]> = {
     { key: 'odd_one_out', label: 'Odd One Out' },
     { key: 'analogy', label: 'Analogy' },
   ],
+  cognitive: [
+    { key: 'logical_deduction', label: 'Logical Deduction' },
+    { key: 'pattern_analysis', label: 'Pattern & Matrix Analysis' },
+    { key: 'numerical_reasoning', label: 'Numerical Reasoning' },
+    { key: 'critical_thinking', label: 'Critical Thinking & Inference' },
+    { key: 'abstract_reasoning', label: 'Abstract Spatial Reasoning' },
+  ],
   english_grammar: [
     { key: 'subject_verb_agreement', label: 'Subject-Verb Agreement' },
     { key: 'tenses_and_aspects', label: 'Tenses & Aspects' },
@@ -57,6 +85,12 @@ const CATEGORY_MAP: Record<string, CategoryOption[]> = {
     { key: 'voice_and_speech', label: 'Active/Passive Voice & Speech' },
     { key: 'idioms_collocations', label: 'Idioms & Professional Collocations' },
     { key: 'reading_comprehension', label: 'Reading Comprehension' },
+  ],
+  composition: [
+    { key: 'executive_writing', label: 'Executive & Technical Writing' },
+    { key: 'clarity_coherence', label: 'Coherence & Structure' },
+    { key: 'grammar_precision', label: 'Grammar & Mechanics' },
+    { key: 'scenario_response', label: 'Client / Incident Communication' },
   ],
   technical: [
     { key: 'data_structures', label: 'Data Structures' },
@@ -75,12 +109,24 @@ const CATEGORY_MAP: Record<string, CategoryOption[]> = {
     { key: 'data_structures', label: 'Data Structures' },
     { key: 'time_complexity', label: 'Time & Space Complexity' },
   ],
+  algorithm: [
+    { key: 'algorithm_design', label: 'Algorithm Design & Problem Solving' },
+    { key: 'time_space_complexity', label: 'Time & Space Complexity' },
+    { key: 'recursion_dp', label: 'Recursion & Dynamic Programming' },
+    { key: 'graphs_trees', label: 'Graphs, Trees & Traversals' },
+  ],
   psychometric: [
     { key: 'personality_work_preferences', label: 'Personality & Work Preferences' },
     { key: 'logical_reasoning', label: 'Logical Reasoning' },
     { key: 'situational_judgement', label: 'Situational Judgement' },
     { key: 'emotional_intelligence', label: 'Emotional Intelligence' },
     { key: 'learning_adaptability', label: 'Learning & Adaptability' },
+  ],
+  comprehension: [
+    { key: 'reading_comprehension', label: 'Reading Comprehension' },
+    { key: 'analytical_deduction', label: 'Analytical Deduction' },
+    { key: 'inference_evidence', label: 'Evidence & Inference' },
+    { key: 'vocabulary_in_context', label: 'Vocabulary in Context' },
   ],
 };
 
@@ -109,12 +155,14 @@ function defaultFourOptions(): BankQuestionOption[] {
 export class AssessmentForm implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(AssessmentService);
+  private readonly learningService = inject(LearningService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
   templateId: number | null = null;
   template: AssessmentTemplate | null = null;
+  departments: Department[] = [];
 
   activeTab: 'config' | 'questions' = 'config';
 
@@ -173,20 +221,29 @@ export class AssessmentForm implements OnInit {
         Validators.maxLength(200)
       ]
     ],
+    department_id: [null as number | null],
     assessment_type: [
-      'logical_reasoning' as 'psychometric' | 'technical' | 'english_grammar' | 'logical_reasoning' | 'programming',
+      'logical_reasoning' as AssessmentDomainType,
       [Validators.required]
     ],
+    assessment_tag: [
+      'Assessment' as 'Assessment' | 'Pre-Assessment',
+      [Validators.required]
+    ],
+    custom_tags_input: [''],
+    reading_passage: [''],
     description: [''],
     question_count: [25, [Validators.required, Validators.min(1), Validators.max(100)]]
   });
 
   // Manual Question Authoring Form (Create + Edit + Dynamic Options)
-  qQuestionType: 'multiple_choice' | 'multiple_select' | 'true_false' = 'multiple_choice';
+  qQuestionType: BankQuestionFormatType = 'multiple_choice';
+  qQuestionSet: 'A' | 'B' | 'C' = 'A';
   qCategory = 'number_series';
   qCustomCategory = '';
   qDifficulty: 'Easy' | 'Medium' | 'Hard' = 'Medium';
   qText = '';
+  qPassageText = '';
   qInstructions = '';
   qExplanation = '';
   qOptions: BankQuestionOption[] = defaultFourOptions();
@@ -195,8 +252,28 @@ export class AssessmentForm implements OnInit {
   qNegativeMarks = 0.0;
   qAddToAssessment = true;
 
+  // Bulk Question Import state (CSV, XLSX, XLS, PDF, PPTX, DOCX)
+  showBulkUploadPanel = false;
+  bulkFile: File | null = null;
+  bulkQuestionSet: 'A' | 'B' | 'C' = 'A';
+  bulkDefaultCategory = '';
+  bulkBusy = false;
+  bulkResult: BulkQuestionImportResponse | null = null;
+  bulkError = '';
+
+  get isTeacher(): boolean {
+    return this.authService.hasRole('teacher');
+  }
+
+  private readonly authService = inject(AuthService);
+
+  get isOpenEndedQuestionType(): boolean {
+    return OPEN_ENDED_FORMAT_SET.has(this.qQuestionType);
+  }
+
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
+    void this.loadDepartments();
     void this.loadAssignableTargets();
 
     if (id > 0) {
@@ -212,9 +289,30 @@ export class AssessmentForm implements OnInit {
     }
   }
 
+  async loadDepartments(): Promise<void> {
+    try {
+      const list = await this.learningService.getDepartments();
+      const active = list.filter(d => d.is_active);
+      this.departments = this.isTeacher
+        ? active.filter(d => !['all / common', 'all/common', 'common'].includes((d.name || '').trim().toLowerCase()))
+        : active;
+      if (this.isTeacher && !this.templateId && this.departments.length > 0 && !this.form.controls.department_id.value) {
+        this.form.controls.department_id.setValue(this.departments[0].id);
+      }
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.warn('Could not load departments for assessment form:', err);
+    }
+  }
+
   get defaultDurationText(): string {
     const type = this.form.controls.assessment_type.value;
-    return (type === 'logical_reasoning' || type === 'programming') ? '30 Minutes' : '15 Minutes';
+    return (
+      type === 'logical_reasoning' ||
+      type === 'programming' ||
+      type === 'cognitive' ||
+      type === 'algorithm'
+    ) ? '30 Minutes' : '15 Minutes';
   }
 
   get assignedQuestions(): BankQuestion[] {
@@ -260,10 +358,12 @@ export class AssessmentForm implements OnInit {
 
   get liveDraftQuestion(): RenderableQuestion {
     const resolvedCategory = this.resolveSelectedCategory();
-    const cleanOptions = this.qOptions.map((opt, idx) => ({
-      id: String.fromCharCode(65 + idx),
-      text: opt.text || '',
-    }));
+    const cleanOptions = this.isOpenEndedQuestionType
+      ? []
+      : this.qOptions.map((opt, idx) => ({
+        id: String.fromCharCode(65 + idx),
+        text: opt.text || '',
+      }));
 
     const base: RenderableQuestion = {
       id: this.editingQuestionId ?? 0,
@@ -278,8 +378,8 @@ export class AssessmentForm implements OnInit {
     };
 
     if (this.inlinePreviewMode === 'admin') {
-      base.correct_option_ids = [...this.qCorrectOptionIds];
-      base.correct_option_id = this.qCorrectOptionIds[0] || null;
+      base.correct_option_ids = this.isOpenEndedQuestionType ? [] : [...this.qCorrectOptionIds];
+      base.correct_option_id = this.isOpenEndedQuestionType ? null : (this.qCorrectOptionIds[0] || null);
       base.explanation = this.qExplanation?.trim() ? this.qExplanation : null;
     }
 
@@ -407,10 +507,14 @@ export class AssessmentForm implements OnInit {
     const currentType = this.form.controls.assessment_type.value || 'logical_reasoning';
     const domainLabels: Record<string, string> = {
       english_grammar: 'English Grammar Categories',
+      composition: 'Written Composition Categories',
       logical_reasoning: 'Logical Reasoning Categories',
+      cognitive: 'Cognitive Aptitude Categories',
       technical: 'Technical Assessment Categories',
       programming: 'Programming & Logic Categories',
-      psychometric: 'Psychometric Categories'
+      algorithm: 'Algorithms & Complexity Categories',
+      psychometric: 'Psychometric Categories',
+      comprehension: 'Reading Comprehension Categories',
     };
 
     const orderedKeys = [
@@ -424,13 +528,13 @@ export class AssessmentForm implements OnInit {
     }));
   }
 
-  onTypeChange(type: 'psychometric' | 'technical' | 'english_grammar' | 'logical_reasoning' | 'programming'): void {
+  onTypeChange(type: AssessmentDomainType): void {
     const cats = CATEGORY_MAP[type] || [];
     if (cats.length > 0 && !this.editingQuestionId) {
       this.qCategory = cats[0].key;
     }
 
-    if (type === 'logical_reasoning') {
+    if (type === 'logical_reasoning' || type === 'cognitive') {
       this.form.controls.question_count.setValue(25);
     } else {
       this.form.controls.question_count.setValue(20);
@@ -475,7 +579,14 @@ export class AssessmentForm implements OnInit {
         this.template = template;
         this.form.patchValue({
           name: template.name,
+          department_id: template.department_id ?? null,
           assessment_type: template.assessment_type || 'logical_reasoning',
+          assessment_tag:
+            template.assessment_tag === 'Pre-Assessment' ? 'Pre-Assessment' : 'Assessment',
+          custom_tags_input: Array.isArray(template.custom_tags)
+            ? template.custom_tags.join(', ')
+            : '',
+          reading_passage: template.reading_passage ?? '',
           description: template.description ?? '',
           question_count: template.question_count || (template.assessment_type === 'logical_reasoning' ? 25 : 20),
         });
@@ -551,6 +662,13 @@ export class AssessmentForm implements OnInit {
     }
 
     const type = this.form.controls.assessment_type.value;
+    const assessmentTag = this.form.controls.assessment_tag.value || 'Assessment';
+    const customTags = (this.form.controls.custom_tags_input.value || '')
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean);
+    const readingPassage = (this.form.controls.reading_passage.value || '').trim() || null;
+    const deptId = this.form.controls.department_id.value ?? null;
     const name = this.form.controls.name.value.trim();
     const description = this.form.controls.description.value.trim() || null;
     const questionCount = Number(this.form.controls.question_count.value) || 20;
@@ -577,7 +695,11 @@ export class AssessmentForm implements OnInit {
         const updated = await firstValueFrom(
           this.api.updateTemplate(this.templateId, {
             name,
+            department_id: deptId,
             assessment_type: type,
+            assessment_tag: assessmentTag,
+            custom_tags: customTags,
+            reading_passage: readingPassage,
             description,
             question_count: questionCount,
             category_config: catConfig,
@@ -594,7 +716,11 @@ export class AssessmentForm implements OnInit {
         const created = await firstValueFrom(
           this.api.createTemplate({
             name,
+            department_id: deptId,
             assessment_type: type,
+            assessment_tag: assessmentTag,
+            custom_tags: customTags,
+            reading_passage: readingPassage,
             description,
             question_count: questionCount,
             category_config: catConfig,
@@ -697,13 +823,19 @@ export class AssessmentForm implements OnInit {
     this.inlinePreviewSelectedAnswer = '';
 
     const normalizedType = (q.question_type || 'multiple_choice').trim().toLowerCase();
-    if (normalizedType === 'multiple_select') {
-      this.qQuestionType = 'multiple_select';
-    } else if (normalizedType === 'true_false') {
-      this.qQuestionType = 'true_false';
-    } else {
-      this.qQuestionType = 'multiple_choice';
-    }
+    const supportedFormats: BankQuestionFormatType[] = [
+      'multiple_choice',
+      'multiple_select',
+      'true_false',
+      'likert',
+      'short_answer',
+      'essay',
+      'composition',
+      'code_submission',
+    ];
+    this.qQuestionType = supportedFormats.includes(normalizedType as BankQuestionFormatType)
+      ? (normalizedType as BankQuestionFormatType)
+      : 'multiple_choice';
 
     const foundInMap = Object.values(CATEGORY_MAP).some(list =>
       list.some(c => c.key === q.category)
@@ -718,43 +850,51 @@ export class AssessmentForm implements OnInit {
 
     this.qDifficulty =
       q.difficulty === 'Easy' || q.difficulty === 'Hard' ? q.difficulty : 'Medium';
+    this.qQuestionSet =
+      q.question_set === 'B' || q.question_set === 'C' ? q.question_set : 'A';
     this.qText = q.question_text || '';
+    this.qPassageText = q.passage_text || '';
     this.qInstructions = q.instructions || '';
     this.qExplanation = q.explanation || '';
     this.qMaxScore = Number(q.max_score) > 0 ? Number(q.max_score) : 1.0;
     this.qNegativeMarks = Number(q.negative_marks ?? 0) >= 0 ? Number(q.negative_marks ?? 0) : 0.0;
     this.qAddToAssessment = q.in_assessment !== false;
 
-    const rawOptions = Array.isArray(q.options) && q.options.length >= 2
-      ? q.options
-      : defaultFourOptions();
+    if (this.isOpenEndedQuestionType) {
+      this.qOptions = defaultFourOptions();
+      this.qCorrectOptionIds = [];
+    } else {
+      const rawOptions = Array.isArray(q.options) && q.options.length >= 2
+        ? q.options
+        : defaultFourOptions();
 
-    const oldToNewId = new Map<string, string>();
-    this.qOptions = rawOptions.map((opt, idx) => {
-      const nextId = String.fromCharCode(65 + idx);
-      const oldId = String(opt.id || nextId).trim().toUpperCase();
-      oldToNewId.set(oldId, nextId);
-      return {
-        id: nextId,
-        text: opt.text || '',
-      };
-    });
+      const oldToNewId = new Map<string, string>();
+      this.qOptions = rawOptions.map((opt, idx) => {
+        const nextId = String.fromCharCode(65 + idx);
+        const oldId = String(opt.id || nextId).trim().toUpperCase();
+        oldToNewId.set(oldId, nextId);
+        return {
+          id: nextId,
+          text: opt.text || '',
+        };
+      });
 
-    const sourceCorrect =
-      Array.isArray(q.correct_option_ids) && q.correct_option_ids.length > 0
-        ? q.correct_option_ids
-        : q.correct_option_id
-        ? [q.correct_option_id]
-        : [];
+      const sourceCorrect =
+        Array.isArray(q.correct_option_ids) && q.correct_option_ids.length > 0
+          ? q.correct_option_ids
+          : q.correct_option_id
+            ? [q.correct_option_id]
+            : [];
 
-    const mappedCorrect = sourceCorrect
-      .map(id => oldToNewId.get(String(id).trim().toUpperCase()) || String(id).trim().toUpperCase())
-      .filter(id => this.qOptions.some(o => o.id === id));
+      const mappedCorrect = sourceCorrect
+        .map(id => oldToNewId.get(String(id).trim().toUpperCase()) || String(id).trim().toUpperCase())
+        .filter(id => this.qOptions.some(o => o.id === id));
 
-    this.qCorrectOptionIds =
-      this.qQuestionType === 'multiple_select'
-        ? Array.from(new Set(mappedCorrect))
-        : mappedCorrect.slice(0, 1);
+      this.qCorrectOptionIds =
+        this.qQuestionType === 'multiple_select'
+          ? Array.from(new Set(mappedCorrect))
+          : mappedCorrect.slice(0, 1);
+    }
 
     this.cdr.detectChanges();
 
@@ -771,9 +911,11 @@ export class AssessmentForm implements OnInit {
     const cats = CATEGORY_MAP[type] || [];
     this.qCategory = cats[0]?.key || 'general';
     this.qCustomCategory = '';
+    this.qQuestionSet = 'A';
     this.qDifficulty = 'Medium';
     this.qQuestionType = 'multiple_choice';
     this.qText = '';
+    this.qPassageText = '';
     this.qInstructions = '';
     this.qExplanation = '';
     this.qOptions = defaultFourOptions();
@@ -786,9 +928,15 @@ export class AssessmentForm implements OnInit {
     this.inlinePreviewSelectedAnswer = '';
   }
 
-  onQuestionTypeChange(nextType: 'multiple_choice' | 'multiple_select' | 'true_false'): void {
+  onQuestionTypeChange(nextType: BankQuestionFormatType): void {
     this.qQuestionType = nextType;
     this.inlinePreviewSelectedAnswer = '';
+
+    if (OPEN_ENDED_FORMAT_SET.has(nextType)) {
+      this.qCorrectOptionIds = [];
+      this.cdr.detectChanges();
+      return;
+    }
 
     if (nextType === 'true_false') {
       const firstText = this.qOptions[0]?.text?.trim();
@@ -799,6 +947,24 @@ export class AssessmentForm implements OnInit {
       ];
       const valid = this.qCorrectOptionIds.filter(id => id === 'A' || id === 'B');
       this.qCorrectOptionIds = valid.length > 0 ? [valid[0]] : ['A'];
+    } else if (nextType === 'likert') {
+      const hasCustomText =
+        this.qOptions.length >= 2 &&
+        this.qOptions.some(o => o.text.trim() && o.text !== 'True' && o.text !== 'False');
+      if (!hasCustomText) {
+        this.qOptions = [
+          { id: 'A', text: 'Strongly Disagree' },
+          { id: 'B', text: 'Disagree' },
+          { id: 'C', text: 'Neutral' },
+          { id: 'D', text: 'Agree' },
+          { id: 'E', text: 'Strongly Agree' },
+        ];
+        this.qCorrectOptionIds = ['E'];
+      } else {
+        const validIds = new Set(this.qOptions.map(o => o.id));
+        const valid = this.qCorrectOptionIds.filter(id => validIds.has(id));
+        this.qCorrectOptionIds = valid.length > 0 ? [valid[0]] : ['A'];
+      }
     } else if (nextType === 'multiple_choice') {
       if (this.qOptions.length === 2 && this.qOptions[0].text === 'True' && this.qOptions[1].text === 'False') {
         this.qOptions = defaultFourOptions();
@@ -960,51 +1126,55 @@ export class AssessmentForm implements OnInit {
       return;
     }
 
-    if (this.qOptions.length < 2) {
-      this.questionError = 'At least 2 answer options are required.';
-      this.cdr.detectChanges();
-      return;
-    }
+    let cleanOptions: BankQuestionOption[] = [];
+    let orderedCorrect: string[] = [];
 
-    if (this.qQuestionType === 'true_false' && this.qOptions.length !== 2) {
-      this.questionError = 'True / False questions require exactly 2 answer options.';
-      this.cdr.detectChanges();
-      return;
-    }
-
-    const cleanOptions: BankQuestionOption[] = [];
-    for (let i = 0; i < this.qOptions.length; i++) {
-      const id = String.fromCharCode(65 + i);
-      const optText = (this.qOptions[i].text || '').trim();
-      if (!optText) {
-        this.questionError = `Option ${id} cannot be empty. Please fill in text or remove unused options.`;
+    if (!this.isOpenEndedQuestionType) {
+      if (this.qOptions.length < 2) {
+        this.questionError = 'At least 2 answer options are required.';
         this.cdr.detectChanges();
         return;
       }
-      cleanOptions.push({ id, text: optText });
-    }
 
-    const validIds = new Set(cleanOptions.map(o => o.id));
-    const orderedCorrect = cleanOptions
-      .map(o => o.id)
-      .filter(id => this.qCorrectOptionIds.includes(id));
+      if (this.qQuestionType === 'true_false' && this.qOptions.length !== 2) {
+        this.questionError = 'True / False questions require exactly 2 answer options.';
+        this.cdr.detectChanges();
+        return;
+      }
 
-    if (orderedCorrect.length === 0) {
-      this.questionError = 'Please select at least one correct answer before saving.';
-      this.cdr.detectChanges();
-      return;
-    }
+      for (let i = 0; i < this.qOptions.length; i++) {
+        const id = String.fromCharCode(65 + i);
+        const optText = (this.qOptions[i].text || '').trim();
+        if (!optText) {
+          this.questionError = `Option ${id} cannot be empty. Please fill in text or remove unused options.`;
+          this.cdr.detectChanges();
+          return;
+        }
+        cleanOptions.push({ id, text: optText });
+      }
 
-    if (this.qQuestionType !== 'multiple_select' && orderedCorrect.length !== 1) {
-      this.questionError = 'Single-choice questions require exactly one selected correct answer.';
-      this.cdr.detectChanges();
-      return;
-    }
+      const validIds = new Set(cleanOptions.map(o => o.id));
+      orderedCorrect = cleanOptions
+        .map(o => o.id)
+        .filter(id => this.qCorrectOptionIds.includes(id));
 
-    if (orderedCorrect.some(id => !validIds.has(id))) {
-      this.questionError = 'Selected correct answer does not match active options.';
-      this.cdr.detectChanges();
-      return;
+      if (orderedCorrect.length === 0) {
+        this.questionError = 'Please select at least one correct answer before saving.';
+        this.cdr.detectChanges();
+        return;
+      }
+
+      if (this.qQuestionType !== 'multiple_select' && orderedCorrect.length !== 1) {
+        this.questionError = 'Single-choice questions require exactly one selected correct answer.';
+        this.cdr.detectChanges();
+        return;
+      }
+
+      if (orderedCorrect.some(id => !validIds.has(id))) {
+        this.questionError = 'Selected correct answer does not match active options.';
+        this.cdr.detectChanges();
+        return;
+      }
     }
 
     const parsedScore = parseFloat(String(this.qMaxScore));
@@ -1024,6 +1194,7 @@ export class AssessmentForm implements OnInit {
     const finalCategory = this.resolveSelectedCategory();
     const instructionsVal = (this.qInstructions || '').trim() || null;
     const explanationVal = (this.qExplanation || '').trim() || null;
+    const passageVal = (this.qPassageText || '').trim() || null;
 
     this.savingQuestion = true;
     this.cdr.detectChanges();
@@ -1032,13 +1203,15 @@ export class AssessmentForm implements OnInit {
       if (this.editingQuestionId) {
         const updatePayload: UpdateBankQuestionPayload = {
           category: finalCategory,
+          question_set: this.qQuestionSet,
           difficulty: this.qDifficulty || 'Medium',
           question_type: this.qQuestionType,
           question_text: text,
+          passage_text: passageVal,
           instructions: instructionsVal,
           explanation: explanationVal,
           options: cleanOptions,
-          correct_option_id: orderedCorrect[0],
+          ...(orderedCorrect.length > 0 ? { correct_option_id: orderedCorrect[0] } : {}),
           correct_option_ids: orderedCorrect,
           max_score: parsedScore,
           negative_marks: parsedNeg,
@@ -1053,13 +1226,15 @@ export class AssessmentForm implements OnInit {
       } else {
         const createPayload: CreateBankQuestionPayload = {
           category: finalCategory,
+          question_set: this.qQuestionSet,
           difficulty: this.qDifficulty || 'Medium',
           question_type: this.qQuestionType,
           question_text: text,
+          passage_text: passageVal,
           instructions: instructionsVal,
           explanation: explanationVal,
           options: cleanOptions,
-          correct_option_id: orderedCorrect[0],
+          ...(orderedCorrect.length > 0 ? { correct_option_id: orderedCorrect[0] } : {}),
           correct_option_ids: orderedCorrect,
           max_score: parsedScore,
           negative_marks: parsedNeg,
@@ -1312,6 +1487,16 @@ export class AssessmentForm implements OnInit {
         return 'Multi-Select';
       case 'true_false':
         return 'True / False';
+      case 'likert':
+        return 'Likert Scale';
+      case 'short_answer':
+        return 'Short Answer';
+      case 'essay':
+        return 'Essay';
+      case 'composition':
+        return 'Composition';
+      case 'code_submission':
+        return 'Code Sandbox';
       default:
         return 'Single MCQ';
     }
@@ -1323,6 +1508,64 @@ export class AssessmentForm implements OnInit {
       return q.correct_option_ids.some(id => String(id).trim().toUpperCase() === norm);
     }
     return String(q.correct_option_id || '').trim().toUpperCase() === norm;
+  }
+
+  // ----------------------------------------------------
+  // Bulk Question Import (.csv, .xlsx, .xls, .pdf, .pptx, .docx)
+  // ----------------------------------------------------
+
+  toggleBulkUploadPanel(): void {
+    this.showBulkUploadPanel = !this.showBulkUploadPanel;
+    this.bulkError = '';
+    this.cdr.detectChanges();
+  }
+
+  onBulkFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.bulkFile = input?.files?.[0] || null;
+    this.bulkResult = null;
+    this.bulkError = '';
+    this.cdr.detectChanges();
+  }
+
+  async runBulkUpload(dryRun: boolean): Promise<void> {
+    if (!this.templateId) {
+      this.bulkError = 'Save the assessment template first before importing questions.';
+      return;
+    }
+    if (!this.bulkFile) {
+      this.bulkError = 'Please select a .csv, .xlsx, .xls, .pdf, .pptx, or .docx file.';
+      return;
+    }
+
+    this.bulkBusy = true;
+    this.bulkError = '';
+    this.questionError = '';
+    this.questionSuccess = '';
+    this.cdr.detectChanges();
+
+    try {
+      const cat = this.bulkDefaultCategory.trim() || undefined;
+      const res = await firstValueFrom(
+        this.api.bulkUploadQuestions(
+          this.templateId,
+          this.bulkFile,
+          this.bulkQuestionSet,
+          cat,
+          dryRun
+        )
+      );
+      this.bulkResult = res;
+      if (!dryRun) {
+        this.questionSuccess = `Imported ${res.inserted_count} question(s) from ${res.filename} (${res.failed_count} skipped).`;
+        await this.loadBankQuestions(this.templateId);
+      }
+    } catch (err: any) {
+      this.bulkError = this.parseErrorMessage(err, 'Failed to process uploaded question file.');
+    } finally {
+      this.bulkBusy = false;
+      this.cdr.detectChanges();
+    }
   }
 
   cancel(): void {

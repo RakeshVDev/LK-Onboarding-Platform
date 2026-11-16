@@ -18,6 +18,8 @@ import {
   AssessmentAssignmentStatus,
   StudentAssignedAssessmentItem
 } from '../services/assessment';
+import { AssessmentStatusService } from '../../../core/services/assessment-status.service';
+import { OnboardingService } from '../../../core/services/onboarding.service';
 
 @Component({
   selector: 'app-learner-assessments',
@@ -29,6 +31,8 @@ import {
 export class LearnerAssessments implements OnInit {
 
   private readonly api = inject(AssessmentService);
+  private readonly assessmentStatusService = inject(AssessmentStatusService);
+  private readonly onboardingService = inject(OnboardingService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -44,6 +48,36 @@ export class LearnerAssessments implements OnInit {
 
   readonly hasInProgressAssessment = computed(() =>
     this.assessments().some(item => item.status === 'IN_PROGRESS')
+  );
+  readonly completedCount = computed(() =>
+    this.assessments().filter(item => item.status === 'COMPLETED').length
+  );
+  readonly pendingCount = computed(() =>
+    this.assessments().filter(
+      item => item.status === 'NOT_STARTED' || item.status === 'IN_PROGRESS'
+    ).length
+  );
+  readonly allCompleted = computed(() => {
+    const status = this.assessmentStatusService.statusState();
+    if (status?.all_completed === true || status?.has_approved_department === true) {
+      return true;
+    }
+    const items = this.assessments();
+    if (items.length === 0) return true;
+    return this.pendingCount() === 0 && this.completedCount() > 0;
+  });
+  readonly hasChosenDepartment = computed(
+    () =>
+      this.assessmentStatusService.statusState()?.has_chosen_department === true ||
+      Boolean(this.onboardingService.permissionsState()?.selected_department_id)
+  );
+  readonly hasApprovedDepartment = computed(
+    () =>
+      this.assessmentStatusService.statusState()?.has_approved_department === true ||
+      this.onboardingService.permissionsState()?.department_approved === true
+  );
+  readonly canSelectDepartment = computed(
+    () => this.onboardingService.permissionsState()?.can_select_department === true
   );
 
   startingId: number | null = null;
@@ -128,6 +162,8 @@ export class LearnerAssessments implements OnInit {
         this.lastSyncedAt.set(data?.synced_at || new Date().toISOString());
         this.lastSyncLocalMs = Date.now();
         this.nowTickMs.set(this.lastSyncLocalMs);
+        void this.assessmentStatusService.getStatus(true).catch(() => { });
+        void this.onboardingService.getPermissions(true).catch(() => { });
 
         if (!this.queryAutoOpenHandled) {
           this.queryAutoOpenHandled = true;
@@ -303,6 +339,7 @@ export class LearnerAssessments implements OnInit {
               remainingSeconds: session.remaining_seconds,
               templateName: session.template_name || item.name,
               assessmentType: session.assessment_type || item.assessment_type,
+              assignedSet: session.assigned_set || undefined,
             }
           }
         );

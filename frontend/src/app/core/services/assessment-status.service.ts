@@ -1,5 +1,5 @@
 
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
@@ -11,6 +11,15 @@ export type AssessmentStatus =
 export interface LearnerAssessmentStatus {
   status: AssessmentStatus;
   session_id: number | null;
+  total_assigned?: number;
+  completed_count?: number;
+  pending_count?: number;
+  all_completed?: boolean;
+  pre_assessments_completed?: boolean;
+  has_chosen_department?: boolean;
+  has_approved_department?: boolean;
+  department_approved?: boolean;
+  onboarding_stage?: string;
 }
 
 @Injectable({
@@ -21,11 +30,13 @@ export class AssessmentStatusService {
   private readonly apiUrl =
     '/training-api/api/v1/assessments/my/status';
 
+  readonly statusState = signal<LearnerAssessmentStatus | null>(null);
+
   private cachedStatus: LearnerAssessmentStatus | null = null;
   private cachedToken: string | null = null;
   private pendingPromise: Promise<LearnerAssessmentStatus> | null = null;
 
-  constructor(private readonly http: HttpClient) {}
+  constructor(private readonly http: HttpClient) { }
 
   async getStatus(force = false): Promise<LearnerAssessmentStatus> {
     const activeToken =
@@ -36,10 +47,16 @@ export class AssessmentStatusService {
     if (this.cachedToken !== activeToken) {
       this.cachedStatus = null;
       this.pendingPromise = null;
+      this.statusState.set(null);
       this.cachedToken = activeToken;
     }
 
-    if (!force && this.cachedStatus && this.cachedStatus.status === 'completed') {
+    if (
+      !force &&
+      this.cachedStatus &&
+      (this.cachedStatus.status === 'completed' || this.cachedStatus.all_completed === true)
+    ) {
+      this.statusState.set(this.cachedStatus);
       return this.cachedStatus;
     }
 
@@ -57,6 +74,7 @@ export class AssessmentStatusService {
             ? sessionStorage.getItem('lk_access_token')
             : null;
         this.cachedStatus = res;
+        this.statusState.set(res);
         return res;
       } finally {
         this.pendingPromise = null;
@@ -70,5 +88,6 @@ export class AssessmentStatusService {
     this.cachedStatus = null;
     this.cachedToken = null;
     this.pendingPromise = null;
+    this.statusState.set(null);
   }
 }

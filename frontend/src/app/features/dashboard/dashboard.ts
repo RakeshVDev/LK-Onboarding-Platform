@@ -9,6 +9,7 @@ import {
   inject
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -23,12 +24,13 @@ import {
   StudentAssignedStats
 } from '../assessments/services/assessment';
 import { UserManagementService, ManagedUser } from '../../core/services/user-management.service';
-import { LearningService } from '../../core/services/learning.service';
+import { LearningService, Department, StudentDepartmentRequest } from '../../core/services/learning.service';
+import { LiveClassesService, LiveClassSession } from '../../core/services/live-classes.service';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, FormsModule],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss'
 })
@@ -37,6 +39,7 @@ export class Dashboard implements OnInit {
   private readonly assessmentService = inject(AssessmentService);
   private readonly userService = inject(UserManagementService);
   private readonly learningService = inject(LearningService);
+  private readonly liveClassesService = inject(LiveClassesService);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -126,6 +129,30 @@ export class Dashboard implements OnInit {
   readonly coursesCount = signal<number>(0);
   readonly cohortsCount = signal<number>(0);
   readonly departmentsCount = signal<number>(0);
+
+  // Student Department Allocation Request state
+  readonly myDeptRequest = signal<StudentDepartmentRequest | null>(null);
+  readonly availableDepartments = signal<Department[]>([]);
+  readonly pendingRequestsCount = signal<number>(0);
+  selectedTrackDeptId = 0;
+  trackNotes = '';
+  readonly submittingTrack = signal(false);
+  readonly trackSubmitSuccess = signal('');
+  readonly trackSubmitError = signal('');
+
+  // Department-gated Live Classes schedule preview
+  readonly upcomingLiveClasses = signal<LiveClassSession[]>([]);
+
+  readonly hasCompletedInitialAssessment = computed(() => {
+    const stats = this.assignedStats();
+    const total = this.totalAssignedCount();
+    if (total === 0) return true;
+    return (
+      stats.not_started_count === 0 &&
+      stats.in_progress_count === 0 &&
+      this.completedAssignedCount() > 0
+    );
+  });
 
   // Time-based greeting
   readonly greeting = computed(() => {
@@ -242,17 +269,94 @@ export class Dashboard implements OnInit {
   }
 
   private async loadRoleSpecificData(role: UserRole): Promise<void> {
-    const tasks: Promise<any>[] = [this.loadLearningCounts()];
+    const tasks: Promise<any>[] = [this.loadLearningCounts(), this.loadLiveClasses()];
 
     if (role === 'learner') {
-      tasks.push(this.loadAssignedAssessments(false));
+      tasks.push(this.loadAssignedAssessments(false), this.loadLearnerDepartmentData());
     } else if (role === 'teacher') {
-      tasks.push(this.loadTemplates(), this.loadAdminResults());
+      tasks.push(this.loadTemplates(), this.loadAdminResults(), this.loadPendingRequests());
     } else if (role === 'admin' || role === 'superadmin') {
-      tasks.push(this.loadTemplates(), this.loadAdminResults(), this.loadUserStats());
+      tasks.push(this.loadTemplates(), this.loadAdminResults(), this.loadUserStats(), this.loadPendingRequests());
     }
 
     await Promise.allSettled(tasks);
+  }
+
+  private async loadLiveClasses(): Promise<void> {
+    try {
+      const res = await firstValueFrom(this.liveClassesService.listSessions());
+      const sessions = Array.isArray(res?.sessions) ? res.sessions : [];
+      this.upcomingLiveClasses.set(
+        sessions.filter(s => s.status !== 'completed' && s.status !== 'cancelled').slice(0, 3)
+      );
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.warn('Could not load live classes preview:', err);
+    }
+  }
+
+  private async loadLearnerDepartmentData(): Promise<void> {
+    try {
+      const [req, depts] = await Promise.all([
+        this.learningService.getMyDepartmentRequest().catch(() => null),
+        this.learningService.getDepartments().catch(() => [])
+      ]);
+      this.myDeptRequest.set(req);
+      const activeDepts = depts.filter(d => {
+        if (!d.is_active) return false;
+        const norm = (d.name || '').trim().toLowerCase();
+        return norm !== 'all / common' && norm !== 'all/common' && norm !== 'common';
+      });
+      this.availableDepartments.set(activeDepts);
+      if (req?.department_id) {
+        this.selectedTrackDeptId = req.department_id;
+      } else if (activeDepts.length > 0) {
+        this.selectedTrackDeptId = activeDepts[0].id;
+      }
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.warn('Could not load learner department request:', err);
+    }
+  }
+
+  private async loadPendingRequests(): Promise<void> {
+    try {
+      const requests = await this.learningService.getDepartmentRequests('pending');
+      this.pendingRequestsCount.set(requests.length);
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.warn('Could not load pending department requests count:', err);
+    }
+  }
+
+  async submitTrackPreference(deptId: number, notes?: string): Promise<void> {
+    if (!deptId) return;
+    this.submittingTrack.set(true);
+    this.trackSubmitError.set('');
+    this.trackSubmitSuccess.set('');
+    this.cdr.detectChanges();
+    try {
+      const res = await this.learningService.submitDepartmentRequest(deptId, notes || this.trackNotes);
+      this.myDeptRequest.set(res);
+      this.selectedTrackDeptId = res.department_id;
+      this.trackSubmitSuccess.set(`Successfully submitted request for the ${res.department_name || 'Department'} track! Waiting for instructor approval.`);
+    } catch (err: any) {
+      this.trackSubmitError.set(err.error?.detail || 'Failed to submit department track request.');
+    } finally {
+      this.submittingTrack.set(false);
+      this.cdr.detectChanges();
+    }
+  }
+
+  getTrackIcon(name?: string | null): string {
+    const lower = (name || '').toLowerCase();
+    if (lower.includes('php')) return '🐘';
+    if (lower.includes('.net') || lower.includes('c#')) return '⚙';
+    if (lower.includes('python')) return '🐍';
+    if (lower.includes('java')) return '☕';
+    if (lower.includes('data') || lower.includes('sql') || lower.includes('db')) return '🗄';
+    if (lower.includes('all') || lower.includes('common')) return '🌐';
+    return '💻';
   }
 
   async refreshLearnerAssessments(): Promise<void> {
@@ -416,6 +520,22 @@ export class Dashboard implements OnInit {
       case 'teacher': return 'Instructor / Faculty';
       case 'learner': return 'New Joinee / Learner';
       default: return 'User';
+    }
+  }
+
+  async joinLiveClass(cls: { id: number; status: string; meeting_url?: string }, event?: Event): Promise<void> {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (cls.status !== 'live') {
+      return;
+    }
+    try {
+      const res = await firstValueFrom(this.liveClassesService.joinSession(cls.id));
+      if (res?.meeting_url) {
+        window.open(res.meeting_url, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      await this.router.navigateByUrl('/live-classes');
     }
   }
 

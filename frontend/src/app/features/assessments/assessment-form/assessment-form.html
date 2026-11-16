@@ -111,11 +111,116 @@
             <div class="type-icon icon-indigo">💻</div>
             <div class="type-meta">
               <strong>Programming &amp; Logic</strong>
-              <span>20 MCQs · 30 Mins limit · Logic, Algorithms &amp; Debugging</span>
+              <span>20 Items · 30 Mins limit · Logic, Code Sandbox &amp; Debugging</span>
+            </div>
+          </label>
+
+          <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'cognitive'">
+            <input type="radio" formControlName="assessment_type" value="cognitive"
+              (change)="onTypeChange('cognitive')">
+            <div class="type-icon icon-emerald">🧠</div>
+            <div class="type-meta">
+              <strong>Cognitive Aptitude</strong>
+              <span>25 Items · 30 Mins limit · Deduction, Speed &amp; Accuracy</span>
+            </div>
+          </label>
+
+          <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'composition'">
+            <input type="radio" formControlName="assessment_type" value="composition"
+              (change)="onTypeChange('composition')">
+            <div class="type-icon icon-rose">📝</div>
+            <div class="type-meta">
+              <strong>Written Composition</strong>
+              <span>20 Items · 15 Mins limit · Local NLP Coherence &amp; Style</span>
+            </div>
+          </label>
+
+          <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'algorithm'">
+            <input type="radio" formControlName="assessment_type" value="algorithm"
+              (change)="onTypeChange('algorithm')">
+            <div class="type-icon icon-blue">⚙</div>
+            <div class="type-meta">
+              <strong>Algorithms &amp; Complexity</strong>
+              <span>20 Items · 30 Mins limit · Big-O Heuristics &amp; Test Suite</span>
+            </div>
+          </label>
+
+          <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'comprehension'">
+            <input type="radio" formControlName="assessment_type" value="comprehension"
+              (change)="onTypeChange('comprehension')">
+            <div class="type-icon icon-teal">📖</div>
+            <div class="type-meta">
+              <strong>Reading Comprehension</strong>
+              <span>Passage Deduction · Evidence &amp; Analytical Inference</span>
             </div>
           </label>
 
         </div>
+      </div>
+
+      <!-- SuperAdmin Assessment Tag & Custom Tags -->
+      <div class="form-group">
+        <label class="group-label">SuperAdmin Assessment Classification Tag <span>*</span></label>
+        <div class="tag-choice-row">
+          <label class="tag-choice-pill" [class.selected]="form.controls.assessment_tag.value === 'Assessment'">
+            <input type="radio" formControlName="assessment_tag" value="Assessment">
+            <div>
+              <strong>Assessment</strong>
+              <span>Primary graded evaluation milestone &amp; certification record</span>
+            </div>
+          </label>
+          <label class="tag-choice-pill" [class.selected]="form.controls.assessment_tag.value === 'Pre-Assessment'">
+            <input type="radio" formControlName="assessment_tag" value="Pre-Assessment">
+            <div>
+              <strong>Pre-Assessment</strong>
+              <span>Diagnostic baseline screening before track specialization</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="custom_tags_input">Additional Classification Tags (Comma-separated)</label>
+        <input id="custom_tags_input" type="text" formControlName="custom_tags_input"
+          placeholder="e.g. onboarding-2026, multi-set-abc, english-fluency">
+        <small class="field-hint">Optional metadata tags surfaced in analytics and template directories.</small>
+      </div>
+
+      @if (form.controls.assessment_type.value === 'comprehension') {
+      <div class="form-group">
+        <label for="reading_passage">Default Comprehension Reading Passage</label>
+        <textarea id="reading_passage" rows="5" formControlName="reading_passage"
+          placeholder="Paste the primary English reading passage displayed alongside comprehension questions..."></textarea>
+        <small class="field-hint">Displayed in a sticky side/top reading pane during candidate examination.</small>
+      </div>
+      }
+
+      <!-- Department Track Assignment -->
+      <div class="form-group">
+        <label for="deptSelect">Target Department / Tech Track @if (isTeacher) {<span>*</span>}</label>
+        <select id="deptSelect" formControlName="department_id" class="form-control">
+          @if (!isTeacher) {
+          <option [ngValue]="null">All Departments / Common (General Induction)</option>
+          } @else if (departments.length === 0) {
+          <option [ngValue]="null" disabled>No assigned departments yet — contact SuperAdmin</option>
+          }
+          @for (dept of departments; track dept.id) {
+          <option [ngValue]="dept.id">{{ dept.name }}</option>
+          }
+        </select>
+        @if (isTeacher && departments.length === 0) {
+        <small class="field-error">No departments are assigned to your teacher account yet. A SuperAdmin must assign 1–4
+          departments before you can create assessments.</small>
+        } @else {
+        <small class="field-hint">
+          @if (isTeacher) {
+          Restricted to departments assigned to your teacher account (up to 4 tracks).
+          } @else {
+          Assign this assessment to a specific track (e.g. Python, .NET, Java, PHP) or keep as Common for all new
+          joinees.
+          }
+        </small>
+        }
       </div>
 
       <!-- Assessment Name -->
@@ -145,7 +250,8 @@
         <div class="form-group">
           <label>Default Duration</label>
           <input type="text" disabled [value]="defaultDurationText">
-          <small class="field-hint">Calculated automatically based on domain standard (30 mins for Logical/Programming, 15 mins others).</small>
+          <small class="field-hint">Calculated automatically based on domain standard (30 mins for Logical/Programming,
+            15 mins others).</small>
         </div>
       </div>
 
@@ -177,11 +283,7 @@
 
         <div class="scope-selector-grid">
           <label class="scope-pill" [class.selected]="assignmentScope === 'all'">
-            <input
-              type="radio"
-              name="assignmentScope"
-              value="all"
-              [checked]="assignmentScope === 'all'"
+            <input type="radio" name="assignmentScope" value="all" [checked]="assignmentScope === 'all'"
               (change)="onScopeChange('all')">
             <div>
               <strong>All Learners</strong>
@@ -190,11 +292,7 @@
           </label>
 
           <label class="scope-pill" [class.selected]="assignmentScope === 'cohort'">
-            <input
-              type="radio"
-              name="assignmentScope"
-              value="cohort"
-              [checked]="assignmentScope === 'cohort'"
+            <input type="radio" name="assignmentScope" value="cohort" [checked]="assignmentScope === 'cohort'"
               (change)="onScopeChange('cohort')">
             <div>
               <strong>Specific Cohorts</strong>
@@ -203,11 +301,7 @@
           </label>
 
           <label class="scope-pill" [class.selected]="assignmentScope === 'learner'">
-            <input
-              type="radio"
-              name="assignmentScope"
-              value="learner"
-              [checked]="assignmentScope === 'learner'"
+            <input type="radio" name="assignmentScope" value="learner" [checked]="assignmentScope === 'learner'"
               (change)="onScopeChange('learner')">
             <div>
               <strong>Specific Students</strong>
@@ -217,97 +311,84 @@
         </div>
 
         @if (assignmentScope === 'cohort') {
-          <div class="target-picker-panel">
-            <div class="picker-toolbar">
-              <input
-                type="text"
-                class="picker-search"
-                [(ngModel)]="targetSearchQuery"
-                [ngModelOptions]="{ standalone: true }"
-                placeholder="Search cohorts by name...">
-              <div class="picker-btn-group">
-                <button type="button" class="btn-picker-util" (click)="selectAllCohorts()">Select All</button>
-                <button type="button" class="btn-picker-util" (click)="clearCohortsSelection()">Clear ({{ selectedCohortIds.length }})</button>
-              </div>
+        <div class="target-picker-panel">
+          <div class="picker-toolbar">
+            <input type="text" class="picker-search" [(ngModel)]="targetSearchQuery"
+              [ngModelOptions]="{ standalone: true }" placeholder="Search cohorts by name...">
+            <div class="picker-btn-group">
+              <button type="button" class="btn-picker-util" (click)="selectAllCohorts()">Select All</button>
+              <button type="button" class="btn-picker-util" (click)="clearCohortsSelection()">Clear ({{
+                selectedCohortIds.length }})</button>
             </div>
+          </div>
 
-            @if (loadingTargets) {
-              <p class="picker-empty">Loading cohorts...</p>
-            } @else if (filteredCohorts.length === 0) {
-              <p class="picker-empty">No active cohorts found matching your filter.</p>
-            } @else {
-              <div class="target-checklist-grid">
-                @for (cohort of filteredCohorts; track cohort.id) {
-                  <label class="target-checkbox-card" [class.checked]="isCohortSelected(cohort.id)">
-                    <input
-                      type="checkbox"
-                      [checked]="isCohortSelected(cohort.id)"
-                      (change)="toggleCohortSelection(cohort.id)">
-                    <div>
-                      <strong>{{ cohort.name }}</strong>
-                      <span>{{ cohort.member_count }} enrolled learner(s) &middot; {{ cohort.status }}</span>
-                    </div>
-                  </label>
-                }
+          @if (loadingTargets) {
+          <p class="picker-empty">Loading cohorts...</p>
+          } @else if (filteredCohorts.length === 0) {
+          <p class="picker-empty">No active cohorts found matching your filter.</p>
+          } @else {
+          <div class="target-checklist-grid">
+            @for (cohort of filteredCohorts; track cohort.id) {
+            <label class="target-checkbox-card" [class.checked]="isCohortSelected(cohort.id)">
+              <input type="checkbox" [checked]="isCohortSelected(cohort.id)"
+                (change)="toggleCohortSelection(cohort.id)">
+              <div>
+                <strong>{{ cohort.name }}</strong>
+                <span>{{ cohort.member_count }} enrolled learner(s) &middot; {{ cohort.status }}</span>
               </div>
+            </label>
             }
           </div>
+          }
+        </div>
         }
 
         @if (assignmentScope === 'learner') {
-          <div class="target-picker-panel">
-            <div class="picker-toolbar">
-              <input
-                type="text"
-                class="picker-search"
-                [(ngModel)]="targetSearchQuery"
-                [ngModelOptions]="{ standalone: true }"
-                placeholder="Search students by name or email...">
-              <div class="picker-btn-group">
-                <button type="button" class="btn-picker-util" (click)="selectAllFilteredLearners()">Select All</button>
-                <button type="button" class="btn-picker-util" (click)="clearLearnersSelection()">Clear ({{ selectedLearnerIds.length }})</button>
-              </div>
+        <div class="target-picker-panel">
+          <div class="picker-toolbar">
+            <input type="text" class="picker-search" [(ngModel)]="targetSearchQuery"
+              [ngModelOptions]="{ standalone: true }" placeholder="Search students by name or email...">
+            <div class="picker-btn-group">
+              <button type="button" class="btn-picker-util" (click)="selectAllFilteredLearners()">Select All</button>
+              <button type="button" class="btn-picker-util" (click)="clearLearnersSelection()">Clear ({{
+                selectedLearnerIds.length }})</button>
             </div>
+          </div>
 
-            @if (loadingTargets) {
-              <p class="picker-empty">Loading students...</p>
-            } @else if (filteredLearners.length === 0) {
-              <p class="picker-empty">No active learners found matching your filter.</p>
-            } @else {
-              <div class="target-checklist-grid">
-                @for (learner of filteredLearners; track learner.id) {
-                  <label class="target-checkbox-card" [class.checked]="isLearnerSelected(learner.id)">
-                    <input
-                      type="checkbox"
-                      [checked]="isLearnerSelected(learner.id)"
-                      (change)="toggleLearnerSelection(learner.id)">
-                    <div>
-                      <strong>{{ learner.full_name }}</strong>
-                      <span>{{ learner.email }}</span>
-                    </div>
-                  </label>
-                }
+          @if (loadingTargets) {
+          <p class="picker-empty">Loading students...</p>
+          } @else if (filteredLearners.length === 0) {
+          <p class="picker-empty">No active learners found matching your filter.</p>
+          } @else {
+          <div class="target-checklist-grid">
+            @for (learner of filteredLearners; track learner.id) {
+            <label class="target-checkbox-card" [class.checked]="isLearnerSelected(learner.id)">
+              <input type="checkbox" [checked]="isLearnerSelected(learner.id)"
+                (change)="toggleLearnerSelection(learner.id)">
+              <div>
+                <strong>{{ learner.full_name }}</strong>
+                <span>{{ learner.email }}</span>
               </div>
+            </label>
             }
           </div>
+          }
+        </div>
         }
 
         <!-- Optional Deadline -->
         <div class="deadline-row">
           <div class="form-group deadline-input-wrap">
             <label for="due_at_local">Optional Submission Deadline</label>
-            <input
-              id="due_at_local"
-              type="datetime-local"
-              [ngModel]="dueAtLocal"
-              (ngModelChange)="onDueDateInputChange($event)"
-              [ngModelOptions]="{ standalone: true }">
-            <small class="field-hint">Leave blank for no fixed expiry date. Past-due unsubmitted assessments transition to Expired.</small>
+            <input id="due_at_local" type="datetime-local" [ngModel]="dueAtLocal"
+              (ngModelChange)="onDueDateInputChange($event)" [ngModelOptions]="{ standalone: true }">
+            <small class="field-hint">Leave blank for no fixed expiry date. Past-due unsubmitted assessments transition
+              to Expired.</small>
           </div>
           @if (dueAtLocal) {
-            <button type="button" class="btn-clear-deadline" (click)="clearDeadline()">
-              Clear Deadline
-            </button>
+          <button type="button" class="btn-clear-deadline" (click)="clearDeadline()">
+            Clear Deadline
+          </button>
           }
         </div>
       </div>
@@ -316,7 +397,8 @@
       <div class="form-actions">
         <button class="btn-cancel" type="button" (click)="cancel()">Cancel</button>
         <button class="btn-submit" type="submit" [disabled]="saving">
-          {{ saving ? 'Saving Assessment...' : (templateId ? 'Update Assessment Settings' : 'Create Assessment & Continue') }}
+          {{ saving ? 'Saving Assessment...' : (templateId ? 'Update Assessment Settings' : 'Create Assessment &
+          Continue') }}
         </button>
       </div>
 
@@ -334,7 +416,8 @@
       <div>
         <h3>Question Bank &amp; Sequence Management</h3>
         <p>
-          Author, edit, preview, and order questions for <strong>{{ template?.name || form.controls.name.value }}</strong>.
+          Author, edit, preview, and order questions for <strong>{{ template?.name || form.controls.name.value
+            }}</strong>.
         </p>
       </div>
 
@@ -342,11 +425,115 @@
         <button class="btn-preview-outline" type="button" (click)="openAssessmentPreview()">
           <span>👁 Preview Assessment</span>
         </button>
+        <button class="btn-bulk-upload" type="button" (click)="toggleBulkUploadPanel()">
+          <span>{{ showBulkUploadPanel ? '✕ Close Bulk Import' : '⬆ Bulk Upload (CSV/Doc)' }}</span>
+        </button>
         <button class="btn-add-question" type="button" (click)="toggleAddQuestion()">
           <span>{{ showAddQuestionForm ? '✕ Close Editor' : '＋ Add Manual Question' }}</span>
         </button>
       </div>
     </div>
+
+    @if (showBulkUploadPanel) {
+    <div class="bulk-upload-card">
+      <div class="card-title-bar">
+        <div class="title-left">
+          <h4>Local NLP Bulk Question Import</h4>
+          <span class="badge-badge">100% Offline Parser · CSV / XLSX / XLS / PDF / PPTX / DOCX</span>
+        </div>
+      </div>
+
+      @if (bulkError) {
+      <div class="alert-banner error-banner">
+        <span>⚠</span> {{ bulkError }}
+      </div>
+      }
+
+      <div class="bulk-controls-grid">
+        <div class="form-group">
+          <label for="bulkFileInput">Select Question File <span>*</span></label>
+          <input id="bulkFileInput" type="file" accept=".csv,.xlsx,.xls,.pdf,.pptx,.docx"
+            (change)="onBulkFileSelected($event)">
+          <small class="field-hint">Supports CSV spreadsheets, Excel workbooks, Word docs, PowerPoint decks, or
+            PDFs.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="bulkSetSelect">Target Question Set</label>
+          <select id="bulkSetSelect" [(ngModel)]="bulkQuestionSet" name="bulkQuestionSet">
+            <option value="A">Set A</option>
+            <option value="B">Set B</option>
+            <option value="C">Set C</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="bulkCategoryInput">Default Category (Optional)</label>
+          <input id="bulkCategoryInput" type="text" [(ngModel)]="bulkDefaultCategory" name="bulkDefaultCategory"
+            placeholder="Leave blank for Auto-Detect NLP">
+        </div>
+      </div>
+
+      <div class="bulk-actions-row">
+        <button type="button" class="btn-preview-inline" [disabled]="bulkBusy || !bulkFile"
+          (click)="runBulkUpload(true)">
+          {{ bulkBusy ? 'Analyzing File...' : '🔍 Inspect & NLP Preview' }}
+        </button>
+        <button type="button" class="btn-submit" [disabled]="bulkBusy || !bulkFile" (click)="runBulkUpload(false)">
+          {{ bulkBusy ? 'Importing...' : '⬆ Confirm & Import to Bank' }}
+        </button>
+      </div>
+
+      @if (bulkResult) {
+      <div class="bulk-summary-strip">
+        <span><strong>File:</strong> {{ bulkResult.filename }} ({{ bulkResult.file_format }})</span>
+        <span>·</span>
+        <span><strong>Detected:</strong> {{ bulkResult.total_detected }}</span>
+        <span>·</span>
+        <span><strong>Valid:</strong> {{ bulkResult.valid_count }}</span>
+        <span>·</span>
+        <span><strong>Inserted:</strong> {{ bulkResult.inserted_count }}</span>
+        <span>·</span>
+        <span><strong>Errors:</strong> {{ bulkResult.failed_count }}</span>
+      </div>
+
+      @if (bulkResult.items.length > 0) {
+      <div class="bulk-preview-table-wrap">
+        <table class="bulk-preview-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Set</th>
+              <th>Category</th>
+              <th>Difficulty</th>
+              <th>Question Preview</th>
+              <th>Status / Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of bulkResult.items; track item.row_number) {
+            <tr [class.row-invalid]="!item.valid">
+              <td>{{ item.row_number }}</td>
+              <td><span class="set-badge">Set {{ item.question_set }}</span></td>
+              <td>{{ item.category || 'general' }}</td>
+              <td>{{ item.difficulty }}</td>
+              <td>{{ item.question_preview }}</td>
+              <td>
+                @if (item.valid) {
+                <span>{{ item.warnings[0] || 'Ready for Bank' }}</span>
+                } @else {
+                <span>{{ item.errors.join('; ') }}</span>
+                }
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      }
+      }
+    </div>
+    }
 
     @if (questionError) {
     <div class="alert-banner error-banner">
@@ -371,10 +558,7 @@
           </span>
         </div>
 
-        <button
-          type="button"
-          class="btn-preview-inline"
-          [class.active]="showInlineQuestionPreview"
+        <button type="button" class="btn-preview-inline" [class.active]="showInlineQuestionPreview"
           (click)="toggleInlineQuestionPreview()">
           👁 {{ showInlineQuestionPreview ? 'Hide Question Preview' : 'Preview Question' }}
         </button>
@@ -386,13 +570,15 @@
           <!-- Question Type Selector -->
           <div class="form-group">
             <label>Question Format <span>*</span></label>
-            <select
-              [(ngModel)]="qQuestionType"
-              (ngModelChange)="onQuestionTypeChange($event)"
-              name="qQuestionType">
+            <select [(ngModel)]="qQuestionType" (ngModelChange)="onQuestionTypeChange($event)" name="qQuestionType">
               <option value="multiple_choice">Single-Choice MCQ</option>
               <option value="multiple_select">Multiple Correct Answers (Checkboxes)</option>
               <option value="true_false">True / False</option>
+              <option value="likert">Likert Behavioral Scale</option>
+              <option value="short_answer">Short Answer (Local NLP Graded)</option>
+              <option value="essay">Essay / Long Prose (Local NLP Graded)</option>
+              <option value="composition">Writing Composition (TF-IDF + Grammar)</option>
+              <option value="code_submission">Python Code Submission (AST & Sandbox)</option>
             </select>
           </div>
 
@@ -432,6 +618,15 @@
                 (click)="qDifficulty = 'Hard'">Hard</button>
             </div>
           </div>
+
+          <div class="form-group">
+            <label for="qQuestionSetSelect">Question Set Variant</label>
+            <select id="qQuestionSetSelect" [(ngModel)]="qQuestionSet" name="qQuestionSet">
+              <option value="A">Set A</option>
+              <option value="B">Set B</option>
+              <option value="C">Set C</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-row-scoring">
@@ -457,6 +652,13 @@
           }
         </div>
 
+        <!-- Optional Comprehension Reading Passage -->
+        <div class="form-group">
+          <label>Associated Comprehension Passage (Optional)</label>
+          <textarea rows="3" [(ngModel)]="qPassageText" name="qPassageText"
+            placeholder="Paste passage excerpt if this question depends on reading comprehension context..."></textarea>
+        </div>
+
         <!-- Question Statement -->
         <div class="form-group">
           <label>Question Statement <span>*</span></label>
@@ -472,6 +674,7 @@
         </div>
 
         <!-- Dynamic Answer Choices Management -->
+        @if (!isOpenEndedQuestionType) {
         <div class="options-inputs-card">
           <div class="options-label-row">
             <div>
@@ -480,77 +683,74 @@
               </label>
               <span class="hint-small">
                 @if (qQuestionType === 'multiple_select') {
-                  Check ALL correct answer checkboxes (one or more allowed).
+                Check ALL correct answer checkboxes (one or more allowed).
                 } @else if (qQuestionType === 'true_false') {
-                  Select the radio button next to True or False.
+                Select the radio button next to True or False.
                 } @else {
-                  Select the radio button next to the single correct answer. Labels update automatically (A, B, C...).
+                Select the radio button next to the single correct answer. Labels update automatically (A, B, C...).
                 }
               </span>
             </div>
 
             @if (qQuestionType !== 'true_false') {
-              <button
-                type="button"
-                class="btn-add-option"
-                [disabled]="qOptions.length >= 10"
-                (click)="addOption()">
-                ＋ Add Option
-              </button>
+            <button type="button" class="btn-add-option" [disabled]="qOptions.length >= 10" (click)="addOption()">
+              ＋ Add Option
+            </button>
             }
           </div>
 
           @for (opt of qOptions; track $index; let optIdx = $index) {
-          <div
-            class="option-input-row"
-            [class.is-correct]="isOptionCorrectSelected(opt.id)">
+          <div class="option-input-row" [class.is-correct]="isOptionCorrectSelected(opt.id)">
 
             <label class="radio-label" [title]="'Mark Option ' + opt.id + ' as correct'">
               @if (qQuestionType === 'multiple_select') {
-                <input
-                  type="checkbox"
-                  [checked]="isOptionCorrectSelected(opt.id)"
-                  (change)="onCorrectAnswerInputChange(opt.id, $any($event.target).checked)"
-                  [name]="'qCorrectChk_' + opt.id">
+              <input type="checkbox" [checked]="isOptionCorrectSelected(opt.id)"
+                (change)="onCorrectAnswerInputChange(opt.id, $any($event.target).checked)"
+                [name]="'qCorrectChk_' + opt.id">
               } @else {
-                <input
-                  type="radio"
-                  [checked]="isOptionCorrectSelected(opt.id)"
-                  (change)="onCorrectAnswerInputChange(opt.id)"
-                  name="qCorrectRadio"
-                  [value]="opt.id">
+              <input type="radio" [checked]="isOptionCorrectSelected(opt.id)"
+                (change)="onCorrectAnswerInputChange(opt.id)" name="qCorrectRadio" [value]="opt.id">
               }
               <span class="opt-key">{{ opt.id }}</span>
             </label>
 
-            <input
-              type="text"
-              [(ngModel)]="opt.text"
-              [name]="'qOpt_' + optIdx"
+            <input type="text" [(ngModel)]="opt.text" [name]="'qOpt_' + optIdx"
               [placeholder]="'Enter answer choice ' + opt.id">
 
             @if (isOptionCorrectSelected(opt.id)) {
-              <span class="correct-tag">✓ Correct Answer</span>
+            <span class="correct-tag">✓ Correct Answer</span>
             }
 
             @if (qQuestionType !== 'true_false' && qOptions.length > 2) {
-              <button
-                type="button"
-                class="btn-remove-opt"
-                title="Remove option {{ opt.id }}"
-                (click)="removeOption(optIdx)">
-                ✕
-              </button>
+            <button type="button" class="btn-remove-opt" title="Remove option {{ opt.id }}"
+              (click)="removeOption(optIdx)">
+              ✕
+            </button>
             }
           </div>
           }
 
           @if (qCorrectOptionIds.length === 0) {
-            <div class="correct-warning-hint">
-              ⚠ Please select at least one correct answer before saving.
-            </div>
+          <div class="correct-warning-hint">
+            ⚠ Please select at least one correct answer before saving.
+          </div>
           }
         </div>
+        } @else {
+        <div class="open-ended-scoring-note">
+          <strong>{{ qQuestionType === 'code_submission' ? 'Python Code Sandbox Evaluation' : 'Offline NLP & Writing
+            Evaluation' }}</strong>
+          <p>
+            {{
+            qQuestionType === 'code_submission'
+            ? 'Candidates will see a Python code editor. Submissions are automatically checked via AST safety gate,
+            Big-O heuristics, and sandbox tests.'
+            : 'Candidates will see a structured text editor. Submissions are automatically analyzed locally using TF-IDF
+            coherence and grammar checks.'
+            }}
+          </p>
+        </div>
+        }
 
         <!-- Optional Solution Explanation -->
         <div class="form-group">
@@ -561,57 +761,45 @@
 
         <!-- LIVE INTERACTIVE QUESTION PREVIEW PANEL (REFLECTS UNSAVED VALUES IMMEDIATELY) -->
         @if (showInlineQuestionPreview) {
-          <div class="inline-preview-box">
-            <div class="inline-preview-toolbar">
-              <div class="ip-left">
-                <span class="ip-badge">LIVE QUESTION PREVIEW</span>
-                <span class="ip-hint">Updates immediately with unsaved changes · Solutions hidden in Student mode</span>
-              </div>
-
-              <div class="ip-mode-switch">
-                <button
-                  type="button"
-                  class="ip-mode-btn"
-                  [class.active]="inlinePreviewMode === 'student'"
-                  (click)="setInlinePreviewMode('student')">
-                  👁 Student Preview
-                </button>
-                <button
-                  type="button"
-                  class="ip-mode-btn"
-                  [class.active]="inlinePreviewMode === 'admin'"
-                  (click)="setInlinePreviewMode('admin')">
-                  ✓ Admin Answer Preview
-                </button>
-              </div>
+        <div class="inline-preview-box">
+          <div class="inline-preview-toolbar">
+            <div class="ip-left">
+              <span class="ip-badge">LIVE QUESTION PREVIEW</span>
+              <span class="ip-hint">Updates immediately with unsaved changes · Solutions hidden in Student mode</span>
             </div>
 
-            <div class="inline-preview-surface">
-              <app-question-renderer
-                [question]="liveDraftQuestion"
-                [questionNumber]="inlinePreviewQuestionNumber"
-                [totalQuestions]="inlinePreviewTotalCount"
-                [mode]="inlinePreviewMode === 'admin' ? 'admin_preview' : 'student_preview'"
-                [selectedAnswer]="inlinePreviewSelectedAnswer"
-                [showClear]="true"
-                (answerChange)="onInlinePreviewAnswerChange($event)"
-                (answerClear)="onInlinePreviewAnswerClear()">
-              </app-question-renderer>
+            <div class="ip-mode-switch">
+              <button type="button" class="ip-mode-btn" [class.active]="inlinePreviewMode === 'student'"
+                (click)="setInlinePreviewMode('student')">
+                👁 Student Preview
+              </button>
+              <button type="button" class="ip-mode-btn" [class.active]="inlinePreviewMode === 'admin'"
+                (click)="setInlinePreviewMode('admin')">
+                ✓ Admin Answer Preview
+              </button>
             </div>
           </div>
+
+          <div class="inline-preview-surface">
+            <app-question-renderer [question]="liveDraftQuestion" [questionNumber]="inlinePreviewQuestionNumber"
+              [totalQuestions]="inlinePreviewTotalCount"
+              [mode]="inlinePreviewMode === 'admin' ? 'admin_preview' : 'student_preview'"
+              [selectedAnswer]="inlinePreviewSelectedAnswer" [showClear]="true"
+              (answerChange)="onInlinePreviewAnswerChange($event)" (answerClear)="onInlinePreviewAnswerClear()">
+            </app-question-renderer>
+          </div>
+        </div>
         }
 
         <!-- Question Form Actions -->
         <div class="form-actions">
           <button class="btn-cancel" type="button" (click)="closeQuestionForm()">Cancel</button>
-          <button
-            class="btn-preview-inline"
-            type="button"
-            (click)="toggleInlineQuestionPreview()">
+          <button class="btn-preview-inline" type="button" (click)="toggleInlineQuestionPreview()">
             👁 {{ showInlineQuestionPreview ? 'Hide Question Preview' : 'Preview Question' }}
           </button>
           <button class="btn-submit" type="submit" [disabled]="savingQuestion">
-            {{ savingQuestion ? 'Saving Question...' : (editingQuestionId ? '✓ Update Question' : '✓ Save Question to Bank') }}
+            {{ savingQuestion ? 'Saving Question...' : (editingQuestionId ? '✓ Update Question' : '✓ Save Question to
+            Bank') }}
           </button>
         </div>
 
@@ -627,212 +815,191 @@
     </div>
     } @else {
 
-      @if (assignedQuestions.length === 0) {
-        <div class="empty-questions-card">
-          <div class="empty-icon">📂</div>
-          <h4>No custom questions in this assessment sequence yet</h4>
-          <p>
-            Students who start this assessment will receive built-in domain questions for
-            <strong>{{ form.controls.assessment_type.value.replace('_', ' ') | titlecase }}</strong>.
-            Click <strong>"+ Add Manual Question"</strong> above to author and sequence custom questions.
-          </p>
-        </div>
-      } @else {
-        <div class="sequence-toolbar">
-          <div class="st-left">
-            <h4>Assessment Question Sequence ({{ assignedQuestions.length }})</h4>
-            <p>Drag cards using the <strong>⋮⋮</strong> handle or use ↑ / ↓ controls to reorder how students see questions.</p>
-          </div>
-          <div class="st-right">
-            @if (sequenceStatus === 'saving') {
-              <span class="seq-pill is-saving">Saving sequence...</span>
-            } @else if (sequenceStatus === 'saved') {
-              <span class="seq-pill is-saved">✓ Sequence saved</span>
+    @if (assignedQuestions.length === 0) {
+    <div class="empty-questions-card">
+      <div class="empty-icon">📂</div>
+      <h4>No custom questions in this assessment sequence yet</h4>
+      <p>
+        Students who start this assessment will receive built-in domain questions for
+        <strong>{{ form.controls.assessment_type.value.replace('_', ' ') | titlecase }}</strong>.
+        Click <strong>"+ Add Manual Question"</strong> above to author and sequence custom questions.
+      </p>
+    </div>
+    } @else {
+    <div class="sequence-toolbar">
+      <div class="st-left">
+        <h4>Assessment Question Sequence ({{ assignedQuestions.length }})</h4>
+        <p>Drag cards using the <strong>⋮⋮</strong> handle or use ↑ / ↓ controls to reorder how students see questions.
+        </p>
+      </div>
+      <div class="st-right">
+        @if (sequenceStatus === 'saving') {
+        <span class="seq-pill is-saving">Saving sequence...</span>
+        } @else if (sequenceStatus === 'saved') {
+        <span class="seq-pill is-saved">✓ Sequence saved</span>
+        }
+      </div>
+    </div>
+
+    <div class="questions-list">
+      @for (question of assignedQuestions; track question.id; let idx = $index) {
+      <article class="question-item-card" draggable="true" [class.is-dragging]="draggedQuestionId === question.id"
+        [class.is-drop-target]="dragOverQuestionId === question.id && draggedQuestionId !== question.id"
+        (dragstart)="onDragStart($event, question.id)" (dragover)="onDragOver($event, question.id)"
+        (dragleave)="onDragLeave(question.id)" (drop)="onDrop($event, question.id)" (dragend)="onDragEnd()">
+
+        <div class="item-header">
+          <div class="item-meta">
+            <span class="drag-handle" title="Drag to reorder sequence">⋮⋮</span>
+            <span class="q-number">#{{ idx + 1 }}</span>
+            <span class="set-badge">Set {{ question.question_set || 'A' }}</span>
+            <span class="cat-badge">{{ categoryLabel(question.category) }}</span>
+            <span class="type-badge">{{ questionTypeLabel(question.question_type) }}</span>
+            <span class="diff-badge" [attr.data-diff]="question.difficulty">
+              {{ question.difficulty }}
+            </span>
+            <span class="score-badge">+{{ question.max_score }} Marks</span>
+            @if ((question.negative_marks ?? 0) > 0) {
+            <span class="neg-badge">-{{ question.negative_marks }} Neg</span>
             }
           </div>
+
+          <div class="item-actions">
+            <button type="button" class="btn-move" title="Move Up" [disabled]="idx === 0 || reorderingSequence"
+              (click)="moveQuestionStep(idx, -1)">
+              ↑
+            </button>
+            <button type="button" class="btn-move" title="Move Down"
+              [disabled]="idx === assignedQuestions.length - 1 || reorderingSequence"
+              (click)="moveQuestionStep(idx, 1)">
+              ↓
+            </button>
+            <button type="button" class="btn-item-action btn-preview-q" title="Preview how this question appears"
+              (click)="previewBankQuestion(question, idx, assignedQuestions.length)">
+              👁 Preview
+            </button>
+            <button type="button" class="btn-item-action btn-edit-q"
+              title="Edit question text, options, or correct answer" (click)="startEditQuestion(question)">
+              ✎ Edit
+            </button>
+            <button type="button" class="btn-item-action btn-remove-seq"
+              title="Remove from assessment sequence (keeps question in bank pool)"
+              [disabled]="sequenceBusyQuestionId === question.id" (click)="removeQuestionFromAssessment(question.id)">
+              ⊖ Remove
+            </button>
+            <button type="button" class="btn-delete-q" (click)="deleteQuestion(question.id)"
+              [disabled]="deletingQuestionId === question.id" title="Permanently delete question from bank">
+              {{ deletingQuestionId === question.id ? 'Deleting...' : '🗑 Delete' }}
+            </button>
+          </div>
         </div>
 
-        <div class="questions-list">
-          @for (question of assignedQuestions; track question.id; let idx = $index) {
-          <article
-            class="question-item-card"
-            draggable="true"
-            [class.is-dragging]="draggedQuestionId === question.id"
-            [class.is-drop-target]="dragOverQuestionId === question.id && draggedQuestionId !== question.id"
-            (dragstart)="onDragStart($event, question.id)"
-            (dragover)="onDragOver($event, question.id)"
-            (dragleave)="onDragLeave(question.id)"
-            (drop)="onDrop($event, question.id)"
-            (dragend)="onDragEnd()">
+        @if (question.instructions) {
+        <div class="item-instructions-pill">
+          <strong>Instructions:</strong> {{ question.instructions }}
+        </div>
+        }
 
-            <div class="item-header">
-              <div class="item-meta">
-                <span class="drag-handle" title="Drag to reorder sequence">⋮⋮</span>
-                <span class="q-number">#{{ idx + 1 }}</span>
-                <span class="cat-badge">{{ categoryLabel(question.category) }}</span>
-                <span class="type-badge">{{ questionTypeLabel(question.question_type) }}</span>
-                <span class="diff-badge" [attr.data-diff]="question.difficulty">
-                  {{ question.difficulty }}
-                </span>
-                <span class="score-badge">+{{ question.max_score }} Marks</span>
-                @if ((question.negative_marks ?? 0) > 0) {
-                  <span class="neg-badge">-{{ question.negative_marks }} Neg</span>
-                }
-              </div>
+        <h4 class="item-statement">{{ question.question_text }}</h4>
 
-              <div class="item-actions">
-                <button
-                  type="button"
-                  class="btn-move"
-                  title="Move Up"
-                  [disabled]="idx === 0 || reorderingSequence"
-                  (click)="moveQuestionStep(idx, -1)">
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  class="btn-move"
-                  title="Move Down"
-                  [disabled]="idx === assignedQuestions.length - 1 || reorderingSequence"
-                  (click)="moveQuestionStep(idx, 1)">
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  class="btn-item-action btn-preview-q"
-                  title="Preview how this question appears"
-                  (click)="previewBankQuestion(question, idx, assignedQuestions.length)">
-                  👁 Preview
-                </button>
-                <button
-                  type="button"
-                  class="btn-item-action btn-edit-q"
-                  title="Edit question text, options, or correct answer"
-                  (click)="startEditQuestion(question)">
-                  ✎ Edit
-                </button>
-                <button
-                  type="button"
-                  class="btn-item-action btn-remove-seq"
-                  title="Remove from assessment sequence (keeps question in bank pool)"
-                  [disabled]="sequenceBusyQuestionId === question.id"
-                  (click)="removeQuestionFromAssessment(question.id)">
-                  ⊖ Remove
-                </button>
-                <button
-                  type="button"
-                  class="btn-delete-q"
-                  (click)="deleteQuestion(question.id)"
-                  [disabled]="deletingQuestionId === question.id"
-                  title="Permanently delete question from bank">
-                  {{ deletingQuestionId === question.id ? 'Deleting...' : '🗑 Delete' }}
-                </button>
-              </div>
-            </div>
-
-            @if (question.instructions) {
-              <div class="item-instructions-pill">
-                <strong>Instructions:</strong> {{ question.instructions }}
-              </div>
+        @if (question.options && question.options.length > 0) {
+        <div class="item-options-grid">
+          @for (opt of question.options; track opt.id) {
+          <div class="item-option" [class.is-correct]="isQuestionOptionCorrect(question, opt.id)">
+            <span class="opt-id">{{ opt.id }}</span>
+            <span class="opt-text">{{ opt.text }}</span>
+            @if (isQuestionOptionCorrect(question, opt.id)) {
+            <span class="correct-check" title="Correct Answer">✓</span>
             }
-
-            <h4 class="item-statement">{{ question.question_text }}</h4>
-
-            <div class="item-options-grid">
-              @for (opt of question.options; track opt.id) {
-              <div class="item-option" [class.is-correct]="isQuestionOptionCorrect(question, opt.id)">
-                <span class="opt-id">{{ opt.id }}</span>
-                <span class="opt-text">{{ opt.text }}</span>
-                @if (isQuestionOptionCorrect(question, opt.id)) {
-                <span class="correct-check" title="Correct Answer">✓</span>
-                }
-              </div>
-              }
-            </div>
-
-            @if (question.explanation) {
-              <div class="item-explanation-note">
-                <strong>Explanation:</strong> {{ question.explanation }}
-              </div>
-            }
-
-          </article>
+          </div>
           }
         </div>
-      }
+        } @else {
+        <div class="item-open-ended-pill">
+          ⚙ Automated Offline Evaluation ({{ question.question_type === 'code_submission' ? 'Python AST + Sandbox Tests'
+          : 'Local TF-IDF & Mechanics' }})
+        </div>
+        }
 
-      <!-- REUSABLE BANK POOL (QUESTIONS REMOVED FROM ASSESSMENT SEQUENCE) -->
-      @if (unassignedQuestions.length > 0) {
-        <div class="pool-section">
-          <div class="sequence-toolbar is-pool">
-            <div class="st-left">
-              <h4>Question Bank Pool ({{ unassignedQuestions.length }})</h4>
-              <p>Removed questions remain preserved in the bank pool and will not affect historical exam records.</p>
+        @if (question.explanation) {
+        <div class="item-explanation-note">
+          <strong>Explanation:</strong> {{ question.explanation }}
+        </div>
+        }
+
+      </article>
+      }
+    </div>
+    }
+
+    <!-- REUSABLE BANK POOL (QUESTIONS REMOVED FROM ASSESSMENT SEQUENCE) -->
+    @if (unassignedQuestions.length > 0) {
+    <div class="pool-section">
+      <div class="sequence-toolbar is-pool">
+        <div class="st-left">
+          <h4>Question Bank Pool ({{ unassignedQuestions.length }})</h4>
+          <p>Removed questions remain preserved in the bank pool and will not affect historical exam records.</p>
+        </div>
+      </div>
+
+      <div class="questions-list">
+        @for (question of unassignedQuestions; track question.id; let idx = $index) {
+        <article class="question-item-card is-pooled">
+          <div class="item-header">
+            <div class="item-meta">
+              <span class="pool-badge">In Pool</span>
+              <span class="cat-badge">{{ categoryLabel(question.category) }}</span>
+              <span class="type-badge">{{ questionTypeLabel(question.question_type) }}</span>
+              <span class="diff-badge" [attr.data-diff]="question.difficulty">
+                {{ question.difficulty }}
+              </span>
+              <span class="score-badge">+{{ question.max_score }} Marks</span>
+            </div>
+
+            <div class="item-actions">
+              <button type="button" class="btn-item-action btn-preview-q"
+                (click)="previewBankQuestion(question, idx, unassignedQuestions.length)">
+                👁 Preview
+              </button>
+              <button type="button" class="btn-item-action btn-edit-q" (click)="startEditQuestion(question)">
+                ✎ Edit
+              </button>
+              <button type="button" class="btn-item-action btn-assign-seq"
+                [disabled]="sequenceBusyQuestionId === question.id" (click)="addQuestionToAssessment(question.id)">
+                ＋ Add to Assessment
+              </button>
+              <button type="button" class="btn-delete-q" (click)="deleteQuestion(question.id)"
+                [disabled]="deletingQuestionId === question.id">
+                {{ deletingQuestionId === question.id ? 'Deleting...' : '🗑 Delete' }}
+              </button>
             </div>
           </div>
 
-          <div class="questions-list">
-            @for (question of unassignedQuestions; track question.id; let idx = $index) {
-            <article class="question-item-card is-pooled">
-              <div class="item-header">
-                <div class="item-meta">
-                  <span class="pool-badge">In Pool</span>
-                  <span class="cat-badge">{{ categoryLabel(question.category) }}</span>
-                  <span class="type-badge">{{ questionTypeLabel(question.question_type) }}</span>
-                  <span class="diff-badge" [attr.data-diff]="question.difficulty">
-                    {{ question.difficulty }}
-                  </span>
-                  <span class="score-badge">+{{ question.max_score }} Marks</span>
-                </div>
+          <h4 class="item-statement">{{ question.question_text }}</h4>
 
-                <div class="item-actions">
-                  <button
-                    type="button"
-                    class="btn-item-action btn-preview-q"
-                    (click)="previewBankQuestion(question, idx, unassignedQuestions.length)">
-                    👁 Preview
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-item-action btn-edit-q"
-                    (click)="startEditQuestion(question)">
-                    ✎ Edit
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-item-action btn-assign-seq"
-                    [disabled]="sequenceBusyQuestionId === question.id"
-                    (click)="addQuestionToAssessment(question.id)">
-                    ＋ Add to Assessment
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-delete-q"
-                    (click)="deleteQuestion(question.id)"
-                    [disabled]="deletingQuestionId === question.id">
-                    {{ deletingQuestionId === question.id ? 'Deleting...' : '🗑 Delete' }}
-                  </button>
-                </div>
-              </div>
-
-              <h4 class="item-statement">{{ question.question_text }}</h4>
-
-              <div class="item-options-grid">
-                @for (opt of question.options; track opt.id) {
-                <div class="item-option" [class.is-correct]="isQuestionOptionCorrect(question, opt.id)">
-                  <span class="opt-id">{{ opt.id }}</span>
-                  <span class="opt-text">{{ opt.text }}</span>
-                  @if (isQuestionOptionCorrect(question, opt.id)) {
-                  <span class="correct-check" title="Correct Answer">✓</span>
-                  }
-                </div>
-                }
-              </div>
-            </article>
+          @if (question.options && question.options.length > 0) {
+          <div class="item-options-grid">
+            @for (opt of question.options; track opt.id) {
+            <div class="item-option" [class.is-correct]="isQuestionOptionCorrect(question, opt.id)">
+              <span class="opt-id">{{ opt.id }}</span>
+              <span class="opt-text">{{ opt.text }}</span>
+              @if (isQuestionOptionCorrect(question, opt.id)) {
+              <span class="correct-check" title="Correct Answer">✓</span>
+              }
+            </div>
             }
           </div>
-        </div>
-      }
+          } @else {
+          <div class="item-open-ended-pill">
+            ⚙ Automated Offline Evaluation ({{ question.question_type === 'code_submission' ? 'Python AST + Sandbox
+            Tests' : 'Local TF-IDF & Mechanics' }})
+          </div>
+          }
+        </article>
+        }
+      </div>
+    </div>
+    }
 
     }
 
@@ -842,15 +1009,10 @@
   }
 
   <!-- Shared Interactive Preview Modal -->
-  <app-assessment-preview-modal
-    [isOpen]="isPreviewModalOpen"
-    [templateId]="templateId"
-    [draftOverrides]="previewDraftOverrides"
-    [singleQuestion]="previewSingleQuestion"
-    [singleQuestionNumber]="previewSingleNumber"
-    [singleTotalQuestions]="previewSingleTotal"
-    [contextTitle]="previewModalTitle"
-    (closed)="closePreviewModal()">
+  <app-assessment-preview-modal [isOpen]="isPreviewModalOpen" [templateId]="templateId"
+    [draftOverrides]="previewDraftOverrides" [singleQuestion]="previewSingleQuestion"
+    [singleQuestionNumber]="previewSingleNumber" [singleTotalQuestions]="previewSingleTotal"
+    [contextTitle]="previewModalTitle" (closed)="closePreviewModal()">
   </app-assessment-preview-modal>
 
 </div>

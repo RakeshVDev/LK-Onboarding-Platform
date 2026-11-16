@@ -1,7 +1,6 @@
 
 import os
 import uuid
-import shutil
 from fastapi import APIRouter, Depends, HTTPException, Response, status, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy import select
@@ -9,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from services.training.app.db.session import SessionLocal
-from services.training.app.models.entities import Course, Department, LearningMaterial
+from services.training.app.models.entities import Course, Department, LearningMaterial, StudentDepartmentRequest
 from services.training.app.schemas.training import (
     CourseCreate,
     CourseResponse,
@@ -18,10 +17,16 @@ from services.training.app.schemas.training import (
     LearningMaterialResponse,
 )
 
-from services.identity.app.core.roles import Permission
+from services.identity.app.core.roles import Permission, Role
 from services.identity.app.dependencies.auth import (
     get_current_user,
     require_permissions,
+)
+from services.training.app.routers.assessments import get_learner_allowed_dept_ids
+from services.training.app.services.teacher_scope import (
+    get_teacher_assigned_dept_ids,
+    require_teacher_department_access,
+    role_str,
 )
 
 router = APIRouter(prefix="/courses", tags=["Courses"])
@@ -30,6 +35,21 @@ MATERIALS_UPLOAD_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "materials")
 )
 os.makedirs(MATERIALS_UPLOAD_DIR, exist_ok=True)
+
+ALLOWED_MATERIAL_EXTENSIONS = {
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".ppt",
+    ".pptx",
+    ".txt",
+    ".md",
+    ".csv",
+    ".xlsx",
+    ".xls",
+    ".zip",
+}
+MAX_MATERIAL_BYTES = 25 * 1024 * 1024  # 25 MB upload limit
 
 
 def get_db():
@@ -52,6 +72,38 @@ def require_department(db: Session, department_id: int):
     return department
 
 
+def get_learner_approved_dept_ids(db: Session, user_id: int) -> set[int] | None:
+    """
+    Returns allowed department IDs for a learner:
+    - None until all assigned onboarding assessments are completed.
+    - {All / Common} after assessments complete until department is approved.
+    - {approved department, All / Common} once approved.
+    """
+    return get_learner_allowed_dept_ids(db, user_id)
+
+
+def _ensure_learner_course_access(db: Session, current_user, course: Course) -> None:
+    if current_user.role != Role.LEARNER:
+        require_teacher_department_access(db, current_user, course.department_id)
+        return
+    if not course.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This course is not published",
+        )
+    allowed_dept_ids = get_learner_approved_dept_ids(db, current_user.id)
+    if not allowed_dept_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your department allocation is pending instructor/admin approval. Courses and study materials will unlock once approved.",
+        )
+    if course.department_id not in allowed_dept_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to study materials outside your approved department.",
+        )
+
+
 @router.post(
     "",
     response_model=CourseResponse,
@@ -64,7 +116,8 @@ def create_course(
         require_permissions(Permission.MANAGE_COURSES)
     ),
 ):
-    require_department(db, payload.department_id)
+    require_teacher_department_access(db, current_user, payload.department_id)
+    dept = require_department(db, payload.department_id)
 
     course = Course(**payload.model_dump())
     db.add(course)
@@ -79,7 +132,14 @@ def create_course(
             detail="Could not create course because of a data conflict",
         )
 
-    return course
+    return CourseResponse(
+        id=course.id,
+        department_id=course.department_id,
+        department_name=dept.name,
+        title=course.title,
+        description=course.description,
+        is_published=course.is_published,
+    )
 
 
 @router.get("", response_model=list[CourseResponse])
@@ -90,14 +150,47 @@ def list_courses(
 ):
     query = select(Course).order_by(Course.id)
 
-    if department_id is not None:
+    if current_user.role == Role.LEARNER:
+        allowed_dept_ids = get_learner_approved_dept_ids(db, current_user.id)
+        if not allowed_dept_ids:
+            # Student has not been approved for a department yet: unlock nothing
+            return []
         query = query.where(
-            Course.department_id == department_id
+            Course.is_published == True,
+            Course.department_id.in_(allowed_dept_ids),
         )
+    elif role_str(current_user) == Role.TEACHER.value:
+        allowed_teacher_depts = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if not allowed_teacher_depts:
+            return []
+        if department_id is not None:
+            if int(department_id) not in allowed_teacher_depts:
+                return []
+            query = query.where(Course.department_id == department_id)
+        else:
+            query = query.where(Course.department_id.in_(allowed_teacher_depts))
+    elif department_id is not None:
+        query = query.where(Course.department_id == department_id)
 
-    # TODO: Filter results by teacher assignments and learner enrollments.
-    # Authentication alone does not grant access to every course.
-    return db.scalars(query).all()
+    courses = db.scalars(query).all()
+    if not courses:
+        return []
+
+    dept_ids = {c.department_id for c in courses}
+    depts = db.scalars(select(Department).where(Department.id.in_(dept_ids))).all()
+    dept_map = {d.id: d.name for d in depts}
+
+    return [
+        CourseResponse(
+            id=c.id,
+            department_id=c.department_id,
+            department_name=dept_map.get(c.department_id),
+            title=c.title,
+            description=c.description,
+            is_published=c.is_published,
+        )
+        for c in courses
+    ]
 
 
 @router.get("/{course_id}", response_model=CourseResponse)
@@ -107,16 +200,23 @@ def get_course(
     current_user=Depends(get_current_user),
 ):
     course = db.get(Course, course_id)
-
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found",
         )
 
-    # TODO: Enforce teacher-assignment and learner-enrollment checks
-    # before returning course details.
-    return course
+    _ensure_learner_course_access(db, current_user, course)
+
+    dept = db.get(Department, course.department_id)
+    return CourseResponse(
+        id=course.id,
+        department_id=course.department_id,
+        department_name=dept.name if dept else None,
+        title=course.title,
+        description=course.description,
+        is_published=course.is_published,
+    )
 
 
 @router.patch(
@@ -139,9 +239,11 @@ def update_course(
             detail="Course not found",
         )
 
+    require_teacher_department_access(db, current_user, course.department_id)
     changes = payload.model_dump(exclude_unset=True)
 
     if changes.get("department_id") is not None:
+        require_teacher_department_access(db, current_user, changes["department_id"])
         require_department(db, changes["department_id"])
 
     for field, value in changes.items():
@@ -179,6 +281,7 @@ def delete_course(
             detail="Course not found",
         )
 
+    require_teacher_department_access(db, current_user, course.department_id)
     db.delete(course)
 
     try:
@@ -218,11 +321,13 @@ def list_course_materials(
             detail="Course not found",
         )
 
+    _ensure_learner_course_access(db, current_user, course)
+
     return db.scalars(
         select(LearningMaterial)
         .where(
             LearningMaterial.course_id == course_id,
-            LearningMaterial.is_active.is_(True),
+            LearningMaterial.is_active == True,
         )
         .order_by(LearningMaterial.id.desc())
     ).all()
@@ -248,6 +353,7 @@ def add_material_link(
             detail="Course not found",
         )
 
+    require_teacher_department_access(db, current_user, course.department_id)
     material = LearningMaterial(
         course_id=course_id,
         title=payload.title.strip(),
@@ -282,20 +388,65 @@ async def upload_material_file(
             detail="Course not found",
         )
 
-    # Sanitize and store filename
-    safe_filename = "".join(c for c in file.filename if c.isalnum() or c in "._- ")
-    if not safe_filename:
-        safe_filename = "document.pdf"
-    unique_name = f"{uuid.uuid4().hex[:12]}_{safe_filename}"
-    file_path = os.path.join(MATERIALS_UPLOAD_DIR, unique_name)
+    require_teacher_department_access(db, current_user, course.department_id)
+    # Strip any client directory prefix and enforce extension/size rules
+    raw_name = os.path.basename(file.filename or "document.pdf")
+    stem, ext = os.path.splitext(raw_name)
+    ext = ext.lower()
+    if ext not in ALLOWED_MATERIAL_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unsupported file extension '{ext or 'none'}'. "
+                f"Allowed: {', '.join(sorted(ALLOWED_MATERIAL_EXTENSIONS))}"
+            ),
+        )
 
+    clean_stem = "".join(c for c in stem if c.isalnum() or c in "._- ").strip(" .")
+    if not clean_stem:
+        clean_stem = "document"
+    safe_filename = f"{clean_stem[:120]}{ext}"
+    unique_name = f"{uuid.uuid4().hex[:12]}_{safe_filename}"
+    file_path = os.path.abspath(os.path.join(MATERIALS_UPLOAD_DIR, unique_name))
+    try:
+        valid_target = os.path.commonpath([MATERIALS_UPLOAD_DIR, file_path]) == MATERIALS_UPLOAD_DIR
+    except ValueError:
+        valid_target = False
+    if not valid_target:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid upload path",
+        )
+
+    total_bytes = 0
     try:
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
+            while True:
+                chunk = file.file.read(65536)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_MATERIAL_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="Uploaded file exceeds 25 MB size limit",
+                    )
+                buffer.write(chunk)
+        if total_bytes == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file is empty",
+            )
+    except HTTPException:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
+    except OSError:
+        if os.path.exists(file_path):
+            os.remove(file_path)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save uploaded file: {str(e)}",
+            detail="Failed to save uploaded file",
         )
 
     material = LearningMaterial(
@@ -327,19 +478,33 @@ def download_material_file(
             detail="Learning material not found",
         )
 
-    if not os.path.exists(material.storage_key):
+    course = db.get(Course, course_id)
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+    _ensure_learner_course_access(db, current_user, course)
+
+    abs_path = os.path.abspath(material.storage_key)
+    try:
+        is_inside_upload_dir = (
+            os.path.commonpath([MATERIALS_UPLOAD_DIR, abs_path]) == MATERIALS_UPLOAD_DIR
+        )
+    except ValueError:
+        is_inside_upload_dir = False
+
+    if not is_inside_upload_dir or not os.path.isfile(abs_path):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found on storage server",
         )
 
-    filename = os.path.basename(material.storage_key)
+    filename = os.path.basename(abs_path)
     # Strip uuid prefix for user display
     display_name = filename.split("_", 1)[-1] if "_" in filename else filename
     media_type = "application/pdf" if filename.lower().endswith(".pdf") else "application/octet-stream"
 
     return FileResponse(
-        material.storage_key,
+        abs_path,
         media_type=media_type,
         filename=display_name,
     )
@@ -364,6 +529,9 @@ def delete_material(
             detail="Learning material not found",
         )
 
+    course = db.get(Course, course_id)
+    if course is not None:
+        require_teacher_department_access(db, current_user, course.department_id)
     material.is_active = False
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -6,38 +6,45 @@ import {
 } from '@angular/router';
 
 import { AuthService } from '../services/auth.service';
-import { AssessmentStatusService } from '../services/assessment-status.service';
+import { OnboardingService } from '../services/onboarding.service';
+
+const ALWAYS_ALLOWED_LEARNER_KEYS = new Set(['assessment', 'result', 'report']);
 
 export const assessmentCompletionGuard: CanActivateChildFn =
   async (route) => {
-
-    // Allow immediate access to assessment-related pages without any blocking checks
-    if (route.data && route.data['allowIncompleteAssessment'] === true) {
-      return true;
-    }
-
     const authService = inject(AuthService);
-    const assessmentService = inject(AssessmentStatusService);
+    const onboardingService = inject(OnboardingService);
     const router = inject(Router);
 
     try {
       const user = await authService.getCurrentUser();
 
-      // Only learners need to complete the mandatory assessment.
       if (user.role !== 'learner') {
         return true;
       }
 
-      const assessment = await assessmentService.getStatus();
+      const permissions = await onboardingService.getPermissions();
+      const navKey = route.data?.['navKey'] as string | undefined;
 
-      if (assessment.status === 'completed') {
+      if (permissions.is_unlocked) {
+        if (navKey === 'department_selection') {
+          return router.createUrlTree(['/dashboard']);
+        }
         return true;
       }
 
-      // Incomplete learner must complete or resume assessment.
-      return router.createUrlTree(['/my-assessments']);
+      if (navKey && ALWAYS_ALLOWED_LEARNER_KEYS.has(navKey)) {
+        return true;
+      }
 
+      if (navKey === 'department_selection' && permissions.can_select_department) {
+        return true;
+      }
+
+      return router.createUrlTree([permissions.redirect_to || '/my-assessments']);
     } catch {
       return router.createUrlTree(['/login']);
     }
   };
+
+export const onboardingGuard = assessmentCompletionGuard;

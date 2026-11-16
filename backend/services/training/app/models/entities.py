@@ -161,3 +161,24 @@ class AttendanceRecord(Base):
     __table_args__ = (
         UniqueConstraint("session_id", "user_id", name="uq_session_attendance"),
     )
+
+
+class StudentDepartmentRequest(Base):
+    __tablename__ = "student_department_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    department_id: Mapped[int] = mapped_column(
+        ForeignKey("departments.id"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)  # pending, approved, rejected
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
