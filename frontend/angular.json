@@ -84,6 +84,13 @@
         "extract-i18n": {
           "builder": "@angular/build:extract-i18n"
         },
+        "unit-test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "tsconfig.spec.json",
+            "runnerConfig": "vitest.config.mjs"
+          }
+        },
         "test": {
           "builder": "@angular/build:karma",
           "options": {

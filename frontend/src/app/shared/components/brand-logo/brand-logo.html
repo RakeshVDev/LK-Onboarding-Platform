@@ -1,0 +1,24 @@
+<div class="csm-brand" [attr.data-variant]="variant" [attr.data-size]="size">
+  <span class="csm-logo-pill">
+    <img
+      src="/assets/images/csm-logo.png"
+      alt="CSM Logo"
+      class="csm-logo-img"
+      decoding="async" />
+  </span>
+
+  @if (showSubtitle || badgeText) {
+    <div class="csm-brand-copy">
+      <div class="csm-brand-row">
+        <span class="csm-platform-name">CSM Assessment</span>
+        @if (badgeText) {
+          <span class="csm-brand-badge">{{ badgeText }}</span>
+        }
+      </div>
+      @if (showSubtitle && subtitle) {
+        <small class="csm-brand-sub">{{ subtitle }}</small>
+      }
+    </div>
+  }
+</div>
+
