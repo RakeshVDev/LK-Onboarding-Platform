@@ -5,6 +5,18 @@
     <div class="header-content">
       <span class="eyebrow">PERFORMANCE &amp; PROGRESS</span>
       <h1>My Assessment Results</h1>
+      @if (learnerFullName()) {
+        <p class="learner-identity-line">
+          Candidate:
+          <button
+            type="button"
+            class="learner-name-btn"
+            (click)="openAllAttendedModal()">
+            {{ learnerFullName() }}
+          </button>
+          <span class="click-hint">(Click name to view all attended results)</span>
+        </p>
+      }
       <p>
         Review your developmental report cards, overall scores, and category breakdowns
         across all completed ASE assessments.
@@ -202,6 +214,60 @@
       </div>
     }
 
+  }
+
+  @if (showHistoryModal()) {
+    <div class="modal-backdrop" (click)="showHistoryModal.set(false)">
+      <div class="history-modal-card" (click)="$event.stopPropagation()">
+        <div class="history-modal-header">
+          <div>
+            <span class="eyebrow">LEARNER ACCOUNT ASSESSMENT HISTORY</span>
+            <h2>{{ learnerFullName() || 'My Attended Assessments' }}</h2>
+            <p class="history-subtitle">{{ attendedResultsList().length }} assessment record{{ attendedResultsList().length === 1 ? '' : 's' }} available for this account</p>
+          </div>
+          <button type="button" class="btn-modal-close" (click)="showHistoryModal.set(false)">✕</button>
+        </div>
+
+        @if (attendedResultsList().length === 0) {
+          <div class="history-empty">No attended assessment results available on this account.</div>
+        } @else {
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Assessment</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Attended Date</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (rec of attendedResultsList(); track rec.session_id) {
+                <tr>
+                  <td><strong>{{ rec.template_name }}</strong></td>
+                  <td>{{ rec.status }}</td>
+                  <td>
+                    @if (rec.status === 'completed') {
+                      <strong>{{ rec.overall_percentage | number:'1.0-1' }}%</strong>
+                    } @else {
+                      <span>In Progress</span>
+                    }
+                  </td>
+                  <td>{{ (rec.completed_at || rec.started_at) | date:'medium' }}</td>
+                  <td>
+                    @if (rec.status === 'completed') {
+                      <button type="button" class="btn-card-primary" (click)="viewReport(rec.session_id)">Report</button>
+                    } @else {
+                      <span>—</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+    </div>
   }
 
 </div>

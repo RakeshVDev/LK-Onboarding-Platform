@@ -174,19 +174,19 @@
         @if (role === 'teacher' && isSuperadmin) {
           <div class="teacher-dept-picker">
             <div class="dept-picker-header">
-              <strong>Assign Teacher Departments (1–4 concrete tracks)</strong>
-              <span class="dept-counter">{{ selectedCreateDeptIds().length }} / 4 selected</span>
+              <strong>Assign Teacher Departments (1–8 concrete tracks)</strong>
+              <span class="dept-counter">{{ selectedCreateDeptIds().length }} / 8 selected</span>
             </div>
             <div class="dept-chip-grid">
               @for (dept of assignableDepartments(); track dept.id) {
                 <label
                   class="dept-check-chip"
                   [class.selected]="selectedCreateDeptIds().includes(dept.id)"
-                  [class.disabled]="selectedCreateDeptIds().length >= 4 && !selectedCreateDeptIds().includes(dept.id)">
+                  [class.disabled]="selectedCreateDeptIds().length >= 8 && !selectedCreateDeptIds().includes(dept.id)">
                   <input
                     type="checkbox"
                     [checked]="selectedCreateDeptIds().includes(dept.id)"
-                    [disabled]="selectedCreateDeptIds().length >= 4 && !selectedCreateDeptIds().includes(dept.id)"
+                    [disabled]="selectedCreateDeptIds().length >= 8 && !selectedCreateDeptIds().includes(dept.id)"
                     (change)="toggleCreateDept(dept.id)" />
                   <span>{{ dept.name }}</span>
                 </label>
@@ -335,9 +335,9 @@
                     } @else if (user.role === 'teacher') {
                       <small class="stage-subtext teacher-depts-line">
                         @if (user.assigned_department_names?.length) {
-                          Depts ({{ user.assigned_department_names!.length }}/4): {{ user.assigned_department_names!.join(', ') }}
+                          Depts ({{ user.assigned_department_names!.length }}/8): {{ user.assigned_department_names!.join(', ') }}
                         } @else {
-                          <span class="unassigned-warn">No departments assigned yet (0/4)</span>
+                          <span class="unassigned-warn">No departments assigned yet (0/8)</span>
                         }
                       </small>
                     }
@@ -388,7 +388,7 @@
                         type="button"
                         class="btn-assign-depts"
                         (click)="openAssignDepartmentsModal(user)">
-                        Assign Depts ({{ user.assigned_department_ids?.length || 0 }}/4)
+                        Assign Depts ({{ user.assigned_department_ids?.length || 0 }}/8)
                       </button>
                     }
 
@@ -430,14 +430,14 @@
         <div class="dept-modal-head">
           <div>
             <h3>Assign Teacher Departments</h3>
-            <p>Select 1 to 4 concrete departments for <strong>{{ teacherUser.full_name }}</strong>.</p>
+            <p>Select 1 to 8 concrete departments for <strong>{{ teacherUser.full_name }}</strong>.</p>
           </div>
           <button type="button" class="btn-modal-close" (click)="closeAssignDepartmentsModal()">×</button>
         </div>
 
         <div class="dept-picker-header">
           <span>Available Specialization Tracks</span>
-          <span class="dept-counter">{{ selectedModalDeptIds().length }} / 4 selected</span>
+          <span class="dept-counter">{{ selectedModalDeptIds().length }} / 8 selected</span>
         </div>
 
         <div class="dept-chip-grid">
@@ -445,11 +445,11 @@
             <label
               class="dept-check-chip"
               [class.selected]="selectedModalDeptIds().includes(dept.id)"
-              [class.disabled]="selectedModalDeptIds().length >= 4 && !selectedModalDeptIds().includes(dept.id)">
+              [class.disabled]="selectedModalDeptIds().length >= 8 && !selectedModalDeptIds().includes(dept.id)">
               <input
                 type="checkbox"
                 [checked]="selectedModalDeptIds().includes(dept.id)"
-                [disabled]="selectedModalDeptIds().length >= 4 && !selectedModalDeptIds().includes(dept.id)"
+                [disabled]="selectedModalDeptIds().length >= 8 && !selectedModalDeptIds().includes(dept.id)"
                 (change)="toggleModalDept(dept.id)" />
               <span>{{ dept.name }}</span>
             </label>
@@ -463,7 +463,7 @@
           <button
             type="button"
             class="primary-button"
-            [disabled]="savingDepartments() || selectedModalDeptIds().length < 1 || selectedModalDeptIds().length > 4"
+            [disabled]="savingDepartments() || selectedModalDeptIds().length < 1 || selectedModalDeptIds().length > 8"
             (click)="saveTeacherDepartments()">
             {{ savingDepartments() ? 'Saving...' : 'Save Assignments' }}
           </button>

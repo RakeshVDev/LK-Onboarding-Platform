@@ -5,6 +5,8 @@ import { RouterLink } from '@angular/router';
 
 import { AuthService, CurrentUser } from '../../core/services/auth.service';
 import {
+  BackendCohort,
+  DeletionRequest,
   LearningService,
   Course,
   Department,
@@ -29,13 +31,22 @@ export class Courses implements OnInit {
 
   readonly courses = signal<Course[]>([]);
   readonly departments = signal<Department[]>([]);
+  readonly batches = signal<BackendCohort[]>([]);
+  readonly deletionRequests = signal<DeletionRequest[]>([]);
   readonly selectedCourse = signal<Course | null>(null);
   readonly myDeptRequest = signal<StudentDepartmentRequest | null>(null);
 
   readonly loading = signal(false);
   readonly saving = signal(false);
+  readonly deletingCourseId = signal<number | null>(null);
+  readonly processingDeletionId = signal<number | null>(null);
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
+
+  // Send-to-Batch popover state inside Resource Vault
+  sendOpenForMaterialId = signal<number | null>(null);
+  selectedBatchIdsForSend = signal<Set<number>>(new Set());
+  sendingMaterialId = signal<number | null>(null);
 
   // Active sub-view or modal: 'syllabus' | 'materials' | 'create' | null
   readonly activeModal = signal<'syllabus' | 'materials' | 'create' | null>(null);
@@ -68,7 +79,6 @@ export class Courses implements OnInit {
 
     this.canManage.set(
       current?.role === 'superadmin' ||
-      current?.role === 'admin' ||
       current?.role === 'teacher'
     );
 
@@ -81,14 +91,19 @@ export class Courses implements OnInit {
 
     try {
       const isLearner = this.user()?.role === 'learner';
-      const [courses, depts, deptReq] = await Promise.all([
+      const isSA = this.user()?.role === 'superadmin';
+      const [courses, depts, deptReq, cohorts, delReqs] = await Promise.all([
         this.learningService.getCourses(),
         this.learningService.getDepartments().catch(() => []),
-        isLearner ? this.learningService.getMyDepartmentRequest().catch(() => null) : Promise.resolve(null)
+        isLearner ? this.learningService.getMyDepartmentRequest().catch(() => null) : Promise.resolve(null),
+        this.canManage() ? this.learningService.getCohorts().catch(() => []) : Promise.resolve([]),
+        isSA ? this.learningService.getDeletionRequests('pending').catch(() => []) : Promise.resolve([])
       ]);
       this.courses.set(courses);
       this.departments.set(depts);
       this.myDeptRequest.set(deptReq);
+      this.batches.set(cohorts);
+      this.deletionRequests.set(delReqs);
       if (depts.length > 0) {
         this.newCourseDeptId = depts[0].id;
       }
@@ -116,6 +131,10 @@ export class Courses implements OnInit {
     return this.myDeptRequest()?.department_name || '';
   }
 
+  get isSuperAdmin(): boolean {
+    return this.user()?.role === 'superadmin';
+  }
+
   get isTeacher(): boolean {
     return this.user()?.role === 'teacher';
   }
@@ -129,6 +148,126 @@ export class Courses implements OnInit {
     return dept ? dept.name : `Department #${deptId}`;
   }
 
+  isCommonCourse(course: Course): boolean {
+    const name = (course.department_name || this.getDepartmentName(course.department_id)).toLowerCase();
+    return name.includes('common') || name === 'all';
+  }
+
+  availableBatchesForSend(course: Course): BackendCohort[] {
+    const active = this.batches().filter(b => b.status !== 'completed');
+    if (this.isCommonCourse(course)) {
+      return active;
+    }
+    return active.filter(b => b.department_id === course.department_id);
+  }
+
+  toggleSendDropdown(material: LearningMaterial): void {
+    if (this.sendOpenForMaterialId() === material.id) {
+      this.closeSendDropdown();
+      return;
+    }
+    this.sendOpenForMaterialId.set(material.id);
+    this.selectedBatchIdsForSend.set(new Set());
+  }
+
+  closeSendDropdown(): void {
+    this.sendOpenForMaterialId.set(null);
+    this.selectedBatchIdsForSend.set(new Set());
+  }
+
+  isBatchSelectedForSend(batchId: number): boolean {
+    return this.selectedBatchIdsForSend().has(batchId);
+  }
+
+  toggleBatchSelectionForSend(batchId: number): void {
+    const next = new Set(this.selectedBatchIdsForSend());
+    if (next.has(batchId)) {
+      next.delete(batchId);
+    } else {
+      next.add(batchId);
+    }
+    this.selectedBatchIdsForSend.set(next);
+  }
+
+  async confirmSendToBatches(course: Course, material: LearningMaterial): Promise<void> {
+    const cohortIds = Array.from(this.selectedBatchIdsForSend());
+    if (cohortIds.length === 0) return;
+
+    this.sendingMaterialId.set(material.id);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+
+    try {
+      const res = await this.learningService.sendMaterialToBatches(course.id, material.id, cohortIds);
+      this.successMessage.set(
+        `Sent "${material.title}" to ${res.delivered_batch_names.join(', ')} (${res.delivered_cohort_ids.length} active batch${res.delivered_cohort_ids.length === 1 ? '' : 'es'}).`
+      );
+      this.closeSendDropdown();
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
+    } finally {
+      this.sendingMaterialId.set(null);
+    }
+  }
+
+  async deleteCourse(course: Course): Promise<void> {
+    if (!this.isSuperAdmin) return;
+    if (!confirm(`Deleting "${course.title}" will permanently delete BOTH this Course and its paired Department (requires approval from all active SuperAdmins). Continue?`)) {
+      return;
+    }
+
+    this.deletingCourseId.set(course.id);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+
+    try {
+      const res = await this.learningService.deleteCourse(course.id);
+      this.successMessage.set(res.message);
+      await this.loadInitialData();
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
+    } finally {
+      this.deletingCourseId.set(null);
+    }
+  }
+
+  hasCurrentUserApprovedDeletion(req: DeletionRequest): boolean {
+    const uid = this.user()?.id;
+    return uid ? req.approved_by_user_ids.includes(uid) : false;
+  }
+
+  async approveDeletion(req: DeletionRequest): Promise<void> {
+    if (!this.isSuperAdmin) return;
+    this.processingDeletionId.set(req.id);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    try {
+      const res = await this.learningService.approveDeletionRequest(req.id);
+      this.successMessage.set(res.message);
+      await this.loadInitialData();
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
+    } finally {
+      this.processingDeletionId.set(null);
+    }
+  }
+
+  async rejectDeletion(req: DeletionRequest): Promise<void> {
+    if (!this.isSuperAdmin) return;
+    this.processingDeletionId.set(req.id);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+    try {
+      await this.learningService.rejectDeletionRequest(req.id);
+      this.deletionRequests.update(list => list.filter(r => r.id !== req.id));
+      this.successMessage.set(`Cancelled deletion request for "${req.department_name}".`);
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
+    } finally {
+      this.processingDeletionId.set(null);
+    }
+  }
+
   // ----------------------------------
   // Create Course
   // ----------------------------------
@@ -136,7 +275,7 @@ export class Courses implements OnInit {
   openCreateModal(): void {
     if (!this.hasAssignedDepartments) {
       this.errorMessage.set(
-        'No departments have been assigned to your teacher account yet. Ask a SuperAdmin to assign 1–4 departments.'
+        'No departments have been assigned to your teacher account yet. Ask a SuperAdmin to assign 1–8 departments.'
       );
       return;
     }
@@ -261,13 +400,16 @@ export class Courses implements OnInit {
     this.materialType = 'pdf';
     this.materialUrl = '';
     this.selectedFile = null;
+    this.closeSendDropdown();
     this.errorMessage.set('');
     this.successMessage.set('');
     this.activeModal.set('materials');
     this.materialsLoading.set(true);
 
     try {
-      const list = await this.learningService.getMaterials(course.id);
+      const list = this.canManage()
+        ? await this.learningService.getMaterials(course.id)
+        : await this.learningService.getDeliveredMaterials(course.id);
       this.materials.set(list);
     } catch (err) {
       this.errorMessage.set(this.learningService.getErrorMessage(err));
@@ -355,13 +497,14 @@ export class Courses implements OnInit {
   }
 
   async deleteMaterial(material: LearningMaterial): Promise<void> {
+    if (!this.isSuperAdmin) return;
     const course = this.selectedCourse();
-    if (!course || !confirm(`Delete resource "${material.title}"?`)) return;
+    if (!course || !confirm(`Permanently delete resource "${material.title}" from the Course Resource Vault?`)) return;
 
     try {
       await this.learningService.deleteMaterial(course.id, material.id);
       this.materials.update(list => list.filter(m => m.id !== material.id));
-      this.successMessage.set('Resource deleted successfully.');
+      this.successMessage.set('Resource permanently removed from Course Vault.');
     } catch (err) {
       this.errorMessage.set(this.learningService.getErrorMessage(err));
     }
@@ -383,6 +526,7 @@ export class Courses implements OnInit {
   }
 
   closeModal(): void {
+    this.closeSendDropdown();
     this.activeModal.set(null);
     this.selectedCourse.set(null);
     this.errorMessage.set('');

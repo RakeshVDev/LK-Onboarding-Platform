@@ -69,6 +69,13 @@ class SecurityAndHardeningTests(unittest.TestCase):
 
         with self.IdSession() as idb:
             pw = hash_password("StrongPassword123!")
+            superadmin = IdentityUser(
+                full_name="Superadmin User",
+                email="superadmin@sec.test",
+                password_hash=pw,
+                role=Role.SUPERADMIN.value,
+                is_active=True,
+            )
             admin = IdentityUser(
                 full_name="Admin User",
                 email="admin@sec.test",
@@ -103,10 +110,11 @@ class SecurityAndHardeningTests(unittest.TestCase):
                 is_activated_by_admin=False,
                 department_approved=False,
             )
-            idb.add_all([admin, teacher, learner_approved, learner_unapproved])
+            idb.add_all([superadmin, admin, teacher, learner_approved, learner_unapproved])
             idb.commit()
-            for u in (admin, teacher, learner_approved, learner_unapproved):
+            for u in (superadmin, admin, teacher, learner_approved, learner_unapproved):
                 idb.refresh(u)
+            self.superadmin_id = superadmin.id
             self.admin_id = admin.id
             self.teacher_id = teacher.id
             self.learner_approved_id = learner_approved.id
@@ -185,8 +193,15 @@ class SecurityAndHardeningTests(unittest.TestCase):
         training_app.dependency_overrides[identity_auth_get_db] = override_id_db
 
         from services.training.app.services import teacher_scope
-        self._teacher_scope_patch = patch.object(teacher_scope, "IdentitySessionLocal", self.IdSession)
-        self._teacher_scope_patch.start()
+        from services.training.app.services import course_sync
+        self._identity_patches = [
+            patch.object(teacher_scope, "IdentitySessionLocal", self.IdSession),
+            patch.object(course_sync, "IdentitySessionLocal", self.IdSession),
+            patch.object(departments_router, "IdentitySessionLocal", self.IdSession),
+            patch.object(cohorts_router, "IdentitySessionLocal", self.IdSession),
+        ]
+        for p in self._identity_patches:
+            p.start()
         training_app.dependency_overrides[departments_router.get_db] = override_tr_db
         training_app.dependency_overrides[cohorts_router.get_db] = override_tr_db
         training_app.dependency_overrides[courses_router.get_db] = override_tr_db
@@ -197,13 +212,15 @@ class SecurityAndHardeningTests(unittest.TestCase):
         self.client = TestClient(training_app)
         self.identity_client = TestClient(identity_app)
 
+        self.superadmin_headers = {"Authorization": f"Bearer {create_access_token(self.superadmin_id)}"}
         self.admin_headers = {"Authorization": f"Bearer {create_access_token(self.admin_id)}"}
         self.teacher_headers = {"Authorization": f"Bearer {create_access_token(self.teacher_id)}"}
         self.approved_headers = {"Authorization": f"Bearer {create_access_token(self.learner_approved_id)}"}
         self.unapproved_headers = {"Authorization": f"Bearer {create_access_token(self.learner_unapproved_id)}"}
 
     def tearDown(self) -> None:
-        self._teacher_scope_patch.stop()
+        for p in self._identity_patches:
+            p.stop()
         training_app.dependency_overrides = self._prev_tr_overrides
         identity_app.dependency_overrides = self._prev_id_overrides
         self.id_engine.dispose()
@@ -273,11 +290,19 @@ class SecurityAndHardeningTests(unittest.TestCase):
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.json()["description"], "Rust & WASM")
 
-        deleted = self.client.delete(
+        # Only SuperAdmin can delete departments (triggers 1:1 course cleanup)
+        deleted_admin = self.client.delete(
             f"/api/v1/departments/{new_id}",
             headers=self.admin_headers,
         )
-        self.assertEqual(deleted.status_code, 204)
+        self.assertEqual(deleted_admin.status_code, 403)
+
+        deleted = self.client.delete(
+            f"/api/v1/departments/{new_id}",
+            headers=self.superadmin_headers,
+        )
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(deleted.json()["status"], "deleted")
 
     def test_cohorts_delete_rbac_and_member_idor_protection(self) -> None:
         with patch.object(assessments_router, "IdentitySessionLocal", self.IdSession):
@@ -326,16 +351,42 @@ class SecurityAndHardeningTests(unittest.TestCase):
                 ).status_code,
                 200,
             )
+            # Admin cannot create/delete batches directly; SuperAdmin creates (with 1-3 teachers) and deletes
+            self.assertEqual(
+                self.client.post(
+                    "/api/v1/cohorts",
+                    headers=self.admin_headers,
+                    json={
+                        "department_id": self.dept_java_id,
+                        "name": "JV-AdminBlocked",
+                        "status": "active",
+                        "teacher_ids": [self.teacher_id],
+                    },
+                ).status_code,
+                403,
+            )
             empty_cohort = self.client.post(
                 "/api/v1/cohorts",
-                headers=self.admin_headers,
-                json={"department_id": self.dept_java_id, "name": "JV-Disposable", "status": "planned"},
+                headers=self.superadmin_headers,
+                json={
+                    "department_id": self.dept_java_id,
+                    "name": "JV-Disposable",
+                    "status": "active",
+                    "teacher_ids": [self.teacher_id],
+                },
             )
             self.assertEqual(empty_cohort.status_code, 201)
             self.assertEqual(
                 self.client.delete(
                     f"/api/v1/cohorts/{empty_cohort.json()['id']}",
                     headers=self.admin_headers,
+                ).status_code,
+                403,
+            )
+            self.assertEqual(
+                self.client.delete(
+                    f"/api/v1/cohorts/{empty_cohort.json()['id']}",
+                    headers=self.superadmin_headers,
                 ).status_code,
                 204,
             )

@@ -49,6 +49,7 @@ export interface CohortDetail {
 
 export interface CohortBatchCard {
   id: string;
+  backendCohortId?: number;
   name: string;
   learnerCount: number;
   startDate: string;
@@ -60,6 +61,8 @@ export interface CohortBatchCard {
   departmentName?: string;
   learnerIds?: Array<number | string>;
   learnerNames?: string[];
+  teacherIds?: number[];
+  teacherNames?: string[];
 }
 
 export type LessonContentType = 'video' | 'text' | 'download' | 'quiz' | 'live' | 'assignment';
@@ -118,6 +121,9 @@ export interface TrainingSession {
 
 export interface LearningMaterialItem {
   id: string;
+  backendCohortId?: number;
+  backendMaterialId?: number;
+  batchId?: string;
   title: string;
   module: string;
   type: 'pdf' | 'video' | 'code' | 'slides' | 'cheatsheet';
@@ -337,7 +343,7 @@ export interface CohortFullData {
   providedIn: 'root'
 })
 export class CohortService {
-  private readonly storageKey = 'ase_cohort_state_v4';
+  private readonly storageKey = 'ase_cohort_state_v5';
   private readonly apiUrl = '/training-api/api/v1/cohorts';
 
   private dataSubject!: BehaviorSubject<CohortFullData>;
@@ -397,7 +403,7 @@ export class CohortService {
           return parsed;
         }
       }
-    } catch {}
+    } catch { }
 
     try {
       const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('ase_managed_users') : null;
@@ -413,7 +419,7 @@ export class CohortService {
           };
         }
       }
-    } catch {}
+    } catch { }
 
     return {
       id: 0,
@@ -610,7 +616,7 @@ export class CohortService {
           if (parsed.batches && parsed.curriculum && parsed.attendanceMatrix) {
             data = parsed;
           }
-        } catch {}
+        } catch { }
       }
     }
 
@@ -3179,7 +3185,7 @@ export class CohortService {
         try {
           const stored = localStorage.getItem('ase_managed_users');
           if (stored) managedUsers = JSON.parse(stored);
-        } catch {}
+        } catch { }
       }
 
       // Merge canonical learners into managedUsers if not present
@@ -3218,7 +3224,7 @@ export class CohortService {
               existingEmails.add(parsed.email.toLowerCase().trim());
             }
           }
-        } catch {}
+        } catch { }
       }
 
       const platformLearners = managedUsers.filter((u: any) => u.role === 'learner' && u.is_active !== false);
@@ -3327,7 +3333,7 @@ export class CohortService {
       if (typeof localStorage !== 'undefined') {
         try {
           localStorage.setItem(this.storageKey, JSON.stringify(data));
-        } catch {}
+        } catch { }
       }
 
       if (!inputData && this.dataSubject) {
@@ -3359,7 +3365,7 @@ export class CohortService {
     if (typeof localStorage !== 'undefined') {
       try {
         localStorage.setItem(this.storageKey, JSON.stringify(data));
-      } catch {}
+      } catch { }
     }
     this.dataSubject.next(data);
   }
@@ -3376,12 +3382,16 @@ export class CohortService {
     learnerIds: Array<number | string> = [],
     learnerNames: string[] = [],
     departmentName: string = 'Python',
-    departmentId?: number
+    departmentId?: number,
+    backendCohortId?: number,
+    teacherIds: number[] = [],
+    teacherNames: string[] = []
   ): CohortBatchCard {
     const current = this.getCohortData();
     const count = learnerIds.length > 0 ? learnerIds.length : learnerCount;
     const newBatch: CohortBatchCard = {
-      id: `batch-${Date.now()}`,
+      id: backendCohortId ? `backend-batch-${backendCohortId}` : `batch-${Date.now()}`,
+      backendCohortId,
       name,
       learnerCount: count,
       startDate,
@@ -3391,7 +3401,9 @@ export class CohortService {
       departmentName: departmentName || 'All / Common',
       departmentId,
       learnerIds,
-      learnerNames
+      learnerNames,
+      teacherIds,
+      teacherNames
     };
 
     const updated: CohortFullData = {
@@ -3406,16 +3418,131 @@ export class CohortService {
 
   deleteBatch(batchId: string): boolean {
     const current = this.getCohortData();
-    if (current.batches.length <= 1) return false;
-
+    const target = current.batches.find(b => b.id === batchId);
     const remaining = current.batches.filter(b => b.id !== batchId);
+    if (remaining.length === current.batches.length) return false;
+
+    const isDeletedBatchMaterial = (m: LearningMaterialItem): boolean =>
+      m.batchId === batchId || (!!target?.backendCohortId && m.backendCohortId === target.backendCohortId);
+
+    const nextActive = current.activeBatchId === batchId ? (remaining[0] || null) : remaining.find(b => b.id === current.activeBatchId) || remaining[0] || null;
+
     const updated: CohortFullData = {
       ...current,
       batches: remaining,
-      activeBatchId: remaining[0].id
+      activeBatchId: nextActive ? nextActive.id : '',
+      materials: current.materials.filter(m => !isDeletedBatchMaterial(m)),
+      sessions: current.sessions.filter(s => (s as any).batchId !== batchId),
+      assignments: current.assignments.filter(a => (a as any).batchId !== batchId),
+      quizzes: current.quizzes.filter(q => (q as any).batchId !== batchId),
+      announcements: current.announcements.filter(an => (an as any).batchId !== batchId)
     };
     this.saveState(updated);
     return true;
+  }
+
+  syncBackendBatchesAndMaterials(
+    backendBatches: Array<{
+      id: number;
+      department_id: number;
+      department_name?: string | null;
+      course_id?: number | null;
+      name: string;
+      start_date?: string | null;
+      end_date?: string | null;
+      status: string;
+      teacher_ids: number[];
+      teachers: Array<{ id: number; full_name: string; email: string }>;
+      member_ids: number[];
+      learner_count: number;
+    }>,
+    deliveredByCohort: Record<
+      number,
+      Array<{
+        id: number;
+        cohort_id: number;
+        course_id: number;
+        material_id: number;
+        title: string;
+        material_type: string;
+        storage_key: string;
+        source_department_name?: string | null;
+        sent_by_name?: string | null;
+        sent_at: string;
+      }>
+    >
+  ): void {
+    const current = this.getCohortData();
+    const mappedBatches: CohortBatchCard[] = backendBatches.map(bc => ({
+      id: `backend-batch-${bc.id}`,
+      backendCohortId: bc.id,
+      name: bc.name,
+      learnerCount: bc.learner_count ?? bc.member_ids.length,
+      startDate: bc.start_date ? new Date(bc.start_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Active',
+      endDate: bc.end_date ? new Date(bc.end_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'SuperAdmin Controlled',
+      status: bc.status === 'completed' ? 'alumni' : 'current',
+      track: `${bc.department_name || 'Engineering'} Track`,
+      departmentId: bc.department_id,
+      departmentName: bc.department_name || undefined,
+      learnerIds: bc.member_ids,
+      teacherIds: bc.teacher_ids,
+      teacherNames: (bc.teachers || []).map(t => t.full_name)
+    }));
+
+    const activeBackendIds = new Set(backendBatches.map(b => b.id));
+    // Keep only local non-backend manual materials from non-deleted batches, plus live delivered Vault materials
+    const preservedNonDelivered = current.materials.filter(
+      m => !m.id.startsWith('deliv-') && (!m.backendCohortId || activeBackendIds.has(m.backendCohortId))
+    );
+    const deliveredItems: LearningMaterialItem[] = [];
+    for (const bc of backendBatches) {
+      const deliveries = deliveredByCohort[bc.id] || [];
+      for (const d of deliveries) {
+        const isFile = d.material_type === 'pdf' || (d.material_type === 'doc' && !d.storage_key.startsWith('http'));
+        const downloadUrl = isFile
+          ? `/training-api/api/v1/courses/${d.course_id}/materials/${d.material_id}/file`
+          : d.storage_key;
+        deliveredItems.push({
+          id: `deliv-${bc.id}-${d.material_id}`,
+          backendCohortId: bc.id,
+          backendMaterialId: d.material_id,
+          batchId: `backend-batch-${bc.id}`,
+          title: d.title,
+          module: d.source_department_name || bc.department_name || 'Course Vault',
+          type: d.material_type === 'video' ? 'video' : d.material_type === 'pdf' ? 'pdf' : 'slides',
+          size: d.material_type.toUpperCase(),
+          uploadedAt: d.sent_at ? new Date(d.sent_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Delivered',
+          author: d.sent_by_name || 'Instructor',
+          downloadUrl,
+          videoUrl: d.material_type === 'video' ? downloadUrl : undefined,
+          description: `Delivered from ${d.source_department_name || 'Course'} Resource Vault`,
+          departmentId: bc.department_id,
+          departmentName: bc.department_name || undefined
+        });
+      }
+    }
+
+    const activeBatch =
+      mappedBatches.find(b => b.id === current.activeBatchId) ||
+      mappedBatches[0] ||
+      null;
+
+    this.saveState({
+      ...current,
+      batches: mappedBatches,
+      activeBatchId: activeBatch ? activeBatch.id : '',
+      materials: [...deliveredItems, ...preservedNonDelivered],
+      details: activeBatch
+        ? {
+            ...current.details,
+            name: activeBatch.name,
+            track: activeBatch.track || current.details.track,
+            department: activeBatch.departmentName || current.details.department,
+            departmentName: activeBatch.departmentName || current.details.departmentName,
+            departmentId: activeBatch.departmentId || current.details.departmentId
+          }
+        : current.details
+    });
   }
 
   setActiveBatch(batchId: string): void {
@@ -3485,6 +3612,10 @@ export class CohortService {
       meetingUrl?: string;
       isLiveNow?: boolean;
       trainer?: string;
+      departmentName?: string;
+      departmentId?: number;
+      quizQuestionsCount?: number;
+      points?: number;
     }
   ): void {
     const current = this.getCohortData();
@@ -3615,14 +3746,14 @@ export class CohortService {
 
     let updatedAssignments = [...current.assignments];
     if (lesson.type === 'assignment') {
-      const deptName = newLesson.departmentName || updatedChap.departmentName || 'All / Common';
+      const deptName = newLesson.departmentName || updatedChap.departmentName || 'Python';
       const deptId = newLesson.departmentId || updatedChap.departmentId;
       updatedAssignments.unshift({
         id: `asg-${newLesson.id}`,
         title: newLesson.title,
         module: updatedChap.title,
         description: newLesson.description || 'Complete the practical task according to rubric.',
-        points: 100,
+        points: lesson.points || 100,
         dueDate: lesson.scheduledDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
         dueRelative: 'Due in 7 days',
         status: 'pending',
@@ -3637,13 +3768,13 @@ export class CohortService {
 
     let updatedQuizzes = [...current.quizzes];
     if (lesson.type === 'quiz') {
-      const deptName = newLesson.departmentName || updatedChap.departmentName || 'All / Common';
+      const deptName = newLesson.departmentName || updatedChap.departmentName || 'Python';
       const deptId = newLesson.departmentId || updatedChap.departmentId;
       updatedQuizzes.unshift({
         id: `quiz-${newLesson.id}`,
         title: newLesson.title,
         module: updatedChap.title,
-        questionsCount: 5,
+        questionsCount: lesson.quizQuestionsCount || 5,
         durationMinutes: 15,
         dueDate: lesson.scheduledDate || 'Upcoming Sprint',
         passingScore: 70,
@@ -4185,6 +4316,9 @@ export class CohortService {
     questionsCount: number;
     durationMinutes: number;
     passingScore: number;
+    dueDate?: string;
+    departmentName?: string;
+    departmentId?: number;
   }): void {
     const current = this.getCohortData();
     const newQuiz: CohortQuiz = {
@@ -4193,9 +4327,11 @@ export class CohortService {
       module: quiz.module,
       questionsCount: quiz.questionsCount || 5,
       durationMinutes: quiz.durationMinutes || 15,
-      dueDate: 'Scheduled by Instructor',
+      dueDate: quiz.dueDate || 'Scheduled by Instructor',
       passingScore: quiz.passingScore || 70,
       status: 'available',
+      departmentName: quiz.departmentName || current.details.department || 'Python',
+      departmentId: quiz.departmentId ?? current.details.departmentId,
       questions: [
         {
           id: 1,
@@ -4209,7 +4345,7 @@ export class CohortService {
 
     this.saveState({
       ...current,
-      quizzes: [...current.quizzes, newQuiz],
+      quizzes: [newQuiz, ...current.quizzes],
       progress: {
         ...current.progress,
         totalQuizzes: current.progress.totalQuizzes + 1

@@ -31,6 +31,53 @@
     </div>
   }
 
+  @if (isSuperAdmin && deletionRequests.length > 0) {
+    <section class="deletion-consensus-panel" aria-label="Pending Course and Department Deletions">
+      <div class="consensus-header">
+        <div>
+          <span class="eyebrow">UNANIMOUS SUPERADMIN CONSENSUS REQUIRED</span>
+          <h3>Pending Course &amp; Department Deletion Requests ({{ deletionRequests.length }})</h3>
+          <p>Deleting either a Department or Course permanently deletes BOTH together only after all active SuperAdmins approve.</p>
+        </div>
+      </div>
+      <div class="consensus-list">
+        @for (delReq of deletionRequests; track delReq.id) {
+          <div class="consensus-card">
+            <div class="consensus-info">
+              <strong>{{ delReq.department_name }}</strong>
+              <span class="consensus-meta">
+                Triggered via {{ delReq.target_type }} by {{ delReq.initiated_by_name }} ·
+                <b>{{ delReq.approved_count }} / {{ delReq.required_count }}</b> SuperAdmins approved
+              </span>
+              <span class="consensus-names">
+                Approved: {{ delReq.approved_by_names.join(', ') || 'None' }}
+                @if (delReq.pending_superadmin_names.length > 0) {
+                  · Waiting on: {{ delReq.pending_superadmin_names.join(', ') }}
+                }
+              </span>
+            </div>
+            <div class="consensus-actions">
+              <button
+                type="button"
+                class="btn-approve"
+                (click)="approveDeletion(delReq)"
+                [disabled]="hasCurrentUserApprovedDeletion(delReq) || processingDeletionId === delReq.id">
+                {{ hasCurrentUserApprovedDeletion(delReq) ? '✓ Approved by You' : '✓ Approve Delete' }}
+              </button>
+              <button
+                type="button"
+                class="btn-reject"
+                (click)="rejectDeletion(delReq)"
+                [disabled]="processingDeletionId === delReq.id">
+                ✕ Cancel / Reject
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    </section>
+  }
+
   <!-- View Mode Tab Bar -->
   <div class="view-tabs-bar">
     <button
@@ -173,14 +220,16 @@
                     {{ dept.is_active ? 'Deactivate' : 'Activate' }}
                   </button>
 
-                  <button
-                    type="button"
-                    class="btn-action btn-delete"
-                    (click)="deleteDepartment(dept)"
-                    [disabled]="deletingId === dept.id"
-                    title="Delete Department">
-                    🗑 Delete
-                  </button>
+                  @if (isSuperAdmin) {
+                    <button
+                      type="button"
+                      class="btn-action btn-delete"
+                      (click)="deleteDepartment(dept)"
+                      [disabled]="deletingId === dept.id"
+                      title="Initiate SuperAdmin Consensus Deletion (Deletes Dept + Course)">
+                      🗑 Delete
+                    </button>
+                  }
                 </div>
               }
             </div>

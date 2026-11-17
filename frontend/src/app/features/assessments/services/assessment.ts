@@ -823,6 +823,7 @@ export class AssessmentService {
     template_id?: number;
     status?: string;
     search?: string;
+    learner_user_id?: number;
     include_not_started?: boolean;
   }): Observable<AdminAssessmentResultsResponse> {
     let httpParams = new HttpParams();
@@ -834,6 +835,9 @@ export class AssessmentService {
     }
     if (params?.search) {
       httpParams = httpParams.set('search', params.search);
+    }
+    if (params?.learner_user_id) {
+      httpParams = httpParams.set('learner_user_id', params.learner_user_id.toString());
     }
     if (params?.include_not_started) {
       httpParams = httpParams.set('include_not_started', 'true');

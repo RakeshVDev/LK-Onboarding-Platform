@@ -105,14 +105,14 @@ def require_teacher_department_access(
     if allowed is None:
         return None
 
-    if allow_common_read and is_common_department_id(db, department_id):
-        return allowed
-
     if not allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No departments have been assigned to your teacher account yet. Contact a SuperAdmin.",
         )
+
+    if allow_common_read and is_common_department_id(db, department_id):
+        return allowed
 
     if department_id is None or int(department_id) not in allowed:
         raise HTTPException(

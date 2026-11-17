@@ -132,6 +132,36 @@ export class AdminResults implements OnInit {
     this.loadResults();
   }
 
+  readonly historyLearner = signal<{ userId: number; name: string; email?: string | null } | null>(null);
+  readonly historyResults = signal<AdminAssessmentResultItem[]>([]);
+  readonly historyLoading = signal<boolean>(false);
+
+  openLearnerHistory(learnerUserId: number, name?: string | null, email?: string | null): void {
+    this.historyLearner.set({
+      userId: learnerUserId,
+      name: name || `Learner #${learnerUserId}`,
+      email
+    });
+    this.historyResults.set([]);
+    this.historyLoading.set(true);
+    this.api.getAdminResults({ learner_user_id: learnerUserId, include_not_started: false }).subscribe({
+      next: res => {
+        this.historyResults.set(res.results || []);
+        this.historyLoading.set(false);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.historyLoading.set(false);
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  closeLearnerHistory(): void {
+    this.historyLearner.set(null);
+    this.historyResults.set([]);
+  }
+
   viewReport(sessionId: number | null): void {
     if (!sessionId) return;
     void this.router.navigate(['/assessments/report', sessionId]);

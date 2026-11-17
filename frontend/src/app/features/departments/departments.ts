@@ -13,6 +13,7 @@ import {
 } from '@angular/forms';
 
 import {
+  DeletionRequest,
   LearningService,
   Department,
   StudentDepartmentRequest
@@ -39,6 +40,12 @@ export class Departments implements OnInit {
   errorMessage = '';
   successMessage = '';
   searchQuery = '';
+
+  // SuperAdmin Course/Dept deletion consensus state
+  isSuperAdmin = false;
+  currentUserId = 0;
+  deletionRequests: DeletionRequest[] = [];
+  processingDeletionId: number | null = null;
 
   // Tab State: 'departments' | 'requests'
   activeTab: 'departments' | 'requests' = 'departments';
@@ -68,8 +75,23 @@ export class Departments implements OnInit {
   });
 
   ngOnInit(): void {
+    this.isSuperAdmin = this.authService.hasRole('superadmin');
+    this.currentUserId = this.authService.getCurrentUserSnapshot()?.id ?? 0;
     void this.loadDepartments();
     void this.loadRequests();
+    if (this.isSuperAdmin) {
+      void this.loadDeletionRequests();
+    }
+  }
+
+  async loadDeletionRequests(): Promise<void> {
+    if (!this.isSuperAdmin) return;
+    try {
+      this.deletionRequests = await this.learningService.getDeletionRequests('pending');
+      this.cdr.detectChanges();
+    } catch {
+      // keep silent if unauthorized
+    }
   }
 
   async loadDepartments(): Promise<void> {
@@ -281,7 +303,10 @@ export class Departments implements OnInit {
   }
 
   async deleteDepartment(dept: Department): Promise<void> {
-    if (!confirm(`Are you sure you want to delete department "${dept.name}"? This action cannot be undone.`)) {
+    if (!this.isSuperAdmin) {
+      return;
+    }
+    if (!confirm(`Deleting "${dept.name}" will delete BOTH this Department and its paired Course Vault (requires approval from all active SuperAdmins). Continue?`)) {
       return;
     }
 
@@ -291,14 +316,68 @@ export class Departments implements OnInit {
     this.cdr.detectChanges();
 
     try {
-      await this.learningService.deleteDepartment(dept.id);
-      this.departments = this.departments.filter(d => d.id !== dept.id);
-      this.successMessage = `Department "${dept.name}" deleted successfully.`;
+      const res = await this.learningService.deleteDepartment(dept.id);
+      if (res.status === 'deleted') {
+        this.departments = this.departments.filter(d => d.id !== dept.id);
+        this.deletionRequests = this.deletionRequests.filter(r => r.department_id !== dept.id);
+        this.successMessage = res.message || `Department "${dept.name}" and its paired Course deleted.`;
+      } else {
+        if (res.request) {
+          this.deletionRequests = [
+            res.request,
+            ...this.deletionRequests.filter(r => r.id !== res.request!.id)
+          ];
+        }
+        this.successMessage = res.message;
+      }
     } catch (err: any) {
       console.error('Delete department error:', err);
-      this.errorMessage = err.error?.detail || 'Cannot delete department with associated courses or cohorts.';
+      this.errorMessage = err.error?.detail || 'Cannot initiate department deletion.';
     } finally {
       this.deletingId = null;
+      this.cdr.detectChanges();
+    }
+  }
+
+  hasCurrentUserApprovedDeletion(req: DeletionRequest): boolean {
+    if (!this.currentUserId) return false;
+    return req.approved_by_user_ids.includes(this.currentUserId);
+  }
+
+  async approveDeletion(req: DeletionRequest): Promise<void> {
+    if (!this.isSuperAdmin) return;
+    this.processingDeletionId = req.id;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.cdr.detectChanges();
+
+    try {
+      const res = await this.learningService.approveDeletionRequest(req.id);
+      this.successMessage = res.message;
+      await Promise.all([this.loadDepartments(), this.loadDeletionRequests()]);
+    } catch (err: any) {
+      this.errorMessage = err.error?.detail || 'Failed to approve deletion request.';
+    } finally {
+      this.processingDeletionId = null;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async rejectDeletion(req: DeletionRequest): Promise<void> {
+    if (!this.isSuperAdmin) return;
+    this.processingDeletionId = req.id;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.cdr.detectChanges();
+
+    try {
+      await this.learningService.rejectDeletionRequest(req.id);
+      this.deletionRequests = this.deletionRequests.filter(r => r.id !== req.id);
+      this.successMessage = `Deletion request for "${req.department_name}" was cancelled.`;
+    } catch (err: any) {
+      this.errorMessage = err.error?.detail || 'Failed to reject deletion request.';
+    } finally {
+      this.processingDeletionId = null;
       this.cdr.detectChanges();
     }
   }

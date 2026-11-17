@@ -33,6 +33,7 @@ describe('BrandLogo', () => {
     fixture.componentInstance.variant = 'dark';
     fixture.componentInstance.size = 'lg';
     fixture.componentInstance.badgeText = 'ENTERPRISE';
+    fixture.componentInstance.showSubtitle = true;
     fixture.componentInstance.subtitle = 'Official Report';
     fixture.detectChanges();
     await fixture.whenStable();

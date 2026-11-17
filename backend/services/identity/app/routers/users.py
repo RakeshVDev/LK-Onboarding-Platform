@@ -1,4 +1,6 @@
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -242,7 +244,10 @@ def update_user_status(
                 detail="Cannot deactivate the last active Superadmin",
             )
 
+    was_active = bool(user.is_active)
     user.is_active = payload.is_active
+    if user.role == Role.LEARNER.value and (not was_active and payload.is_active):
+        user.results_cleared_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(user)
 

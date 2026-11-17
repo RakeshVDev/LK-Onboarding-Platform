@@ -45,6 +45,7 @@ async def lifespan(_app: FastAPI):
                 _ensure_column(conn, "users", "is_activated_by_admin", "BOOLEAN NOT NULL DEFAULT 0")
                 _ensure_column(conn, "users", "selected_department_id", "VARCHAR(64) NULL")
                 _ensure_column(conn, "users", "department_approved", "BOOLEAN NOT NULL DEFAULT 0")
+                _ensure_column(conn, "users", "results_cleared_at", "DATETIME NULL")
     except Exception as exc:
         print(f"  [Identity Auto-Migration] Warning: {exc}")
     yield

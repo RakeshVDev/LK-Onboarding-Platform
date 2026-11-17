@@ -33,6 +33,7 @@ class UserResponse(BaseModel):
     assigned_department_ids: list[int] = Field(default_factory=list)
     assigned_department_names: list[str] = Field(default_factory=list)
     onboarding_stage: str | None = None
+    results_cleared_at: datetime | None = None
     created_at: datetime | None = None
 
 

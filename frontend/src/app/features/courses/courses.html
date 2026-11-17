@@ -3,24 +3,67 @@
   <!-- Header -->
   <header class="page-header">
     <div class="header-left">
-      <span class="eyebrow">ACADEMIC &amp; TRAINING CURRICULUM</span>
-      <h1>Training Courses</h1>
-      <p>Explore specialized technical and onboarding courses, download course PDFs, and access recommended learning links.</p>
+      <span class="eyebrow">ACADEMIC &amp; PERMANENT RESOURCE VAULT</span>
+      <h1>Course Vaults ({{ courses().length }})</h1>
+      <p>1:1 synced with active Departments (including All / Common with HTML, CSS, JS, TS, Angular &amp; React). Teachers can archive resources here and send them to active batches.</p>
     </div>
 
-    @if (canManage() && hasAssignedDepartments) {
     <div class="header-actions">
-      <button type="button" class="btn-create-course" (click)="openCreateModal()">
-        <span>+ Create New Course</span>
-      </button>
+      <span class="vault-sync-pill">1 Course per Department</span>
     </div>
-    }
   </header>
 
   @if (!loading() && isTeacher && !hasAssignedDepartments) {
   <div class="alert-banner alert-error">
-    <span>⚠</span> No departments have been assigned to your teacher account yet. A SuperAdmin must assign 1–4 departments before you can manage courses or study materials.
+    <span>⚠</span> No departments have been assigned to your teacher account yet. A SuperAdmin must assign 1–8 departments (or add you to a batch) before you can manage courses or study materials.
   </div>
+  }
+
+  @if (isSuperAdmin && deletionRequests().length > 0) {
+  <section class="deletion-consensus-panel" aria-label="Pending Course and Department Deletions">
+    <div class="consensus-header">
+      <div>
+        <span class="eyebrow">UNANIMOUS SUPERADMIN CONSENSUS REQUIRED</span>
+        <h3>Pending Course &amp; Department Deletion Requests ({{ deletionRequests().length }})</h3>
+        <p>Deleting a Course or Department deletes BOTH together only once all active SuperAdmins approve.</p>
+      </div>
+    </div>
+    <div class="consensus-list">
+      @for (delReq of deletionRequests(); track delReq.id) {
+      <div class="consensus-card">
+        <div class="consensus-info">
+          <strong>{{ delReq.department_name }}</strong>
+          <span class="consensus-meta">
+            Triggered via {{ delReq.target_type }} by {{ delReq.initiated_by_name }} ·
+            <b>{{ delReq.approved_count }} / {{ delReq.required_count }}</b> SuperAdmins approved
+          </span>
+          <span class="consensus-names">
+            Approved: {{ delReq.approved_by_names.join(', ') || 'None' }}
+            @if (delReq.pending_superadmin_names.length > 0) {
+              · Waiting on: {{ delReq.pending_superadmin_names.join(', ') }}
+            }
+          </span>
+        </div>
+        <div class="consensus-actions">
+          <button
+            type="button"
+            class="btn-approve"
+            (click)="approveDeletion(delReq)"
+            [disabled]="hasCurrentUserApprovedDeletion(delReq) || processingDeletionId() === delReq.id">
+            {{ hasCurrentUserApprovedDeletion(delReq) ? '✓ Approved by You' : '✓ Approve Delete' }}
+          </button>
+          <button
+            type="button"
+            class="btn-reject"
+            (click)="rejectDeletion(delReq)"
+            [disabled]="processingDeletionId() === delReq.id">
+            ✕ Reject
+          </button>
+        </div>
+      </div>
+      }
+    </div>
+  </section>
   }
 
   <!-- Alerts -->
@@ -105,11 +148,22 @@
           <span>Syllabus</span>
         </button>
 
-        <!-- Learning Materials (PDF & Links) Action -->
+        <!-- Learning Materials / Permanent Resource Vault Action -->
         <button type="button" class="btn-action btn-materials" (click)="openMaterials(course)">
           <span class="btn-icon">📂</span>
-          <span>Resources &amp; PDFs</span>
+          <span>{{ canManage() ? 'Resource Vault' : 'Batch Resources' }}</span>
         </button>
+
+        @if (isSuperAdmin) {
+        <button
+          type="button"
+          class="btn-action btn-delete-course"
+          (click)="deleteCourse(course)"
+          [disabled]="deletingCourseId() === course.id"
+          title="Delete Course & Department (SuperAdmin Consensus)">
+          <span>{{ deletingCourseId() === course.id ? '...' : '🗑' }}</span>
+        </button>
+        }
       </div>
     </article>
     }
@@ -118,12 +172,7 @@
   <div class="empty-state">
     <div class="empty-icon">▣</div>
     <h3>No courses available</h3>
-    <p>There are currently no training courses created in this workspace.</p>
-    @if (canManage() && hasAssignedDepartments) {
-    <button type="button" class="btn-create-course" (click)="openCreateModal()">
-      <span>Create Your First Course</span>
-    </button>
-    }
+    <p>Courses are automatically synced 1:1 with active Departments once assigned or created.</p>
   </div>
   }
 
@@ -365,7 +414,7 @@
 
       <!-- Materials List -->
       <div class="materials-list-container">
-        <h3>Available Resources ({{ materials().length }})</h3>
+        <h3>{{ canManage() ? 'Permanent Resource Vault' : 'Delivered Batch Resources' }} ({{ materials().length }})</h3>
 
         @if (materialsLoading()) {
         <div class="loading-state mini-loading">
@@ -392,12 +441,61 @@
             </div>
 
             <div class="mat-actions-col">
+              @if (canManage()) {
+              <div class="send-batch-wrapper">
+                <button
+                  type="button"
+                  class="btn-send-res"
+                  (click)="toggleSendDropdown(item)"
+                  [disabled]="sendingMaterialId() === item.id">
+                  <span>📤 Send ▾</span>
+                </button>
+                @if (sendOpenForMaterialId() === item.id && selectedCourse()) {
+                <div class="send-batch-dropdown" (click)="$event.stopPropagation()">
+                  <div class="send-dropdown-header">
+                    <strong>Send to Active Batch(es)</strong>
+                    <button type="button" class="btn-mini-close" (click)="closeSendDropdown()">✕</button>
+                  </div>
+                  @if (availableBatchesForSend(selectedCourse()!).length === 0) {
+                  <p class="send-empty-hint">
+                    No active batches assigned for {{ isCommonCourse(selectedCourse()!) ? 'your departments' : getDepartmentName(selectedCourse()!.department_id) }} yet.
+                  </p>
+                  } @else {
+                  <div class="send-batch-options">
+                    @for (b of availableBatchesForSend(selectedCourse()!); track b.id) {
+                    <label class="send-batch-checkbox">
+                      <input
+                        type="checkbox"
+                        [checked]="isBatchSelectedForSend(b.id)"
+                        (change)="toggleBatchSelectionForSend(b.id)" />
+                      <span class="batch-label">{{ b.name }}</span>
+                      <span class="batch-dept-tag">{{ b.department_name }}</span>
+                    </label>
+                    }
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-confirm-send"
+                    [disabled]="selectedBatchIdsForSend().size === 0 || sendingMaterialId() === item.id"
+                    (click)="confirmSendToBatches(selectedCourse()!, item)">
+                    {{ sendingMaterialId() === item.id ? 'Sending...' : 'Deliver to ' + selectedBatchIdsForSend().size + ' Batch(es)' }}
+                  </button>
+                  }
+                </div>
+                }
+              </div>
+              }
+
               <button type="button" class="btn-open-res" (click)="openResource(item)">
                 <span>{{ item.material_type === 'pdf' ? 'Download / View PDF' : 'Open Link ↗' }}</span>
               </button>
 
-              @if (canManage()) {
-              <button type="button" class="btn-del-res" (click)="deleteMaterial(item)" title="Delete material">
+              @if (isSuperAdmin) {
+              <button
+                type="button"
+                class="btn-del-res"
+                (click)="deleteMaterial(item)"
+                title="Permanently Delete from Vault (SuperAdmin Only)">
                 ✕
               </button>
               }

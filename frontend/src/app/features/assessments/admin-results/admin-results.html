@@ -162,7 +162,13 @@
                 <div class="user-cell">
                   <div class="avatar">{{ getUserInitials(item.learner_name) }}</div>
                   <div>
-                    <strong class="user-name">{{ item.learner_name || 'Learner' }}</strong>
+                    <button
+                      type="button"
+                      class="user-name-link"
+                      title="View all assessment results ever attended by {{ item.learner_name || 'this learner' }}"
+                      (click)="openLearnerHistory(item.learner_user_id, item.learner_name, item.learner_email)">
+                      {{ item.learner_name || ('Learner #' + item.learner_user_id) }}
+                    </button>
                     <span class="user-email">{{ item.learner_email || 'No email' }}</span>
                   </div>
                 </div>
@@ -285,6 +291,72 @@
           }
         </tbody>
       </table>
+    </div>
+  }
+
+  <!-- Learner All-Time Assessment History Modal -->
+  @if (historyLearner(); as hl) {
+    <div class="modal-backdrop" (click)="closeLearnerHistory()">
+      <div class="history-modal-card" (click)="$event.stopPropagation()">
+        <div class="history-modal-header">
+          <div>
+            <span class="eyebrow">ALL-TIME LEARNER ASSESSMENT RECORD</span>
+            <h2>{{ hl.name }}</h2>
+            <p class="history-subtitle">{{ hl.email || ('User #' + hl.userId) }} · {{ historyResults().length }} record{{ historyResults().length === 1 ? '' : 's' }} ever attended</p>
+          </div>
+          <button type="button" class="btn-modal-close" (click)="closeLearnerHistory()">✕</button>
+        </div>
+
+        <div class="history-modal-body">
+          @if (historyLoading()) {
+            <div class="history-loading">Loading complete assessment history...</div>
+          } @else if (historyResults().length === 0) {
+            <div class="history-empty">No assessment attempts recorded for this learner account yet.</div>
+          } @else {
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Assessment</th>
+                  <th>Status</th>
+                  <th>Score</th>
+                  <th>Attended Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (rec of historyResults(); track rec.session_id || ($index + '-' + rec.template_id)) {
+                  <tr>
+                    <td>
+                      <strong>{{ rec.template_name }}</strong>
+                      <div class="rec-meta">{{ rec.assessment_type }}</div>
+                    </td>
+                    <td>{{ rec.status }}</td>
+                    <td>
+                      @if (rec.status === 'completed') {
+                        <strong>{{ rec.overall_percentage | number:'1.0-1' }}%</strong>
+                        <span class="rec-meta">({{ rec.total_score }}/{{ rec.max_score }})</span>
+                      } @else {
+                        <span>—</span>
+                      }
+                    </td>
+                    <td>{{ (rec.completed_at || rec.started_at) | date:'medium' }}</td>
+                    <td>
+                      @if (rec.status === 'completed' && rec.session_id) {
+                        <div class="btn-group">
+                          <button type="button" class="btn-action-primary" (click)="viewReport(rec.session_id)">Report</button>
+                          <button type="button" class="btn-action-secondary" (click)="viewScores(rec.session_id)">Scores</button>
+                        </div>
+                      } @else {
+                        <span>—</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+      </div>
     </div>
   }
 

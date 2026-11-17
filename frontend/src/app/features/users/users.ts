@@ -276,8 +276,8 @@ export class Users implements OnInit {
       this.selectedCreateDeptIds.set(current.filter(id => id !== deptId));
       return;
     }
-    if (current.length >= 4) {
-      this.errorMessage.set('A teacher can be assigned at most 4 departments.');
+    if (current.length >= 8) {
+      this.errorMessage.set('A teacher can be assigned at most 8 departments.');
       return;
     }
     this.errorMessage.set('');
@@ -303,7 +303,7 @@ export class Users implements OnInit {
       this.selectedModalDeptIds.set(current.filter(id => id !== deptId));
       return;
     }
-    if (current.length >= 4) {
+    if (current.length >= 8) {
       return;
     }
     this.selectedModalDeptIds.set([...current, deptId]);
@@ -314,8 +314,8 @@ export class Users implements OnInit {
     if (!teacher || this.savingDepartments()) return;
 
     const deptIds = this.selectedModalDeptIds();
-    if (deptIds.length < 1 || deptIds.length > 4) {
-      this.errorMessage.set('Select between 1 and 4 concrete departments for this teacher.');
+    if (deptIds.length < 1 || deptIds.length > 8) {
+      this.errorMessage.set('Select between 1 and 8 concrete departments for this teacher.');
       return;
     }
 

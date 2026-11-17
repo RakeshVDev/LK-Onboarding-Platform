@@ -9,7 +9,13 @@ class CohortCreate(BaseModel):
     name: str = Field(min_length=2, max_length=150)
     start_date: datetime | None = None
     end_date: datetime | None = None
-    status: str = Field(default="planned", max_length=30)
+    status: str = Field(default="active", max_length=30)
+    teacher_ids: list[int] = Field(min_length=1, max_length=3)
+    excluded_learner_ids: list[int] = Field(default_factory=list)
+
+
+class CohortTeachersUpdate(BaseModel):
+    teacher_ids: list[int] = Field(min_length=1, max_length=3)
 
 
 class CohortUpdate(BaseModel):
@@ -20,16 +26,55 @@ class CohortUpdate(BaseModel):
     status: str | None = Field(default=None, max_length=30)
 
 
+class CohortTeacherInfo(BaseModel):
+    id: int
+    full_name: str
+    email: str
+
+
 class CohortResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     department_id: int
     department_name: str | None = None
+    course_id: int | None = None
     name: str
     start_date: datetime | None
     end_date: datetime | None
     status: str
+    teacher_ids: list[int] = Field(default_factory=list)
+    teachers: list[CohortTeacherInfo] = Field(default_factory=list)
+    member_ids: list[int] = Field(default_factory=list)
+    learner_count: int = 0
+    material_count: int = 0
+
+
+class CohortCandidateUser(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    assigned_department_ids: list[int] = Field(default_factory=list)
+
+
+class CohortDepartmentCandidatesResponse(BaseModel):
+    department_id: int
+    learners: list[CohortCandidateUser] = Field(default_factory=list)
+    teachers: list[CohortCandidateUser] = Field(default_factory=list)
+
+
+class CohortDeliveredMaterialResponse(BaseModel):
+    id: int
+    cohort_id: int
+    course_id: int
+    material_id: int
+    title: str
+    material_type: str
+    storage_key: str
+    source_department_name: str | None = None
+    sent_by_user_id: int
+    sent_by_name: str | None = None
+    sent_at: datetime
 
 
 class CohortMemberCreate(BaseModel):

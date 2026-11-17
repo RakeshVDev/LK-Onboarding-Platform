@@ -43,12 +43,32 @@ describe('Cohorts (SuperAdmin-Only Teacher/Learner Mode Switcher)', () => {
       githubOrg: 'lk-onboarding',
       isLiveActive: false,
     },
-    batches: [],
-    activeBatchId: 'b1',
-    curriculum: [],
-    sessions: [],
-    materials: [],
-    assignments: [],
+    batches: [
+      { id: 'b-py', name: 'Python Batch', learnerCount: 5, startDate: '2026-10-01', endDate: '2026-12-31', status: 'current', departmentName: 'Python', departmentId: 1 },
+      { id: 'b-java', name: 'Java Batch', learnerCount: 5, startDate: '2026-10-01', endDate: '2026-12-31', status: 'current', departmentName: 'Java', departmentId: 2 },
+      { id: 'b-common', name: 'Common Batch', learnerCount: 5, startDate: '2026-10-01', endDate: '2026-12-31', status: 'current', departmentName: 'All / Common', departmentId: 99 },
+    ],
+    activeBatchId: 'b-py',
+    curriculum: [
+      { id: 'ch-py', title: 'Python Core', sequenceOrder: 1, departmentName: 'Python', departmentId: 1, lessons: [{ id: 'l-py', title: 'FastAPI Intro', type: 'video', departmentName: 'Python', departmentId: 1 }] },
+      { id: 'ch-java', title: 'Java Core', sequenceOrder: 2, departmentName: 'Java', departmentId: 2, lessons: [{ id: 'l-java', title: 'Spring Boot Intro', type: 'video', departmentName: 'Java', departmentId: 2 }] },
+      { id: 'ch-common', title: 'Common Foundations', sequenceOrder: 3, departmentName: 'All / Common', departmentId: 99, lessons: [{ id: 'l-com', title: 'Git Intro', type: 'text', departmentName: 'All / Common', departmentId: 99 }] },
+    ],
+    sessions: [
+      { id: 's-py', title: 'Python Live Class', module: 'Mod 1', trainer: 'Faculty Lead', date: 'Today', time: '10:00 AM', duration: '1h', status: 'today', location: 'Meet', meetingUrl: 'https://meet.example.com/py', topics: ['FastAPI'], departmentName: 'Python', departmentId: 1 },
+      { id: 's-java', title: 'Java Live Class', module: 'Mod 1', trainer: 'Java Lead', date: 'Tomorrow', time: '11:00 AM', duration: '1h', status: 'upcoming', location: 'Meet', meetingUrl: 'https://meet.example.com/java', topics: ['Spring'], departmentName: 'Java', departmentId: 2 },
+      { id: 's-common', title: 'Common Live Class', module: 'Mod 0', trainer: 'Faculty Lead', date: 'Today', time: '09:00 AM', duration: '1h', status: 'today', location: 'Meet', meetingUrl: 'https://meet.example.com/common', topics: ['Git'], departmentName: 'All / Common', departmentId: 99 },
+    ],
+    materials: [
+      { id: 'm-py', title: 'Python Handbook', module: 'Mod 1', type: 'pdf', size: '1 MB', uploadedAt: 'Today', author: 'Faculty Lead', downloadUrl: '#', description: 'Python docs', departmentName: 'Python', departmentId: 1 },
+      { id: 'm-java', title: 'Java Handbook', module: 'Mod 1', type: 'pdf', size: '1 MB', uploadedAt: 'Today', author: 'Java Lead', downloadUrl: '#', description: 'Java docs', departmentName: 'Java', departmentId: 2 },
+      { id: 'm-common', title: 'Common Handbook', module: 'Mod 0', type: 'pdf', size: '1 MB', uploadedAt: 'Today', author: 'Faculty Lead', downloadUrl: '#', description: 'Common docs', departmentName: 'All / Common', departmentId: 99 },
+    ],
+    assignments: [
+      { id: 'a-py', title: 'Python API Task', module: 'Mod 1', description: 'Build FastAPI', points: 100, dueDate: '2026-11-20', dueRelative: 'Due soon', status: 'pending', requirements: ['Tests'], departmentName: 'Python', departmentId: 1 },
+      { id: 'a-java', title: 'Java API Task', module: 'Mod 1', description: 'Build Spring', points: 100, dueDate: '2026-11-20', dueRelative: 'Due soon', status: 'pending', requirements: ['Tests'], departmentName: 'Java', departmentId: 2 },
+      { id: 'a-common', title: 'Common Task', module: 'Mod 0', description: 'Git flow', points: 100, dueDate: '2026-11-20', dueRelative: 'Due soon', status: 'pending', requirements: ['Tests'], departmentName: 'All / Common', departmentId: 99 },
+    ],
     attendance: {
       percentage: 100,
       totalSessions: 0,
@@ -65,7 +85,11 @@ describe('Cohorts (SuperAdmin-Only Teacher/Learner Mode Switcher)', () => {
       days: [],
       students: [],
     },
-    quizzes: [],
+    quizzes: [
+      { id: 'q-py', title: 'Python Quiz', module: 'Mod 1', questionsCount: 5, durationMinutes: 10, dueDate: '2026-11-20', passingScore: 70, status: 'available', departmentName: 'Python', departmentId: 1, questions: [], submissions: [{ studentId: 1, studentName: 'Py Student', score: 90, passed: true, submittedAt: '2026-11-10' }] },
+      { id: 'q-java', title: 'Java Quiz', module: 'Mod 1', questionsCount: 5, durationMinutes: 10, dueDate: '2026-11-20', passingScore: 70, status: 'available', departmentName: 'Java', departmentId: 2, questions: [], submissions: [{ studentId: 2, studentName: 'Java Student', score: 85, passed: true, submittedAt: '2026-11-10' }] },
+      { id: 'q-common', title: 'Common Quiz', module: 'Mod 0', questionsCount: 5, durationMinutes: 10, dueDate: '2026-11-20', passingScore: 70, status: 'available', departmentName: 'All / Common', departmentId: 99, questions: [], submissions: [{ studentId: 3, studentName: 'Common Student', score: 80, passed: true, submittedAt: '2026-11-10' }] },
+    ],
     announcements: [],
     members: [],
     progress: {
@@ -93,6 +117,8 @@ describe('Cohorts (SuperAdmin-Only Teacher/Learner Mode Switcher)', () => {
       department_approved: true,
       selected_department_id: '1',
       selected_department_name: 'Python',
+      assigned_department_ids: role === 'teacher' ? [1] : undefined,
+      assigned_department_names: role === 'teacher' ? ['Python'] : undefined,
     };
 
     const data$ = new BehaviorSubject<CohortFullData>(createMinimalCohortData());
@@ -204,5 +230,42 @@ describe('Cohorts (SuperAdmin-Only Teacher/Learner Mode Switcher)', () => {
 
     fixture.componentInstance.toggleViewMode('teacher');
     expect(fixture.componentInstance.viewMode()).toBe('learner');
+  });
+
+  it('scopes learner Cohort Details, Training Schedule, Learning Materials, Assignments, and Quizzes strictly to learner department and removes Cohort Members tab', async () => {
+    const fixture = await mountWithRole('learner');
+    const comp = fixture.componentInstance;
+
+    expect(comp.approvedDepartmentName()).toBe('Python');
+    expect(comp.overviewSessions().map(s => s.id)).toEqual(['s-py']);
+    expect(comp.filteredSessions().map(s => s.id)).toEqual(['s-py']);
+    expect(comp.filteredMaterials().map(m => m.id)).toEqual(['m-py']);
+    expect(comp.filteredAssignments().map(a => a.id)).toEqual(['a-py']);
+    expect(comp.filteredQuizzes().map(q => q.id)).toEqual(['q-py']);
+    expect(comp.filteredCurriculum().map(c => c.id)).toEqual(['ch-py']);
+
+    // Cohort Members tab is removed from learner navigation bar and blocked on setTab
+    const tabButtonsText = Array.from<HTMLElement>(
+      fixture.nativeElement.querySelectorAll('.cohort-tab-bar .tab-btn')
+    ).map(btn => btn.textContent || '');
+    expect(tabButtonsText.some(t => t.includes('Cohort Members'))).toBe(false);
+
+    comp.setTab('members');
+    expect(comp.activeTab()).toBe('overview');
+  });
+
+  it('scopes teacher Cohort Details, Training Schedule, Curriculum/Materials, Assignments, and Quizzes strictly to assigned departments', async () => {
+    const fixture = await mountWithRole('teacher');
+    const comp = fixture.componentInstance;
+
+    expect(comp.teacherAssignedDepartments().map(d => d.name)).toEqual(['Python']);
+    expect(comp.overviewSessions().map(s => s.id)).toEqual(['s-py']);
+    expect(comp.filteredTeacherSessions().map(s => s.id)).toEqual(['s-py']);
+    expect(comp.filteredMaterials().map(m => m.id)).toEqual(['m-py']);
+    expect(comp.filteredCurriculum().map(c => c.id)).toEqual(['ch-py']);
+    expect(comp.filteredAssignments().map(a => a.id)).toEqual(['a-py']);
+    expect(comp.filteredQuizzes().map(q => q.id)).toEqual(['q-py']);
+    expect(comp.allQuizSubmissions().map(s => s.quizId)).toEqual(['q-py']);
+    expect(comp.filteredBatches().map(b => b.id)).toEqual(['b-py']);
   });
 });

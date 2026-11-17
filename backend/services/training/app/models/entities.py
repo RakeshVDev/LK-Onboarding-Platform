@@ -35,10 +35,13 @@ class Cohort(Base):
     department_id: Mapped[int] = mapped_column(
         ForeignKey("departments.id"), nullable=False, index=True
     )
+    course_id: Mapped[int | None] = mapped_column(
+        ForeignKey("courses.id"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     start_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     end_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    status: Mapped[str] = mapped_column(String(30), default="planned", nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="active", nullable=False)
 
     __table_args__ = (
         UniqueConstraint("department_id", "name", name="uq_cohort_department_name"),
@@ -181,4 +184,65 @@ class StudentDepartmentRequest(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class CohortTeacher(Base):
+    __tablename__ = "cohort_teachers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cohort_id: Mapped[int] = mapped_column(
+        ForeignKey("cohorts.id"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    assigned_by_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("cohort_id", "user_id", name="uq_cohort_teacher"),
+    )
+
+
+class CohortMaterialDelivery(Base):
+    __tablename__ = "cohort_material_deliveries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cohort_id: Mapped[int] = mapped_column(
+        ForeignKey("cohorts.id"), nullable=False, index=True
+    )
+    course_id: Mapped[int] = mapped_column(
+        ForeignKey("courses.id"), nullable=False, index=True
+    )
+    material_id: Mapped[int] = mapped_column(
+        ForeignKey("learning_materials.id"), nullable=False, index=True
+    )
+    sent_by_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("cohort_id", "material_id", name="uq_cohort_material_delivery"),
+    )
+
+
+class DepartmentCourseDeletionRequest(Base):
+    __tablename__ = "department_course_deletion_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    department_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    department_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    course_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    target_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    initiated_by_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    approved_by_user_ids_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
 
