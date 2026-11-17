@@ -14,6 +14,7 @@ import {
   AssessmentService,
   UserAssessmentResultItem
 } from '../services/assessment';
+import { AuthService } from '../../../core/services/auth.service';
 import {
   AssessmentRadarChartComponent,
   RadarChartSeries
@@ -28,12 +29,26 @@ import {
 })
 export class LearnerResults implements OnInit {
   private readonly api = inject(AssessmentService);
+  private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
   readonly results = signal<UserAssessmentResultItem[]>([]);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
+  readonly showHistoryModal = signal(false);
+
+  learnerFullName(): string {
+    return this.authService.getCurrentUserSnapshot()?.full_name || '';
+  }
+
+  attendedResultsList(): UserAssessmentResultItem[] {
+    return this.results();
+  }
+
+  openAllAttendedModal(): void {
+    this.showHistoryModal.set(true);
+  }
 
   readonly competencyRadarAxes = computed<string[]>(() => {
     const completed = this.results().filter((r) => r.status === 'completed');
