@@ -317,6 +317,7 @@ export interface AdminAssessmentResultItem extends Omit<UserAssessmentResultItem
   session_id: number | null;
   started_at?: string | null;
   assignment_scope?: string | null;
+  assessment_tag?: string | null;
 }
 
 export interface AdminAssessmentResultsResponse {
