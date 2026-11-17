@@ -337,7 +337,7 @@ export interface CohortFullData {
   providedIn: 'root'
 })
 export class CohortService {
-  private readonly storageKey = 'ase_cohort_state_v4';
+  private readonly storageKey = 'ase_cohort_state_v5';
   private readonly apiUrl = '/training-api/api/v1/cohorts';
 
   private dataSubject!: BehaviorSubject<CohortFullData>;
@@ -397,7 +397,7 @@ export class CohortService {
           return parsed;
         }
       }
-    } catch {}
+    } catch { }
 
     try {
       const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('ase_managed_users') : null;
@@ -413,7 +413,7 @@ export class CohortService {
           };
         }
       }
-    } catch {}
+    } catch { }
 
     return {
       id: 15,
@@ -610,7 +610,7 @@ export class CohortService {
           if (parsed.batches && parsed.curriculum && parsed.attendanceMatrix) {
             data = parsed;
           }
-        } catch {}
+        } catch { }
       }
     }
 
@@ -3577,7 +3577,7 @@ export class CohortService {
         try {
           const stored = localStorage.getItem('ase_managed_users');
           if (stored) managedUsers = JSON.parse(stored);
-        } catch {}
+        } catch { }
       }
 
       // Merge canonical learners into managedUsers if not present
@@ -3616,7 +3616,7 @@ export class CohortService {
               existingEmails.add(parsed.email.toLowerCase().trim());
             }
           }
-        } catch {}
+        } catch { }
       }
 
       const platformLearners = managedUsers.filter((u: any) => u.role === 'learner' && u.is_active !== false);
@@ -3725,7 +3725,7 @@ export class CohortService {
       if (typeof localStorage !== 'undefined') {
         try {
           localStorage.setItem(this.storageKey, JSON.stringify(data));
-        } catch {}
+        } catch { }
       }
 
       if (!inputData && this.dataSubject) {
@@ -3757,7 +3757,7 @@ export class CohortService {
     if (typeof localStorage !== 'undefined') {
       try {
         localStorage.setItem(this.storageKey, JSON.stringify(data));
-      } catch {}
+      } catch { }
     }
     this.dataSubject.next(data);
   }
@@ -3883,6 +3883,10 @@ export class CohortService {
       meetingUrl?: string;
       isLiveNow?: boolean;
       trainer?: string;
+      departmentName?: string;
+      departmentId?: number;
+      quizQuestionsCount?: number;
+      points?: number;
     }
   ): void {
     const current = this.getCohortData();
@@ -4013,14 +4017,14 @@ export class CohortService {
 
     let updatedAssignments = [...current.assignments];
     if (lesson.type === 'assignment') {
-      const deptName = newLesson.departmentName || updatedChap.departmentName || 'All / Common';
+      const deptName = newLesson.departmentName || updatedChap.departmentName || 'Python';
       const deptId = newLesson.departmentId || updatedChap.departmentId;
       updatedAssignments.unshift({
         id: `asg-${newLesson.id}`,
         title: newLesson.title,
         module: updatedChap.title,
         description: newLesson.description || 'Complete the practical task according to rubric.',
-        points: 100,
+        points: lesson.points || 100,
         dueDate: lesson.scheduledDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
         dueRelative: 'Due in 7 days',
         status: 'pending',
@@ -4035,13 +4039,13 @@ export class CohortService {
 
     let updatedQuizzes = [...current.quizzes];
     if (lesson.type === 'quiz') {
-      const deptName = newLesson.departmentName || updatedChap.departmentName || 'All / Common';
+      const deptName = newLesson.departmentName || updatedChap.departmentName || 'Python';
       const deptId = newLesson.departmentId || updatedChap.departmentId;
       updatedQuizzes.unshift({
         id: `quiz-${newLesson.id}`,
         title: newLesson.title,
         module: updatedChap.title,
-        questionsCount: 5,
+        questionsCount: lesson.quizQuestionsCount || 5,
         durationMinutes: 15,
         dueDate: lesson.scheduledDate || 'Upcoming Sprint',
         passingScore: 70,
@@ -4575,6 +4579,9 @@ export class CohortService {
     questionsCount: number;
     durationMinutes: number;
     passingScore: number;
+    dueDate?: string;
+    departmentName?: string;
+    departmentId?: number;
   }): void {
     const current = this.getCohortData();
     const newQuiz: CohortQuiz = {
@@ -4583,9 +4590,11 @@ export class CohortService {
       module: quiz.module,
       questionsCount: quiz.questionsCount || 5,
       durationMinutes: quiz.durationMinutes || 15,
-      dueDate: 'Scheduled by Instructor',
+      dueDate: quiz.dueDate || 'Scheduled by Instructor',
       passingScore: quiz.passingScore || 70,
       status: 'available',
+      departmentName: quiz.departmentName || current.details.department || 'Python',
+      departmentId: quiz.departmentId ?? current.details.departmentId,
       questions: [
         {
           id: 1,
@@ -4599,7 +4608,7 @@ export class CohortService {
 
     this.saveState({
       ...current,
-      quizzes: [...current.quizzes, newQuiz],
+      quizzes: [newQuiz, ...current.quizzes],
       progress: {
         ...current.progress,
         totalQuizzes: current.progress.totalQuizzes + 1
