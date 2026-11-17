@@ -71,6 +71,45 @@ class LearningMaterialResponse(BaseModel):
     is_active: bool
 
 
+class SendMaterialToBatchesRequest(BaseModel):
+    cohort_ids: list[int] = Field(min_length=1, max_length=50)
+
+
+class SendMaterialToBatchesResponse(BaseModel):
+    material_id: int
+    course_id: int
+    delivered_cohort_ids: list[int]
+    delivered_batch_names: list[str]
+    total_deliveries: int
+
+
+class DeletionRequestResponse(BaseModel):
+    id: int
+    department_id: int
+    department_name: str
+    course_id: int | None = None
+    target_type: str
+    initiated_by_user_id: int
+    initiated_by_name: str | None = None
+    approved_by_user_ids: list[int] = Field(default_factory=list)
+    approved_by_names: list[str] = Field(default_factory=list)
+    required_superadmin_ids: list[int] = Field(default_factory=list)
+    pending_superadmin_names: list[str] = Field(default_factory=list)
+    approved_count: int = 0
+    required_count: int = 1
+    status: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class CourseDeletionActionResponse(BaseModel):
+    status: str  # 'deleted' | 'pending_approval'
+    department_id: int
+    course_id: int | None = None
+    message: str
+    request: DeletionRequestResponse | None = None
+
+
 # ---------- Student Department Allocation Request schemas ----------
 
 class StudentDepartmentRequestCreate(BaseModel):

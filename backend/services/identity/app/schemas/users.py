@@ -37,4 +37,4 @@ class UserStatusUpdateRequest(BaseModel):
 
 
 class TeacherDepartmentsUpdateRequest(BaseModel):
-    department_ids: list[int] = Field(min_length=1, max_length=4)
+    department_ids: list[int] = Field(min_length=1, max_length=8)

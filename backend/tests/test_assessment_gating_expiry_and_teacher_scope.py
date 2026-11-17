@@ -12,12 +12,13 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from fastapi import HTTPException  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, select  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from services.identity.app.core.roles import Role  # noqa: E402
-from services.identity.app.core.security import hash_password  # noqa: E402
+from services.identity.app.core.security import create_access_token, hash_password  # noqa: E402
 from services.identity.app.db.base import Base as IdentityBase  # noqa: E402
 from services.identity.app.models.user import User as IdentityUser  # noqa: E402
 from services.training.app.db.base import Base as TrainingBase  # noqa: E402
@@ -683,21 +684,42 @@ class TeacherDepartmentAssignmentAndScopingTests(unittest.TestCase):
         )
         self.assertEqual(res_ad.status_code, 403)
 
-        # Reject > 4 departments (5 -> 422)
-        res_5 = client.put(
+        # Reject > 8 departments (9 -> 422), allow up to 8 concrete active departments
+        with self.TrSession() as tdb:
+            extra_depts = []
+            for idx in range(1, 5):
+                d = Department(name=f"ExtraTrack{idx}", is_active=True)
+                tdb.add(d)
+                extra_depts.append(d)
+            tdb.commit()
+            for d in extra_depts:
+                tdb.refresh(d)
+            eight_ids = [
+                self.py_dept.id,
+                self.java_dept.id,
+                self.php_dept.id,
+                self.dotnet_dept.id,
+                self.db_dept.id,
+                extra_depts[0].id,
+                extra_depts[1].id,
+                extra_depts[2].id,
+            ]
+            nine_ids = [*eight_ids, extra_depts[3].id]
+
+        res_9 = client.put(
             f"/api/v1/users/{self.teacher_py.id}/departments",
             headers=sa_hdrs,
-            json={
-                "department_ids": [
-                    self.py_dept.id,
-                    self.java_dept.id,
-                    self.php_dept.id,
-                    self.dotnet_dept.id,
-                    self.db_dept.id,
-                ]
-            },
+            json={"department_ids": nine_ids},
         )
-        self.assertEqual(res_5.status_code, 422)
+        self.assertEqual(res_9.status_code, 422)
+
+        res_8 = client.put(
+            f"/api/v1/users/{self.teacher_py.id}/departments",
+            headers=sa_hdrs,
+            json={"department_ids": eight_ids},
+        )
+        self.assertEqual(res_8.status_code, 200)
+        self.assertEqual(len(res_8.json()["assigned_department_ids"]), 8)
 
         # Reject 0 departments -> 422
         res_0 = client.put(
@@ -770,7 +792,24 @@ class TeacherDepartmentAssignmentAndScopingTests(unittest.TestCase):
         from services.training.app.services import teacher_scope
 
         # Assign ONLY Python dept to self.teacher_py; leave self.teacher_unassigned with []
+        # Create an auxiliary Java teacher for Java batch setup so teacher_py remains Python-only.
+        from services.identity.app.models.user import User as IdentityUser
+        from services.identity.app.core.security import hash_password
+
         with self.IdSession() as idb:
+            teacher_java = IdentityUser(
+                full_name="Java Batch Teacher",
+                email="teacher.java.scope@lk.test",
+                password_hash=hash_password("TeacherJava123!"),
+                role=Role.TEACHER.value,
+                is_active=True,
+                all_assessments_completed=True,
+                is_activated_by_admin=True,
+            )
+            idb.add(teacher_java)
+            idb.commit()
+            idb.refresh(teacher_java)
+            teacher_java_id = int(teacher_java.id)
             idb.add(
                 UserDepartment(
                     user_id=self.teacher_py.id,
@@ -782,6 +821,7 @@ class TeacherDepartmentAssignmentAndScopingTests(unittest.TestCase):
 
         with (
             patch.object(teacher_scope, "IdentitySessionLocal", self.IdSession),
+            patch.object(cohorts_router, "IdentitySessionLocal", self.IdSession),
             patch.object(assessments_router, "IdentitySessionLocal", self.IdSession),
             patch.object(departments_router, "IdentitySessionLocal", self.IdSession),
             patch.object(departments_router, "get_users_map", return_value={}),
@@ -811,12 +851,20 @@ class TeacherDepartmentAssignmentAndScopingTests(unittest.TestCase):
                 current_user=self.superadmin,
             )
             coh_py = cohorts_router.create_cohort(
-                CohortCreate(department_id=self.py_dept.id, name="Py Batch 1"),
+                CohortCreate(
+                    department_id=self.py_dept.id,
+                    name="Py Batch 1",
+                    teacher_ids=[self.teacher_py.id],
+                ),
                 db=tdb,
                 current_user=self.superadmin,
             )
             coh_java = cohorts_router.create_cohort(
-                CohortCreate(department_id=self.java_dept.id, name="Java Batch 1"),
+                CohortCreate(
+                    department_id=self.java_dept.id,
+                    name="Java Batch 1",
+                    teacher_ids=[teacher_java_id],
+                ),
                 db=tdb,
                 current_user=self.superadmin,
             )
@@ -864,7 +912,10 @@ class TeacherDepartmentAssignmentAndScopingTests(unittest.TestCase):
             self.assertEqual([d.id for d in depts_py], [self.py_dept.id])
 
             visible_courses = courses_router.list_courses(db=tdb, current_user=self.teacher_py)
-            self.assertEqual([c.id for c in visible_courses], [c_py.id])
+            visible_course_dept_ids = {c.department_id for c in visible_courses}
+            self.assertIn(self.py_dept.id, visible_course_dept_ids)
+            self.assertIn(self.common_dept.id, visible_course_dept_ids)
+            self.assertNotIn(self.java_dept.id, visible_course_dept_ids)
             with self.assertRaises(HTTPException) as cur_ctx:
                 courses_router.add_material_link(
                     c_java.id,
@@ -897,7 +948,11 @@ class TeacherDepartmentAssignmentAndScopingTests(unittest.TestCase):
             )
             with self.assertRaises(HTTPException) as coh_ctx:
                 cohorts_router.create_cohort(
-                    CohortCreate(department_id=self.java_dept.id, name="Illegal Java Batch"),
+                    CohortCreate(
+                        department_id=self.java_dept.id,
+                        name="Illegal Java Batch",
+                        teacher_ids=[teacher_java_id],
+                    ),
                     db=tdb,
                     current_user=self.teacher_py,
                 )
@@ -1051,6 +1106,493 @@ class TeacherDepartmentAssignmentAndScopingTests(unittest.TestCase):
                     session_id=sess_java.id, db=tdb, current_user=self.teacher_py
                 )
             self.assertEqual(res_ctx.exception.status_code, 403)
+
+
+class CourseVaultAndBatchWorkflowTests(unittest.TestCase):
+    """End-to-end coverage for 1:1 Course<->Dept Vault, SuperAdmin Consensus Deletion, Batches & Result Cutoff."""
+
+    def setUp(self) -> None:
+        self.id_engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        self.tr_engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        IdentityBase.metadata.create_all(bind=self.id_engine)
+        TrainingBase.metadata.create_all(bind=self.tr_engine)
+        self.IdSession = sessionmaker(bind=self.id_engine, autocommit=False, autoflush=False)
+        self.TrSession = sessionmaker(bind=self.tr_engine, autocommit=False, autoflush=False)
+
+        from services.identity.app.core.security import hash_password
+        from services.identity.app.models.user import User as IdentityUser
+
+        pw = hash_password("SecurePass123!")
+        with self.TrSession() as tdb:
+            self.py_dept = Department(name="Python", description="Python track", is_active=True)
+            self.java_dept = Department(name="Java", description="Java track", is_active=True)
+            self.common_dept = Department(name="All / Common", description="Common curriculum", is_active=True)
+            tdb.add_all([self.py_dept, self.java_dept, self.common_dept])
+            tdb.commit()
+            for d in (self.py_dept, self.java_dept, self.common_dept):
+                tdb.refresh(d)
+
+        with self.IdSession() as idb:
+            self.sa1 = IdentityUser(
+                full_name="SuperAdmin One",
+                email="sa1@vault.test",
+                password_hash=pw,
+                role=Role.SUPERADMIN.value,
+                is_active=True,
+            )
+            self.sa2 = IdentityUser(
+                full_name="SuperAdmin Two",
+                email="sa2@vault.test",
+                password_hash=pw,
+                role=Role.SUPERADMIN.value,
+                is_active=True,
+            )
+            self.admin = IdentityUser(
+                full_name="Admin User",
+                email="admin@vault.test",
+                password_hash=pw,
+                role=Role.ADMIN.value,
+                is_active=True,
+            )
+            self.teacher_py = IdentityUser(
+                full_name="Python Teacher",
+                email="tpy@vault.test",
+                password_hash=pw,
+                role=Role.TEACHER.value,
+                is_active=True,
+            )
+            self.teacher_other = IdentityUser(
+                full_name="Other Teacher",
+                email="tother@vault.test",
+                password_hash=pw,
+                role=Role.TEACHER.value,
+                is_active=True,
+            )
+            self.learner_in = IdentityUser(
+                full_name="Alice Included",
+                email="alice@vault.test",
+                password_hash=pw,
+                role=Role.LEARNER.value,
+                is_active=True,
+                all_assessments_completed=True,
+                is_activated_by_admin=True,
+                selected_department_id=str(self.py_dept.id),
+                department_approved=True,
+            )
+            self.learner_out = IdentityUser(
+                full_name="Bob Excluded",
+                email="bob@vault.test",
+                password_hash=pw,
+                role=Role.LEARNER.value,
+                is_active=True,
+                all_assessments_completed=True,
+                is_activated_by_admin=True,
+                selected_department_id=str(self.py_dept.id),
+                department_approved=True,
+            )
+            idb.add_all(
+                [
+                    self.sa1,
+                    self.sa2,
+                    self.admin,
+                    self.teacher_py,
+                    self.teacher_other,
+                    self.learner_in,
+                    self.learner_out,
+                ]
+            )
+            idb.commit()
+            for u in (
+                self.sa1,
+                self.sa2,
+                self.admin,
+                self.teacher_py,
+                self.teacher_other,
+                self.learner_in,
+                self.learner_out,
+            ):
+                idb.refresh(u)
+
+        def override_id_db():
+            db = self.IdSession()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        def override_tr_db():
+            db = self.TrSession()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        from services.identity.app.main import app as identity_app
+        from services.identity.app.dependencies.auth import get_db as id_auth_get_db
+        from services.training.app.main import app as training_app
+        from services.training.app.routers import (
+            cohorts as cohorts_router,
+            courses as courses_router,
+            departments as departments_router,
+        )
+        from services.training.app.services import course_sync, teacher_scope
+
+        self._prev_tr = dict(training_app.dependency_overrides)
+        self._prev_id = dict(identity_app.dependency_overrides)
+        self._patches = [
+            patch.object(teacher_scope, "IdentitySessionLocal", self.IdSession),
+            patch.object(course_sync, "IdentitySessionLocal", self.IdSession),
+            patch.object(departments_router, "IdentitySessionLocal", self.IdSession),
+            patch.object(cohorts_router, "IdentitySessionLocal", self.IdSession),
+            patch.object(assessments_router, "IdentitySessionLocal", self.IdSession),
+        ]
+        for p in self._patches:
+            p.start()
+
+        identity_app.dependency_overrides[id_auth_get_db] = override_id_db
+        training_app.dependency_overrides[id_auth_get_db] = override_id_db
+        training_app.dependency_overrides[departments_router.get_db] = override_tr_db
+        training_app.dependency_overrides[courses_router.get_db] = override_tr_db
+        training_app.dependency_overrides[cohorts_router.get_db] = override_tr_db
+        training_app.dependency_overrides[assessments_router.get_db] = override_tr_db
+
+        self.training_app = training_app
+        self.identity_app = identity_app
+        self.tr_client = TestClient(training_app)
+        self.id_client = TestClient(identity_app)
+
+    def tearDown(self) -> None:
+        for p in self._patches:
+            p.stop()
+        self.training_app.dependency_overrides = self._prev_tr
+        self.identity_app.dependency_overrides = self._prev_id
+        self.id_engine.dispose()
+        self.tr_engine.dispose()
+
+    def _hdr(self, user_id: int) -> dict[str, str]:
+        return {"Authorization": f"Bearer {create_access_token(user_id)}"}
+
+    def test_vault_batch_send_purge_and_unanimous_deletion(self) -> None:
+        # 1) Create new department -> auto-creates its 1:1 Course; listing syncs All / Common w/ HTML/CSS/JS/TS/Angular/React
+        create_dept = self.tr_client.post(
+            "/api/v1/departments",
+            headers=self._hdr(self.sa1.id),
+            json={"name": "Frontend", "description": "UI Track"},
+        )
+        self.assertEqual(create_dept.status_code, 201)
+        fe_dept_id = create_dept.json()["id"]
+
+        depts = self.tr_client.get("/api/v1/departments", headers=self._hdr(self.sa1.id)).json()
+        courses = self.tr_client.get("/api/v1/courses", headers=self._hdr(self.sa1.id)).json()
+        self.assertEqual(len(courses), len(depts))
+
+        common_course = next(c for c in courses if "common" in (c["department_name"] or "").lower())
+        py_course = next(c for c in courses if c["department_id"] == self.py_dept.id)
+
+        common_mats = self.tr_client.get(
+            f"/api/v1/courses/{common_course['id']}/materials",
+            headers=self._hdr(self.sa1.id),
+        )
+        self.assertEqual(common_mats.status_code, 200)
+        titles_joined = " | ".join(m["title"] for m in common_mats.json())
+        for expected in ("HTML", "CSS", "JS", "TS", "Angular", "React"):
+            self.assertIn(expected, titles_joined)
+
+        # Duplicate manual course for same dept -> 409
+        dup_course = self.tr_client.post(
+            "/api/v1/courses",
+            headers=self._hdr(self.sa1.id),
+            json={"department_id": self.py_dept.id, "title": "Duplicate Py", "is_published": True},
+        )
+        self.assertEqual(dup_course.status_code, 409)
+
+        # 2) SuperAdmin creates batch with default active dept learners minus excluded Bob + assigns teacher_py (auto-adds Python dept!)
+        cand = self.tr_client.get(
+            f"/api/v1/cohorts/department-candidates?department_id={self.py_dept.id}",
+            headers=self._hdr(self.sa1.id),
+        )
+        self.assertEqual(cand.status_code, 200)
+        self.assertEqual({l["id"] for l in cand.json()["learners"]}, {self.learner_in.id, self.learner_out.id})
+
+        batch1 = self.tr_client.post(
+            "/api/v1/cohorts",
+            headers=self._hdr(self.sa1.id),
+            json={
+                "department_id": self.py_dept.id,
+                "name": "Py Batch Alpha",
+                "teacher_ids": [self.teacher_py.id],
+                "excluded_learner_ids": [self.learner_out.id],
+            },
+        )
+        self.assertEqual(batch1.status_code, 201)
+        b1_json = batch1.json()
+        self.assertEqual(b1_json["member_ids"], [self.learner_in.id])
+        self.assertEqual(b1_json["teacher_ids"], [self.teacher_py.id])
+
+        # Verify teacher_py automatically received Python dept in Identity UserDepartment
+        t_me = self.id_client.get("/api/v1/auth/me", headers=self._hdr(self.teacher_py.id))
+        self.assertIn(self.py_dept.id, t_me.json()["assigned_department_ids"])
+
+        # Create 2nd Python batch for multi-batch delivery test
+        batch2 = self.tr_client.post(
+            "/api/v1/cohorts",
+            headers=self._hdr(self.sa1.id),
+            json={
+                "department_id": self.py_dept.id,
+                "name": "Py Batch Beta",
+                "teacher_ids": [self.teacher_py.id],
+                "excluded_learner_ids": [],
+            },
+        )
+        self.assertEqual(batch2.status_code, 201)
+        b2_id = batch2.json()["id"]
+
+        # 3) Teacher adds Python resource + accesses All / Common Vault, only SuperAdmin can delete Vault resources
+        py_mat = self.tr_client.post(
+            f"/api/v1/courses/{py_course['id']}/materials",
+            headers=self._hdr(self.teacher_py.id),
+            json={
+                "title": "Python AsyncIO Playbook",
+                "material_type": "link",
+                "storage_key": "https://docs.python.org/3/library/asyncio.html",
+            },
+        )
+        self.assertEqual(py_mat.status_code, 201)
+        py_mat_id = py_mat.json()["id"]
+
+        # Learner cannot view raw Vault; teacher CAN; only SuperAdmin can delete from Vault
+        self.assertEqual(
+            self.tr_client.get(
+                f"/api/v1/courses/{py_course['id']}/materials",
+                headers=self._hdr(self.learner_in.id),
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.tr_client.delete(
+                f"/api/v1/courses/{py_course['id']}/materials/{py_mat_id}",
+                headers=self._hdr(self.teacher_py.id),
+            ).status_code,
+            403,
+        )
+
+        # Teacher multi-batch SEND from Python Vault AND All/Common Vault
+        common_html_id = common_mats.json()[0]["id"]
+        send_py = self.tr_client.post(
+            f"/api/v1/courses/{py_course['id']}/materials/{py_mat_id}/send-to-batches",
+            headers=self._hdr(self.teacher_py.id),
+            json={"cohort_ids": [b1_json["id"], b2_id]},
+        )
+        self.assertEqual(send_py.status_code, 200)
+        send_common = self.tr_client.post(
+            f"/api/v1/courses/{common_course['id']}/materials/{common_html_id}/send-to-batches",
+            headers=self._hdr(self.teacher_py.id),
+            json={"cohort_ids": [b1_json["id"]]},
+        )
+        self.assertEqual(send_common.status_code, 200)
+
+        # Included learner Alice sees Batch Alpha + delivered materials; Excluded learner Bob does NOT see Batch Alpha
+        alice_cohorts = self.tr_client.get("/api/v1/cohorts", headers=self._hdr(self.learner_in.id)).json()
+        self.assertIn(b1_json["id"], [c["id"] for c in alice_cohorts])
+        bob_cohorts = self.tr_client.get("/api/v1/cohorts", headers=self._hdr(self.learner_out.id)).json()
+        self.assertNotIn(b1_json["id"], [c["id"] for c in bob_cohorts])
+
+        alpha_mats = self.tr_client.get(
+            f"/api/v1/cohorts/{b1_json['id']}/materials",
+            headers=self._hdr(self.learner_in.id),
+        ).json()
+        self.assertEqual(len(alpha_mats), 2)
+
+        # 4) Delete Batch Alpha (SuperAdmin only) -> purges cohort records/deliveries, Vault still intact!
+        self.assertEqual(
+            self.tr_client.delete(
+                f"/api/v1/cohorts/{b1_json['id']}",
+                headers=self._hdr(self.admin.id),
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.tr_client.delete(
+                f"/api/v1/cohorts/{b1_json['id']}",
+                headers=self._hdr(self.sa1.id),
+            ).status_code,
+            204,
+        )
+        self.assertEqual(
+            self.tr_client.get(f"/api/v1/cohorts/{b1_json['id']}", headers=self._hdr(self.sa1.id)).status_code,
+            404,
+        )
+        # Vault resource still preserved!
+        vault_after_purge = self.tr_client.get(
+            f"/api/v1/courses/{py_course['id']}/materials",
+            headers=self._hdr(self.teacher_py.id),
+        ).json()
+        self.assertIn(py_mat_id, [m["id"] for m in vault_after_purge])
+
+        # Only SuperAdmin can delete individual Vault resource
+        self.assertEqual(
+            self.tr_client.delete(
+                f"/api/v1/courses/{py_course['id']}/materials/{py_mat_id}",
+                headers=self._hdr(self.sa1.id),
+            ).status_code,
+            204,
+        )
+
+        # 5) Unanimous SuperAdmin consensus deletion (sa1 initiates -> 202 pending, sa2 approves -> 200 both dept & course gone)
+        del_init = self.tr_client.delete(
+            f"/api/v1/departments/{fe_dept_id}",
+            headers=self._hdr(self.sa1.id),
+        )
+        self.assertEqual(del_init.status_code, 202)
+        req_id = del_init.json()["request"]["id"]
+        self.assertEqual(del_init.json()["request"]["approved_count"], 1)
+        self.assertEqual(del_init.json()["request"]["required_count"], 2)
+
+        # sa2 approves -> executes cascade delete of both Department and Course
+        del_approve = self.tr_client.post(
+            f"/api/v1/departments/deletion-requests/{req_id}/approve",
+            headers=self._hdr(self.sa2.id),
+        )
+        self.assertEqual(del_approve.status_code, 200)
+        self.assertEqual(del_approve.json()["status"], "deleted")
+        self.assertEqual(
+            self.tr_client.get(f"/api/v1/departments/{fe_dept_id}", headers=self._hdr(self.sa1.id)).status_code,
+            404,
+        )
+
+    def test_learner_deactivation_reactivation_hides_old_results_but_keeps_superadmin_all_time_history(self) -> None:
+        from services.training.app.models.assessment import (
+            AssessmentScore,
+            AssessmentSession,
+            AssessmentTemplate,
+        )
+
+        t0 = datetime.now(timezone.utc) - timedelta(hours=2)
+        with self.TrSession() as tdb:
+            tpl = AssessmentTemplate(
+                name="Python Screening",
+                department_id=self.py_dept.id,
+                assessment_type="technical_mcq",
+                assessment_tag="Assessment",
+                question_count=5,
+                category_config={"core": {"label": "Core", "question_count": 5}},
+                is_active=True,
+                created_by_user_id=self.sa1.id,
+            )
+            tdb.add(tpl)
+            tdb.flush()
+            old_sess = AssessmentSession(
+                template_id=tpl.id,
+                learner_user_id=self.learner_in.id,
+                status="completed",
+                question_count=5,
+                started_at=t0,
+                completed_at=t0 + timedelta(minutes=10),
+                template_name_snapshot=tpl.name,
+                assessment_type_snapshot=tpl.assessment_type,
+                assessment_tag_snapshot=tpl.assessment_tag,
+                department_id_snapshot=self.py_dept.id,
+            )
+            tdb.add(old_sess)
+            tdb.flush()
+            tdb.add(
+                AssessmentScore(
+                    session_id=old_sess.id,
+                    category="Core",
+                    score=4.0,
+                    max_score=5.0,
+                    percentage=80.0,
+                )
+            )
+            tdb.commit()
+            old_sess_id = old_sess.id
+            tpl_id = tpl.id
+
+        # Before deactivation: Alice sees her old result
+        my_before = self.tr_client.get("/api/v1/assessments/my/results", headers=self._hdr(self.learner_in.id))
+        self.assertEqual(my_before.status_code, 200)
+        self.assertEqual(len(my_before.json()), 1)
+
+        # SuperAdmin deactivates then reactivates Alice
+        self.assertEqual(
+            self.id_client.patch(
+                f"/api/v1/users/{self.learner_in.id}/status",
+                headers=self._hdr(self.sa1.id),
+                json={"is_active": False},
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.id_client.patch(
+                f"/api/v1/users/{self.learner_in.id}/status",
+                headers=self._hdr(self.sa1.id),
+                json={"is_active": True},
+            ).status_code,
+            200,
+        )
+
+        # Onboarding/dept status stays intact, but old assessment result disappears from Alice's account
+        me_after = self.id_client.get("/api/v1/auth/me", headers=self._hdr(self.learner_in.id)).json()
+        self.assertTrue(me_after["department_approved"])
+        self.assertTrue(me_after["all_assessments_completed"])
+
+        my_after = self.tr_client.get("/api/v1/assessments/my/results", headers=self._hdr(self.learner_in.id))
+        self.assertEqual(my_after.status_code, 200)
+        self.assertEqual(my_after.json(), [])
+        self.assertEqual(
+            self.tr_client.get(
+                f"/api/v1/assessments/sessions/{old_sess_id}/results",
+                headers=self._hdr(self.learner_in.id),
+            ).status_code,
+            404,
+        )
+
+        # New assessment taken AFTER reactivation shows up for Alice; SuperAdmin all-time history sees BOTH!
+        with self.TrSession() as tdb:
+            now_post = datetime.now(timezone.utc) + timedelta(seconds=1)
+            new_sess = AssessmentSession(
+                template_id=tpl_id,
+                learner_user_id=self.learner_in.id,
+                status="completed",
+                question_count=5,
+                started_at=now_post,
+                completed_at=now_post,
+                template_name_snapshot="Python Screening",
+                assessment_type_snapshot="technical_mcq",
+                assessment_tag_snapshot="Assessment",
+                department_id_snapshot=self.py_dept.id,
+            )
+            tdb.add(new_sess)
+            tdb.flush()
+            tdb.add(
+                AssessmentScore(
+                    session_id=new_sess.id,
+                    category="Core",
+                    score=5.0,
+                    max_score=5.0,
+                    percentage=100.0,
+                )
+            )
+            tdb.commit()
+            new_sess_id = new_sess.id
+
+        my_new = self.tr_client.get("/api/v1/assessments/my/results", headers=self._hdr(self.learner_in.id)).json()
+        self.assertEqual([r["session_id"] for r in my_new], [new_sess_id])
+
+        sa_history = self.tr_client.get(
+            f"/api/v1/assessments/admin/results?learner_user_id={self.learner_in.id}",
+            headers=self._hdr(self.sa1.id),
+        ).json()
+        self.assertEqual({r["session_id"] for r in sa_history["results"]}, {old_sess_id, new_sess_id})
+        self.assertEqual(sa_history["results"][0]["learner_name"], "Alice Included")
 
 
 if __name__ == "__main__":

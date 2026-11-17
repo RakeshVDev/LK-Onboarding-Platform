@@ -290,10 +290,10 @@ def validate_and_assign_teacher_departments(
             seen.add(did)
             clean_ids.append(did)
 
-    if len(clean_ids) < 1 or len(clean_ids) > 4:
+    if len(clean_ids) < 1 or len(clean_ids) > 8:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="A teacher must be assigned between 1 and 4 concrete departments.",
+            detail="A teacher must be assigned between 1 and 8 concrete departments.",
         )
 
     for did in clean_ids:

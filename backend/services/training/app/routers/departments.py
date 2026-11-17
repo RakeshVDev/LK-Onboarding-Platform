@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -6,12 +8,20 @@ from sqlalchemy.orm import Session
 from services.training.app.db.session import SessionLocal
 from services.training.app.models.entities import Department, StudentDepartmentRequest
 from services.training.app.schemas.training import (
+    CourseDeletionActionResponse,
+    DeletionRequestResponse,
     DepartmentCreate,
     DepartmentResponse,
     DepartmentUpdate,
     StudentDepartmentRequestCreate,
     StudentDepartmentRequestResponse,
     StudentDepartmentRequestReview,
+)
+from services.training.app.services.course_sync import (
+    ensure_course_for_department,
+    get_active_superadmin_users,
+    initiate_or_approve_deletion,
+    serialize_deletion_request,
 )
 
 from services.identity.app.core.roles import Permission, Role
@@ -397,6 +407,8 @@ def create_department(
 
     department = Department(**payload.model_dump())
     db.add(department)
+    db.flush()
+    ensure_course_for_department(db, department, seed_common_if_new=True)
     db.commit()
     db.refresh(department)
     return department
@@ -414,6 +426,110 @@ def list_departments(
             return []
         query = query.where(Department.id.in_(allowed))
     return db.scalars(query).all()
+
+
+@router.get("/deletion-requests", response_model=list[DeletionRequestResponse])
+def list_deletion_requests(
+    status_filter: Annotated[str | None, Query(alias="status")] = "pending",
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if role_str(current_user) != Role.SUPERADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only SuperAdmin can view course/department deletion approval requests.",
+        )
+    from services.training.app.models.entities import DepartmentCourseDeletionRequest
+
+    stmt = select(DepartmentCourseDeletionRequest).order_by(DepartmentCourseDeletionRequest.id.desc())
+    if status_filter:
+        stmt = stmt.where(DepartmentCourseDeletionRequest.status == status_filter)
+    rows = db.scalars(stmt).all()
+    superadmins = get_active_superadmin_users(identity_session_factory=IdentitySessionLocal)
+    return [DeletionRequestResponse(**serialize_deletion_request(r, superadmins)) for r in rows]
+
+
+@router.post(
+    "/deletion-requests/{request_id}/approve",
+    response_model=CourseDeletionActionResponse,
+)
+def approve_deletion_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if role_str(current_user) != Role.SUPERADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only SuperAdmin can approve course/department deletion.",
+        )
+    from services.training.app.models.entities import Course, DepartmentCourseDeletionRequest
+
+    req = db.get(DepartmentCourseDeletionRequest, request_id)
+    if req is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deletion request not found")
+    if req.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Deletion request is already {req.status}",
+        )
+    dept = db.get(Department, req.department_id)
+    if dept is None:
+        req.status = "executed"
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department already deleted")
+    paired_course = db.scalars(select(Course).where(Course.department_id == dept.id)).first()
+    deleted, req_data = initiate_or_approve_deletion(
+        db,
+        department=dept,
+        target_type=req.target_type,
+        course_id=paired_course.id if paired_course else req.course_id,
+        current_user_id=int(current_user.id),
+        identity_session_factory=IdentitySessionLocal,
+    )
+    msg = (
+        f"Unanimous SuperAdmin approval reached. Deleted '{dept.name}' and its paired Course."
+        if deleted
+        else f"Approval recorded ({req_data['approved_count']}/{req_data['required_count']} SuperAdmins)."
+    )
+    return CourseDeletionActionResponse(
+        status="deleted" if deleted else "pending_approval",
+        department_id=req_data["department_id"],
+        course_id=req_data["course_id"],
+        message=msg,
+        request=DeletionRequestResponse(**req_data),
+    )
+
+
+@router.post(
+    "/deletion-requests/{request_id}/reject",
+    response_model=DeletionRequestResponse,
+)
+def reject_deletion_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if role_str(current_user) != Role.SUPERADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only SuperAdmin can reject course/department deletion.",
+        )
+    from services.training.app.models.entities import DepartmentCourseDeletionRequest
+
+    req = db.get(DepartmentCourseDeletionRequest, request_id)
+    if req is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deletion request not found")
+    if req.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Deletion request is already {req.status}",
+        )
+    req.status = "rejected"
+    db.commit()
+    db.refresh(req)
+    superadmins = get_active_superadmin_users(identity_session_factory=IdentitySessionLocal)
+    return DeletionRequestResponse(**serialize_deletion_request(req, superadmins))
 
 
 @router.get("/{department_id}", response_model=DepartmentResponse)
@@ -462,23 +578,50 @@ def update_department(
     return department
 
 
-@router.delete("/{department_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{department_id}", response_model=CourseDeletionActionResponse)
 def delete_department(
     department_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permissions(Permission.MANAGE_DEPARTMENTS)),
+    current_user=Depends(get_current_user),
 ):
+    if role_str(current_user) != Role.SUPERADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only SuperAdmin can delete a department or course.",
+        )
+
+    from fastapi.encoders import jsonable_encoder
+    from fastapi.responses import JSONResponse
+    from services.training.app.models.entities import Course
+
     department = db.get(Department, department_id)
     if not department:
         raise HTTPException(status_code=404, detail="Department not found")
 
-    db.delete(department)
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="Cannot delete this department while it has dependent records",
-        )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    paired_course = db.scalars(select(Course).where(Course.department_id == department_id)).first()
+    deleted, req_data = initiate_or_approve_deletion(
+        db,
+        department=department,
+        target_type="department",
+        course_id=paired_course.id if paired_course else None,
+        current_user_id=int(current_user.id),
+        identity_session_factory=IdentitySessionLocal,
+    )
+    body = CourseDeletionActionResponse(
+        status="deleted" if deleted else "pending_approval",
+        department_id=req_data["department_id"],
+        course_id=req_data["course_id"],
+        message=(
+            f"Deleted department '{req_data['department_name']}' and its paired Course."
+            if deleted
+            else (
+                f"Deletion request generated ({req_data['approved_count']}/{req_data['required_count']} "
+                "SuperAdmins approved). Waiting for all remaining SuperAdmins to approve."
+            )
+        ),
+        request=DeletionRequestResponse(**req_data),
+    )
+    return JSONResponse(
+        status_code=status.HTTP_200_OK if deleted else status.HTTP_202_ACCEPTED,
+        content=jsonable_encoder(body),
+    )

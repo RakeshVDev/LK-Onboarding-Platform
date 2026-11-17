@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -3281,6 +3281,37 @@ def record_tab_switch(
 # View assessment results (Learner or Admin/Teacher)
 # --------------------------------------------------
 
+def _normalize_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def get_learner_results_cleared_at(user_id: int) -> datetime | None:
+    try:
+        with IdentitySessionLocal() as id_db:
+            user = id_db.get(IdentityUser, int(user_id))
+            if user is None:
+                return None
+            return _normalize_utc(getattr(user, "results_cleared_at", None))
+    except Exception:
+        return None
+
+
+def _is_session_hidden_by_reactivation(
+    session: AssessmentSession,
+    cleared_at: datetime | None,
+) -> bool:
+    if cleared_at is None:
+        return False
+    ref_dt = _normalize_utc(session.completed_at or session.started_at)
+    if ref_dt is None:
+        return True
+    return ref_dt <= cleared_at
+
+
 @router.get(
     "/sessions/{session_id}/results",
     response_model=AssessmentScoresResponse,
@@ -3309,6 +3340,13 @@ def get_assessment_results(
             raise HTTPException(
                 status_code=403,
                 detail="Only learners can view their assessment results",
+            )
+        if _is_session_hidden_by_reactivation(
+            assessment_session, get_learner_results_cleared_at(int(current_user.id))
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="Assessment result cleared after account reactivation",
             )
     elif role not in {Role.ADMIN.value, Role.SUPERADMIN.value, Role.TEACHER.value}:
         raise HTTPException(
@@ -3420,6 +3458,13 @@ def create_assessment_report(
             raise HTTPException(
                 status_code=403,
                 detail="Only learners can generate their assessment reports",
+            )
+        if _is_session_hidden_by_reactivation(
+            assessment_session, get_learner_results_cleared_at(int(current_user.id))
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="Assessment report cleared after account reactivation",
             )
     elif role not in {Role.ADMIN.value, Role.SUPERADMIN.value, Role.TEACHER.value}:
         raise HTTPException(
@@ -3659,6 +3704,13 @@ def get_assessment_report(
                 status_code=403,
                 detail="Only learners can view their assessment reports",
             )
+        if _is_session_hidden_by_reactivation(
+            assessment_session, get_learner_results_cleared_at(int(current_user.id))
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="Assessment report cleared after account reactivation",
+            )
     elif role not in {Role.ADMIN.value, Role.SUPERADMIN.value, Role.TEACHER.value}:
         raise HTTPException(
             status_code=403,
@@ -3832,16 +3884,25 @@ def get_my_assessment_results(
     current_user=Depends(get_current_user),
 ):
     purge_expired_assessments(db)
-    sessions = (
-        db.query(AssessmentSession, AssessmentTemplate)
-        .outerjoin(AssessmentTemplate, AssessmentSession.template_id == AssessmentTemplate.id)
-        .filter(AssessmentSession.learner_user_id == current_user.id)
-        .order_by(
-            AssessmentSession.completed_at.desc(),
-            AssessmentSession.started_at.desc(),
-        )
-        .all()
+    cleared_at = (
+        get_learner_results_cleared_at(int(current_user.id))
+        if role_of(current_user) == Role.LEARNER.value
+        else None
     )
+    sessions = [
+        (sess, tpl)
+        for sess, tpl in (
+            db.query(AssessmentSession, AssessmentTemplate)
+            .outerjoin(AssessmentTemplate, AssessmentSession.template_id == AssessmentTemplate.id)
+            .filter(AssessmentSession.learner_user_id == current_user.id)
+            .order_by(
+                AssessmentSession.completed_at.desc(),
+                AssessmentSession.started_at.desc(),
+            )
+            .all()
+        )
+        if not _is_session_hidden_by_reactivation(sess, cleared_at)
+    ]
 
     if not sessions:
         return []
@@ -3920,6 +3981,7 @@ def get_admin_assessment_results(
     template_id: int | None = None,
     status: str | None = None,
     search: str | None = None,
+    learner_user_id: int | None = None,
     include_not_started: bool = False,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -3944,6 +4006,8 @@ def get_admin_assessment_results(
 
     if template_id is not None:
         query = query.filter(AssessmentSession.template_id == template_id)
+    if learner_user_id is not None:
+        query = query.filter(AssessmentSession.learner_user_id == learner_user_id)
     if (
         not include_unattempted
         and status is not None
@@ -3995,6 +4059,8 @@ def get_admin_assessment_results(
     def _teacher_can_view_dept(dept_id: int | None) -> bool:
         if not is_teacher_caller:
             return True
+        if not teacher_allowed_depts:
+            return False
         if dept_id is None or int(dept_id) in common_dept_ids:
             return True
         return int(dept_id) in teacher_allowed_depts

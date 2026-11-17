@@ -7,7 +7,13 @@ from sqlalchemy import inspect, text
 from services.training.app.core.config import settings
 from services.training.app.db.session import engine, SessionLocal
 from services.training.app.models.assessment import AssessmentAssignment
-from services.training.app.models.entities import Department
+from services.training.app.models.entities import (
+    CohortMaterialDelivery,
+    CohortTeacher,
+    Department,
+    DepartmentCourseDeletionRequest,
+)
+from services.training.app.services.course_sync import ensure_department_courses_synced
 from services.assessment_intelligence.models import (
     ScoringVersion,
     CandidateDimensionScore,
@@ -57,7 +63,14 @@ async def lifespan(app: FastAPI):
         AssessmentAssignment.__table__.create(bind=engine, checkfirst=True)
     except Exception:
         pass
-    for intel_model in (ScoringVersion, CandidateDimensionScore, LiveClassSession):
+    for intel_model in (
+        ScoringVersion,
+        CandidateDimensionScore,
+        LiveClassSession,
+        CohortTeacher,
+        CohortMaterialDelivery,
+        DepartmentCourseDeletionRequest,
+    ):
         try:
             intel_model.__table__.create(bind=engine, checkfirst=True)
         except Exception:
@@ -68,6 +81,9 @@ async def lifespan(app: FastAPI):
         with engine.begin() as conn:
             insp = inspect(conn)
             tables = set(insp.get_table_names())
+
+            if "cohorts" in tables:
+                _ensure_column(conn, "cohorts", "course_id", "INT NULL")
 
             if "assessment_templates" in tables:
                 _ensure_column(conn, "assessment_templates", "department_id", "INT NULL")
@@ -260,6 +276,7 @@ async def lifespan(app: FastAPI):
                 if not exists:
                     db.add(Department(name=name, description=desc, is_active=True))
             db.commit()
+            ensure_department_courses_synced(db, seed_common_if_empty=True)
             assessments.purge_expired_assessments(db)
     except Exception as exc:
         print(f"  [Seed] Warning seeding default departments: {exc}")
