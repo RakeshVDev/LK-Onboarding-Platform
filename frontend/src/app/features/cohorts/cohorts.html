@@ -262,10 +262,12 @@
                 (ngModelChange)="batchSearch.set($event)" />
             </div>
 
-            <!-- "Add New Batch" matching Screenshot 1 (Arrow 01 / 02) -->
-            <button type="button" class="btn-add-batch" (click)="openAddBatchModal()">
-              Add New Batch
-            </button>
+            <!-- "Add New Batch" restricted strictly to SuperAdmin -->
+            @if (isSuperAdminRole()) {
+              <button type="button" class="btn-add-batch" (click)="openAddBatchModal()">
+                Add New Batch
+              </button>
+            }
           </div>
         </div>
 
@@ -385,10 +387,19 @@
                 </div>
               </div>
 
+              @if (batch.teacherNames && batch.teacherNames.length > 0) {
+                <div class="batch-teachers-row">
+                  <span class="date-lbl">Assigned Teachers ({{ batch.teacherNames.length }}/3):</span>
+                  <strong class="teacher-names-val">{{ batch.teacherNames.join(', ') }}</strong>
+                </div>
+              }
+
               <div class="batch-card-footer">
-                <button type="button" class="btn-batch-delete" (click)="deleteBatch(batch.id, $event)">
-                  🗑 Delete
-                </button>
+                @if (isSuperAdminRole()) {
+                  <button type="button" class="btn-batch-delete" (click)="deleteBatch(batch.id, $event)" title="Delete / End Batch (SuperAdmin Only — Purges Cohort Records, Keeps Course Vault)">
+                    🗑 Delete Batch
+                  </button>
+                }
                 <button type="button" class="btn-batch-manage" (click)="selectBatchToManage(batch.id)">
                   {{ batch.id === cohortData().activeBatchId ? 'Active Workspace ✓' : 'Manage Cohort →' }}
                 </button>
@@ -2960,7 +2971,7 @@
       <div class="modal-window" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <div>
-            <span class="modal-eyebrow">INSTRUCTOR ACTION</span>
+            <span class="modal-eyebrow">SUPERADMIN BATCH PROVISIONING</span>
             <h2>Add New Training Batch</h2>
           </div>
           <button type="button" class="btn-modal-close" (click)="isCreatingBatch.set(false)">✕</button>
@@ -2978,16 +2989,63 @@
           </div>
 
           <div class="form-group">
-            <label for="batchDepartment">Department Track <span class="required">*</span></label>
+            <label for="batchDepartment">Concrete Department <span class="required">*</span></label>
             <select
               id="batchDepartment"
               class="form-select"
               [ngModel]="newBatchDepartmentName"
               (ngModelChange)="onBatchDeptSelect($event)">
-              @for (dept of teacherAssignedDepartments(); track dept.id) {
+              @for (dept of concreteDepartmentsForBatchCreation(); track dept.id) {
                 <option [value]="dept.name">{{ dept.name }}</option>
               }
             </select>
+          </div>
+
+          <!-- 1-3 Teachers Selection (Automatically assigns Department to Teacher) -->
+          <div class="batch-learners-picker">
+            <div class="picker-header">
+              <div>
+                <label class="picker-title">
+                  <span class="picker-icon">🎓</span>
+                  <strong>Assign Teachers to Batch (1–3 Required)</strong>
+                  <span class="required">*</span>
+                </label>
+                <small class="picker-subtitle">Assigning a teacher here automatically assigns {{ newBatchDepartmentName }} to them (up to 8 departments max)</small>
+              </div>
+              <span class="selection-counter-pill">
+                {{ selectedBatchTeacherIds().size }} / 3 Selected
+              </span>
+            </div>
+
+            <div class="picker-learners-list">
+              @if (candidateTeachersForBatch().length === 0) {
+                <div class="empty-picker-state">
+                  <p>No active teachers found.</p>
+                </div>
+              } @else {
+                @for (t of candidateTeachersForBatch(); track t.id) {
+                  <div
+                    class="learner-picker-row"
+                    [class.selected]="selectedBatchTeacherIds().has(t.id)"
+                    (click)="toggleBatchTeacher(t.id)">
+                    <div class="checkbox-col">
+                      <input
+                        type="checkbox"
+                        class="learner-checkbox"
+                        [checked]="selectedBatchTeacherIds().has(t.id)"
+                        [disabled]="!selectedBatchTeacherIds().has(t.id) && selectedBatchTeacherIds().size >= 3"
+                        (click)="$event.stopPropagation()"
+                        (change)="toggleBatchTeacher(t.id)" />
+                    </div>
+                    <div class="learner-avatar-bubble">{{ t.full_name.charAt(0) }}</div>
+                    <div class="learner-info-col">
+                      <strong class="learner-fullname">{{ t.full_name }}</strong>
+                      <span class="learner-email-txt">{{ t.email }} ({{ t.assigned_department_ids.length }}/8 depts)</span>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
           </div>
 
           <div class="form-group">
@@ -3017,10 +3075,9 @@
               <div>
                 <label class="picker-title">
                   <span class="picker-icon">👥</span>
-                  <strong>Select Learners to Include in Batch</strong>
-                  <span class="required">*</span>
+                  <strong>Department Learners Included by Default (Uncheck to Exclude)</strong>
                 </label>
-                <small class="picker-subtitle">Showing platform learners registered by Super Administrator</small>
+                <small class="picker-subtitle">All active learners in {{ newBatchDepartmentName }} are automatically included unless unchecked below</small>
               </div>
 
               <div class="picker-actions">

@@ -90,6 +90,90 @@ export interface Enrollment {
   status: string;
 }
 
+export interface DeletionRequest {
+  id: number;
+  department_id: number;
+  department_name: string;
+  course_id?: number | null;
+  target_type: string;
+  initiated_by_user_id: number;
+  initiated_by_name?: string | null;
+  approved_by_user_ids: number[];
+  approved_by_names: string[];
+  required_superadmin_ids: number[];
+  pending_superadmin_names: string[];
+  approved_count: number;
+  required_count: number;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CourseDeletionActionResponse {
+  status: 'deleted' | 'pending_approval';
+  department_id: number;
+  course_id?: number | null;
+  message: string;
+  request?: DeletionRequest | null;
+}
+
+export interface SendMaterialToBatchesResponse {
+  material_id: number;
+  course_id: number;
+  delivered_cohort_ids: number[];
+  delivered_batch_names: string[];
+  total_deliveries: number;
+}
+
+export interface CohortTeacherInfo {
+  id: number;
+  full_name: string;
+  email: string;
+}
+
+export interface BackendCohort {
+  id: number;
+  department_id: number;
+  department_name?: string | null;
+  course_id?: number | null;
+  name: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  status: string;
+  teacher_ids: number[];
+  teachers: CohortTeacherInfo[];
+  member_ids: number[];
+  learner_count: number;
+  material_count: number;
+}
+
+export interface CohortCandidateUser {
+  id: number;
+  full_name: string;
+  email: string;
+  assigned_department_ids: number[];
+}
+
+export interface CohortDepartmentCandidates {
+  department_id: number;
+  learners: CohortCandidateUser[];
+  teachers: CohortCandidateUser[];
+}
+
+export interface CohortDeliveredMaterial {
+  id: number;
+  cohort_id: number;
+  course_id: number;
+  material_id: number;
+  title: string;
+  material_type: string;
+  storage_key: string;
+  source_department_name?: string | null;
+  sent_by_user_id: number;
+  sent_by_name?: string | null;
+  sent_at: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -147,10 +231,43 @@ export class LearningService {
     );
   }
 
-  deleteDepartment(departmentId: number): Promise<void> {
+  deleteDepartment(departmentId: number): Promise<CourseDeletionActionResponse> {
     return firstValueFrom(
-      this.http.delete<void>(
+      this.http.delete<CourseDeletionActionResponse>(
         `${this.apiUrl}/departments/${departmentId}`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  getDeletionRequests(status = 'pending'): Promise<DeletionRequest[]> {
+    let params = new HttpParams();
+    if (status) {
+      params = params.set('status', status);
+    }
+    return firstValueFrom(
+      this.http.get<DeletionRequest[]>(
+        `${this.apiUrl}/departments/deletion-requests`,
+        { headers: this.getHeaders(), params }
+      )
+    );
+  }
+
+  approveDeletionRequest(requestId: number): Promise<CourseDeletionActionResponse> {
+    return firstValueFrom(
+      this.http.post<CourseDeletionActionResponse>(
+        `${this.apiUrl}/departments/deletion-requests/${requestId}/approve`,
+        {},
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  rejectDeletionRequest(requestId: number): Promise<DeletionRequest> {
+    return firstValueFrom(
+      this.http.post<DeletionRequest>(
+        `${this.apiUrl}/departments/deletion-requests/${requestId}/reject`,
+        {},
         { headers: this.getHeaders() }
       )
     );
@@ -253,9 +370,9 @@ export class LearningService {
     );
   }
 
-  deleteCourse(courseId: number): Promise<void> {
+  deleteCourse(courseId: number): Promise<CourseDeletionActionResponse> {
     return firstValueFrom(
-      this.http.delete<void>(
+      this.http.delete<CourseDeletionActionResponse>(
         `${this.apiUrl}/courses/${courseId}`,
         { headers: this.getHeaders() }
       )
@@ -362,6 +479,29 @@ export class LearningService {
     );
   }
 
+  getDeliveredMaterials(courseId: number): Promise<LearningMaterial[]> {
+    return firstValueFrom(
+      this.http.get<LearningMaterial[]>(
+        `${this.apiUrl}/courses/${courseId}/delivered-materials`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  sendMaterialToBatches(
+    courseId: number,
+    materialId: number,
+    cohortIds: number[]
+  ): Promise<SendMaterialToBatchesResponse> {
+    return firstValueFrom(
+      this.http.post<SendMaterialToBatchesResponse>(
+        `${this.apiUrl}/courses/${courseId}/materials/${materialId}/send-to-batches`,
+        { cohort_ids: cohortIds },
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
   deleteMaterial(courseId: number, materialId: number): Promise<void> {
     return firstValueFrom(
       this.http.delete<void>(
@@ -373,16 +513,28 @@ export class LearningService {
 
   // ---------- COHORTS ----------
 
-  getCohorts(departmentId?: number): Promise<Cohort[]> {
+  getCohorts(departmentId?: number): Promise<BackendCohort[]> {
     let params = new HttpParams();
     if (departmentId) {
       params = params.set('department_id', departmentId.toString());
     }
 
     return firstValueFrom(
-      this.http.get<Cohort[]>(
+      this.http.get<BackendCohort[]>(
         `${this.apiUrl}/cohorts`,
         { headers: this.getHeaders(), params }
+      )
+    );
+  }
+
+  getCohortCandidates(departmentId: number): Promise<CohortDepartmentCandidates> {
+    return firstValueFrom(
+      this.http.get<CohortDepartmentCandidates>(
+        `${this.apiUrl}/cohorts/department-candidates`,
+        {
+          headers: this.getHeaders(),
+          params: new HttpParams().set('department_id', departmentId.toString())
+        }
       )
     );
   }
@@ -393,9 +545,11 @@ export class LearningService {
     start_date?: string | null;
     end_date?: string | null;
     status?: string;
-  }): Promise<Cohort> {
+    teacher_ids: number[];
+    excluded_learner_ids?: number[];
+  }): Promise<BackendCohort> {
     return firstValueFrom(
-      this.http.post<Cohort>(
+      this.http.post<BackendCohort>(
         `${this.apiUrl}/cohorts`,
         payload,
         { headers: this.getHeaders() }
@@ -403,11 +557,40 @@ export class LearningService {
     );
   }
 
-  updateCohort(cohortId: number, payload: Partial<Cohort>): Promise<Cohort> {
+  updateCohort(cohortId: number, payload: Partial<Cohort>): Promise<BackendCohort> {
     return firstValueFrom(
-      this.http.patch<Cohort>(
+      this.http.patch<BackendCohort>(
         `${this.apiUrl}/cohorts/${cohortId}`,
         payload,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  updateCohortTeachers(cohortId: number, teacherIds: number[]): Promise<BackendCohort> {
+    return firstValueFrom(
+      this.http.put<BackendCohort>(
+        `${this.apiUrl}/cohorts/${cohortId}/teachers`,
+        { teacher_ids: teacherIds },
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  endCohort(cohortId: number): Promise<{ status: string; cohort_id: number; name: string; message: string }> {
+    return firstValueFrom(
+      this.http.post<{ status: string; cohort_id: number; name: string; message: string }>(
+        `${this.apiUrl}/cohorts/${cohortId}/end`,
+        {},
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  getCohortMaterials(cohortId: number): Promise<CohortDeliveredMaterial[]> {
+    return firstValueFrom(
+      this.http.get<CohortDeliveredMaterial[]>(
+        `${this.apiUrl}/cohorts/${cohortId}/materials`,
         { headers: this.getHeaders() }
       )
     );

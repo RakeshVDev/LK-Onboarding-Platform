@@ -26,7 +26,14 @@ import {
 } from '../../core/services/cohort.service';
 import { AuthService } from '../../core/services/auth.service';
 import { UserManagementService, ManagedUser } from '../../core/services/user-management.service';
-import { LearningService, Department, StudentDepartmentRequest } from '../../core/services/learning.service';
+import {
+  BackendCohort,
+  CohortCandidateUser,
+  CohortDeliveredMaterial,
+  LearningService,
+  Department,
+  StudentDepartmentRequest
+} from '../../core/services/learning.service';
 import { AssignableHost, LiveClassesService } from '../../core/services/live-classes.service';
 
 export type CohortTab =
@@ -314,10 +321,16 @@ export class Cohorts implements OnInit {
   newBatchTrack = 'Associate Software Engineer Track';
   newBatchLearnerCount = 0;
 
-  // Super Admin Learners for Batch Inclusion
+  // Super Admin Learners & 1–3 Teachers for Batch Creation
   readonly superAdminLearners = signal<ManagedUser[]>([]);
+  readonly candidateLearnersForBatch = signal<CohortCandidateUser[]>([]);
+  readonly candidateTeachersForBatch = signal<CohortCandidateUser[]>([]);
+  readonly loadingBatchCandidates = signal<boolean>(false);
+  readonly savingBatch = signal<boolean>(false);
   readonly selectedBatchLearnerIds = signal<Set<number | string>>(new Set());
+  readonly selectedBatchTeacherIds = signal<Set<number>>(new Set());
   readonly batchLearnerSearch = signal<string>('');
+  readonly batchCandidatesLoaded = signal<boolean>(false);
 
   // Teacher Screenshots 2 & 3: Curriculum Builder
   readonly selectedChapterId = signal<string>('chap-1');
@@ -820,8 +833,18 @@ export class Cohorts implements OnInit {
       }));
   });
 
-  // Available Super Admin Learners for Batch Inclusion
+  // Available Learners for Batch Inclusion (Defaults to Active Learners of Chosen Concrete Department)
   readonly availableSuperAdminLearners = computed<ManagedUser[]>(() => {
+    if (this.batchCandidatesLoaded()) {
+      return this.candidateLearnersForBatch().map(c => ({
+        id: c.id,
+        full_name: c.full_name,
+        email: c.email,
+        role: 'learner' as const,
+        is_active: true,
+        created_at: ''
+      }));
+    }
     const map = new Map<string, ManagedUser>();
     for (const l of this.userManagementService.getLearners()) {
       const key = (l.email || l.full_name || String(l.id)).toLowerCase().trim();
@@ -846,6 +869,10 @@ export class Cohorts implements OnInit {
     }
     return Array.from(map.values());
   });
+
+  readonly concreteDepartmentsForBatchCreation = computed<Department[]>(() =>
+    this.teacherAssignedDepartments().filter(d => !this.isCommonDepartmentName(d.name))
+  );
 
   readonly filteredBatchLearners = computed<ManagedUser[]>(() => {
     let list = this.availableSuperAdminLearners();
@@ -1137,8 +1164,9 @@ export class Cohorts implements OnInit {
     this.loadSuperAdminLearners();
     this.newSessionTrainer = this.getCurrentTeacherName();
 
-    // Load active engineering departments and student track allocation
+    // Load active engineering departments, real backend batches & deliveries, and student track allocation
     void this.loadDepartmentContext();
+    void this.syncRealBatchesAndMaterials();
     void this.syncRealLiveSessions();
 
     if (typeof window !== 'undefined') {
@@ -1297,43 +1325,101 @@ export class Cohorts implements OnInit {
     }
   }
 
+  async syncRealBatchesAndMaterials(): Promise<void> {
+    if (!this.authService.getToken?.()) return;
+    try {
+      const backendBatches = await this.learningService.getCohorts();
+      if (!Array.isArray(backendBatches)) return;
+      const deliveredByCohort: Record<number, CohortDeliveredMaterial[]> = {};
+      await Promise.all(
+        backendBatches.map(async bc => {
+          try {
+            deliveredByCohort[bc.id] = await this.learningService.getCohortMaterials(bc.id);
+          } catch {
+            deliveredByCohort[bc.id] = [];
+          }
+        })
+      );
+      this.cohortService.syncBackendBatchesAndMaterials(backendBatches, deliveredByCohort);
+    } catch {
+      // keep fallback state cleanly when backend is unavailable
+    }
+  }
+
   onBatchDeptSelect(deptName: string): void {
     this.newBatchDepartmentName = deptName;
-    const found = this.teacherAssignedDepartments().find(d => d.name === deptName);
+    const found = this.concreteDepartmentsForBatchCreation().find(d => d.name === deptName);
     this.newBatchDepartmentId = found ? found.id : null;
     this.newBatchTrack = `${deptName} Engineering Track`;
+    if (found) {
+      void this.loadDepartmentBatchCandidates(found.id);
+    }
+  }
+
+  async loadDepartmentBatchCandidates(departmentId: number): Promise<void> {
+    this.loadingBatchCandidates.set(true);
+    try {
+      const candidates = await this.learningService.getCohortCandidates(departmentId);
+      this.candidateLearnersForBatch.set(candidates.learners || []);
+      this.candidateTeachersForBatch.set(candidates.teachers || []);
+      this.batchCandidatesLoaded.set(true);
+      this.selectedBatchLearnerIds.set(new Set((candidates.learners || []).map(l => l.id)));
+      this.newBatchLearnerCount = (candidates.learners || []).length;
+    } catch {
+      this.batchCandidatesLoaded.set(false);
+      const fallbackLearners = this.availableSuperAdminLearners();
+      this.selectedBatchLearnerIds.set(new Set(fallbackLearners.map(l => l.id)));
+      this.candidateTeachersForBatch.set(
+        this.superAdminTeachers()
+          .filter(t => (t.role || '').toLowerCase() === 'teacher')
+          .map(t => ({
+            id: t.id,
+            full_name: t.full_name,
+            email: t.email,
+            assigned_department_ids: t.assigned_department_ids || []
+          }))
+      );
+    } finally {
+      this.loadingBatchCandidates.set(false);
+    }
   }
 
   async openAddBatchModal(): Promise<void> {
-    const allowedDepts = this.teacherAssignedDepartments();
-    if (this.isTeacherRole() && allowedDepts.length === 0) {
-      this.showToast(
-        'No departments have been assigned to your teacher account yet. Ask a SuperAdmin to assign 1–4 departments.',
-        'warning'
-      );
+    if (!this.isSuperAdminRole()) {
+      this.showToast('Only SuperAdmin can create or delete training batches.', 'warning');
       return;
     }
-    await this.loadSuperAdminLearners();
+    const concreteDepts = this.concreteDepartmentsForBatchCreation();
+    if (concreteDepts.length === 0) {
+      this.showToast('Create an active concrete department first before adding a batch.', 'warning');
+      return;
+    }
     this.isCreatingBatch.set(true);
     this.newBatchName = '';
     this.newBatchStartDate = '01 Dec 2026';
     this.newBatchEndDate = '01 Mar 2027';
-    if (allowedDepts.length > 0) {
-      this.newBatchDepartmentName = allowedDepts[0].name;
-      this.newBatchDepartmentId = allowedDepts[0].id;
-      this.newBatchTrack = `${this.newBatchDepartmentName} Engineering Track`;
-    } else {
-      this.newBatchDepartmentName = '';
-      this.newBatchDepartmentId = null;
-      this.newBatchTrack = '';
-    }
+    this.selectedBatchTeacherIds.set(new Set());
     this.batchLearnerSearch.set('');
+    this.batchCandidatesLoaded.set(false);
 
-    // Pre-select all available learners created by super admin
-    const learners = this.availableSuperAdminLearners();
-    const idSet = new Set<number | string>(learners.map(l => l.id));
-    this.selectedBatchLearnerIds.set(idSet);
-    this.newBatchLearnerCount = idSet.size;
+    this.newBatchDepartmentName = concreteDepts[0].name;
+    this.newBatchDepartmentId = concreteDepts[0].id;
+    this.newBatchTrack = `${this.newBatchDepartmentName} Engineering Track`;
+    await this.loadDepartmentBatchCandidates(concreteDepts[0].id);
+  }
+
+  toggleBatchTeacher(teacherId: number): void {
+    const next = new Set(this.selectedBatchTeacherIds());
+    if (next.has(teacherId)) {
+      next.delete(teacherId);
+    } else {
+      if (next.size >= 3) {
+        this.showToast('A batch can have at most 3 assigned teachers.', 'warning');
+        return;
+      }
+      next.add(teacherId);
+    }
+    this.selectedBatchTeacherIds.set(next);
   }
 
   async loadSuperAdminTeachers(): Promise<void> {
@@ -1478,48 +1564,73 @@ export class Cohorts implements OnInit {
     this.newBatchLearnerCount = 0;
   }
 
-  saveNewBatch(): void {
+  async saveNewBatch(): Promise<void> {
+    if (!this.isSuperAdminRole()) {
+      this.showToast('Only SuperAdmin can create a new batch.', 'warning');
+      return;
+    }
     if (!this.newBatchName.trim()) {
       this.showToast('Please specify a batch name.', 'warning');
       return;
     }
-
-    const selectedIds = Array.from(this.selectedBatchLearnerIds());
-    if (selectedIds.length === 0) {
-      this.showToast('Please select at least one learner created by the super admin to include in this batch.', 'warning');
+    if (!this.newBatchDepartmentId) {
+      this.showToast('Please select a concrete department.', 'warning');
+      return;
+    }
+    const teacherIds = Array.from(this.selectedBatchTeacherIds());
+    if (teacherIds.length < 1 || teacherIds.length > 3) {
+      this.showToast('Assign between 1 and 3 teachers to this batch.', 'warning');
       return;
     }
 
-    const allLearners = this.availableSuperAdminLearners();
-    const selectedLearners = allLearners.filter(l => selectedIds.includes(l.id));
-    const learnerNames = selectedLearners.map(l => l.full_name);
+    const selectedIds = Array.from(this.selectedBatchLearnerIds());
+    const excludedIds = this.candidateLearnersForBatch()
+      .filter(l => !this.selectedBatchLearnerIds().has(l.id))
+      .map(l => Number(l.id));
 
-    const created = this.cohortService.createBatch(
-      this.newBatchName.trim(),
-      this.newBatchStartDate,
-      this.newBatchEndDate,
-      this.newBatchTrack,
-      selectedIds.length,
-      selectedIds,
-      learnerNames,
-      this.newBatchDepartmentName,
-      this.newBatchDepartmentId || undefined
-    );
-
-    this.isCreatingBatch.set(false);
-    this.showToast(`Batch "${created.name}" created with ${selectedIds.length} learners!`, 'success');
+    this.savingBatch.set(true);
+    try {
+      const created = await this.learningService.createCohort({
+        department_id: Number(this.newBatchDepartmentId),
+        name: this.newBatchName.trim(),
+        status: 'active',
+        teacher_ids: teacherIds,
+        excluded_learner_ids: excludedIds
+      });
+      this.isCreatingBatch.set(false);
+      await this.syncRealBatchesAndMaterials();
+      this.showToast(
+        `Batch "${created.name}" created (${created.learner_count} learners, ${created.teachers.length} teacher${created.teachers.length === 1 ? '' : 's'}). Assigned teachers now have ${this.newBatchDepartmentName} access.`,
+        'success'
+      );
+    } catch (err: any) {
+      this.showToast(this.learningService.getErrorMessage(err), 'warning');
+    } finally {
+      this.savingBatch.set(false);
+    }
   }
 
-  deleteBatch(batchId: string, event: Event): void {
+  async deleteBatch(batchId: string, event: Event): Promise<void> {
     event.stopPropagation();
-    if (confirm('Are you sure you want to delete this batch?')) {
-      const ok = this.cohortService.deleteBatch(batchId);
-      if (ok) {
-        this.showToast('Batch removed.', 'info');
-      } else {
-        this.showToast('At least one batch must remain active.', 'warning');
+    if (!this.isSuperAdminRole()) {
+      this.showToast('Only SuperAdmin can delete or end a batch.', 'warning');
+      return;
+    }
+    if (!confirm('Delete & end this batch? All cohort records and batch-shared resources for both Learners and Teachers will be permanently removed (Course Permanent Vault stays intact).')) {
+      return;
+    }
+    const target = this.batches().find(b => b.id === batchId);
+    if (target?.backendCohortId) {
+      try {
+        await this.learningService.deleteCohort(target.backendCohortId);
+      } catch (err: any) {
+        this.showToast(this.learningService.getErrorMessage(err), 'warning');
+        return;
       }
     }
+    this.cohortService.deleteBatch(batchId);
+    await this.syncRealBatchesAndMaterials();
+    this.showToast('Batch deleted. All cohort records purged while Course Vault remains preserved.', 'info');
   }
 
   selectBatchToManage(batchId: string): void {
@@ -1682,6 +1793,15 @@ export class Cohorts implements OnInit {
       points: this.lessonAssignmentPoints || 100
     });
 
+    // Archive published study resource into the Department's 1:1 Course Permanent Resource Vault
+    void this.archiveCohortResourceToVault(
+      resolvedDept.id,
+      this.lessonTitleInput.trim(),
+      this.activeLessonType(),
+      this.lessonVideoUrlInput.trim() || (downloadUrl !== '#' && !downloadUrl.startsWith('data:') ? downloadUrl : ''),
+      this.uploadedFile()
+    );
+
     if (isLiveNow) {
       this.showToast(`Lesson "${this.lessonTitleInput}" published and is now LIVE! Learners can join directly.`, 'success');
     } else if (this.activeLessonType() === 'download' && fileName) {
@@ -1699,6 +1819,42 @@ export class Cohorts implements OnInit {
     this.lessonTextNotesInput = '';
     this.lessonIsLiveNow.set(false);
     this.removeUploadedFile();
+  }
+
+  private async archiveCohortResourceToVault(
+    departmentId: number,
+    title: string,
+    lessonType: LessonContentType,
+    externalUrl: string,
+    fileObj: File | null
+  ): Promise<void> {
+    if (!this.authService.getToken?.()) return;
+    if (!fileObj && !externalUrl) return;
+    try {
+      const deptCourses = await this.learningService.getCourses(departmentId);
+      const targetCourse = deptCourses[0];
+      if (!targetCourse) return;
+
+      let archivedId: number | null = null;
+      if (fileObj) {
+        const res = await this.learningService.uploadMaterialFile(targetCourse.id, title, fileObj);
+        archivedId = res.id;
+      } else if (externalUrl) {
+        const res = await this.learningService.addMaterialLink(
+          targetCourse.id,
+          title,
+          lessonType === 'video' ? 'video' : 'link',
+          externalUrl
+        );
+        archivedId = res.id;
+      }
+      const activeBatch = this.batches().find(b => b.id === this.cohortData().activeBatchId);
+      if (archivedId && activeBatch?.backendCohortId) {
+        await this.learningService.sendMaterialToBatches(targetCourse.id, archivedId, [activeBatch.backendCohortId]);
+      }
+    } catch {
+      // non-blocking archive
+    }
   }
 
   // File Upload Handlers for Downloadable, Quiz, and Assignment Lessons

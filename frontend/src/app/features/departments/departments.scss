@@ -1289,4 +1289,92 @@
   }
 }
 
+/* SuperAdmin Course/Dept Consensus Deletion Panel */
+.deletion-consensus-panel {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #ea580c;
+  border-radius: 14px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    color: #c2410c;
+    letter-spacing: 0.08em;
+  }
+
+  h3 {
+    margin: 4px 0;
+    font-size: 17px;
+    color: #9a3412;
+  }
+
+  p {
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: #7c2d12;
+  }
+
+  .consensus-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .consensus-card {
+    background: #ffffff;
+    border: 1px solid #ffedd5;
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .consensus-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+
+    strong {
+      font-size: 15px;
+      color: #0f172a;
+    }
+
+    .consensus-meta,
+    .consensus-names {
+      font-size: 12.5px;
+      color: #475569;
+    }
+  }
+
+  .consensus-actions {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .deletion-consensus-panel {
+    background: #27150a;
+    border-color: #7c2d12;
+
+    h3, .eyebrow { color: #fdba74; }
+    p { color: #fed7aa; }
+
+    .consensus-card {
+      background: #111827;
+      border-color: #7c2d12;
+      strong { color: #f8fafc; }
+      .consensus-meta, .consensus-names { color: #cbd5e1; }
+    }
+  }
+}
+
 

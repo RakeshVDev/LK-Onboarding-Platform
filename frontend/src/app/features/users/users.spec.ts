@@ -118,7 +118,11 @@ describe('Users Component (Admin Activation & Department Approval Controls)', ()
               { id: 3, name: 'Java', description: 'Java', is_active: true },
               { id: 4, name: 'PHP', description: 'PHP', is_active: true },
               { id: 5, name: '.NET', description: '.NET', is_active: true },
-              { id: 6, name: 'Database Engineer', description: 'DB', is_active: true }
+              { id: 6, name: 'Database Engineer', description: 'DB', is_active: true },
+              { id: 7, name: 'React', description: 'Frontend React', is_active: true },
+              { id: 8, name: 'Angular', description: 'Frontend Angular', is_active: true },
+              { id: 9, name: 'Cloud DevOps', description: 'Cloud', is_active: true },
+              { id: 10, name: 'QA Automation', description: 'QA', is_active: true }
             ])
           }
         },
@@ -164,13 +168,13 @@ describe('Users Component (Admin Activation & Department Approval Controls)', ()
     expect(fixture.nativeElement.textContent).toContain('✓ Unlocked');
   });
 
-  it('excludes All / Common and caps SuperAdmin teacher department selection at 4 tracks', async () => {
+  it('excludes All / Common and caps SuperAdmin teacher department selection at 8 tracks', async () => {
     const { fixture } = await setup();
     const comp = fixture.componentInstance;
 
     const concreteIds = comp.assignableDepartments().map(d => d.id);
     expect(concreteIds).not.toContain(1);
-    expect(concreteIds).toEqual([2, 3, 4, 5, 6]);
+    expect(concreteIds).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
     comp.openAssignDepartmentsModal({
       id: 201,
@@ -182,10 +186,10 @@ describe('Users Component (Admin Activation & Department Approval Controls)', ()
       assigned_department_names: ['Python'],
       created_at: '2026-11-13T10:00:00Z'
     });
-    for (const id of [3, 4, 5, 6]) {
+    for (const id of [3, 4, 5, 6, 7, 8, 9, 10]) {
       comp.toggleModalDept(id);
     }
-    expect(comp.selectedModalDeptIds()).toEqual([2, 3, 4, 5]);
+    expect(comp.selectedModalDeptIds()).toEqual([2, 3, 4, 5, 6, 7, 8, 9]);
     await comp.saveTeacherDepartments();
     expect(comp.assigningTeacher()).toBeNull();
   });
