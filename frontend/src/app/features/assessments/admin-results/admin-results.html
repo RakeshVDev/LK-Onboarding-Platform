@@ -59,37 +59,28 @@
   </div>
 
   @if (errorMessage()) {
-    <div class="error-banner" role="alert">
-      {{ errorMessage() }}
-    </div>
+  <div class="error-banner" role="alert">
+    {{ errorMessage() }}
+  </div>
   }
 
   <!-- Filter & Search Toolbar -->
   <div class="filter-toolbar">
     <div class="search-box">
       <span class="search-icon">🔍</span>
-      <input
-        type="text"
-        placeholder="Search by learner name, email, or assessment..."
-        [(ngModel)]="searchQuery"
+      <input type="text" placeholder="Search by learner name, email, or assessment..." [(ngModel)]="searchQuery"
         (input)="onFilterChange()" />
     </div>
 
     <div class="filter-controls">
-      <select
-        class="filter-select"
-        [(ngModel)]="selectedTemplateId"
-        (change)="onFilterChange()">
+      <select class="filter-select" [(ngModel)]="selectedTemplateId" (change)="onFilterChange()">
         <option [ngValue]="null">All Assessments</option>
         @for (tpl of templates; track tpl.id) {
-          <option [ngValue]="tpl.id">{{ tpl.name }}</option>
+        <option [ngValue]="tpl.id">{{ tpl.name }}</option>
         }
       </select>
 
-      <select
-        class="filter-select"
-        [(ngModel)]="selectedStatus"
-        (change)="onFilterChange()">
+      <select class="filter-select" [(ngModel)]="selectedStatus" (change)="onFilterChange()">
         <option value="all">All Statuses</option>
         <option value="completed">Completed</option>
         <option value="in_progress">In Progress</option>
@@ -98,266 +89,252 @@
       </select>
 
       <label class="toggle-pending">
-        <input
-          type="checkbox"
-          [(ngModel)]="includeNotStarted"
-          [disabled]="selectedStatus === 'not_started'"
+        <input type="checkbox" [(ngModel)]="includeNotStarted" [disabled]="selectedStatus === 'not_started'"
           (change)="onFilterChange()" />
         <span>Include Not Attended</span>
       </label>
 
       @if (searchQuery || selectedTemplateId || selectedStatus !== 'all' || !includeNotStarted) {
-        <button class="btn-clear" type="button" (click)="clearFilters()">
-          Clear Filters
-        </button>
+      <button class="btn-clear" type="button" (click)="clearFilters()">
+        Clear Filters
+      </button>
       }
     </div>
   </div>
 
   <!-- Results Table / List -->
   @if (loading()) {
-    <div class="loading-state">
-      <span class="spinner"></span>
-      <p>Loading learner results...</p>
-    </div>
+  <div class="loading-state">
+    <span class="spinner"></span>
+    <p>Loading learner results...</p>
+  </div>
   }
 
   @if (!loading() && results().length === 0) {
-    <div class="empty-state">
-      <div class="empty-icon">▥</div>
-      <h3>No assessment records found</h3>
-      <p>
-        @if (searchQuery || selectedTemplateId || selectedStatus !== 'all' || !includeNotStarted) {
-          No records match your active search or filters. Try adjusting your filter options.
-        } @else {
-          No learner assignments or assessment attempts found yet.
-        }
-      </p>
+  <div class="empty-state">
+    <div class="empty-icon">▥</div>
+    <h3>No assessment records found</h3>
+    <p>
       @if (searchQuery || selectedTemplateId || selectedStatus !== 'all' || !includeNotStarted) {
-        <button class="btn-clear" type="button" (click)="clearFilters()">Reset Filters</button>
+      No records match your active search or filters. Try adjusting your filter options.
+      } @else {
+      No learner assignments or assessment attempts found yet.
       }
-    </div>
+    </p>
+    @if (searchQuery || selectedTemplateId || selectedStatus !== 'all' || !includeNotStarted) {
+    <button class="btn-clear" type="button" (click)="clearFilters()">Reset Filters</button>
+    }
+  </div>
   }
 
   @if (!loading() && results().length > 0) {
-    <div class="table-container">
-      <table class="results-table">
-        <thead>
-          <tr>
-            <th>Learner</th>
-            <th>Assessment</th>
-            <th>Status</th>
-            <th>Proctoring</th>
-            <th>Score</th>
-            <th>Performance</th>
-            <th>Date</th>
-            <th class="actions-col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (item of results(); track (item.session_id ?? ('pending-' + item.learner_user_id + '-' + item.template_id))) {
-            <tr>
-              <!-- Learner -->
-              <td>
-                <div class="user-cell">
-                  <div class="avatar">{{ getUserInitials(item.learner_name) }}</div>
-                  <div>
-                    <button
-                      type="button"
-                      class="user-name-link"
-                      title="View all assessment results ever attended by {{ item.learner_name || 'this learner' }}"
-                      (click)="openLearnerHistory(item.learner_user_id, item.learner_name, item.learner_email)">
-                      {{ item.learner_name || ('Learner #' + item.learner_user_id) }}
-                    </button>
-                    <span class="user-email">{{ item.learner_email || 'No email' }}</span>
-                  </div>
+  <div class="table-container">
+    <table class="results-table">
+      <thead>
+        <tr>
+          <th>Learner</th>
+          <th>Assessment</th>
+          <th>Status</th>
+          <th>Proctoring</th>
+          <th>Score</th>
+          <th>Performance</th>
+          <th>Date</th>
+          <th class="actions-col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (item of results(); track (item.session_id ?? ('pending-' + item.learner_user_id + '-' +
+        item.template_id))) {
+        <tr>
+          <!-- Learner -->
+          <td>
+            <div class="user-cell">
+              <div class="avatar">{{ getUserInitials(item.learner_name) }}</div>
+              <div>
+                <button type="button" class="user-name-link"
+                  title="View all assessment results ever attended by {{ item.learner_name || 'this learner' }}"
+                  (click)="openLearnerHistory(item.learner_user_id, item.learner_name, item.learner_email)">
+                  {{ item.learner_name || ('Learner #' + item.learner_user_id) }}
+                </button>
+                <span class="user-email">{{ item.learner_email || 'No email' }}</span>
+              </div>
+            </div>
+          </td>
+
+          <!-- Assessment -->
+          <td>
+            <div class="assessment-cell">
+              <span class="test-name">{{ item.template_name }}</span>
+              <span class="type-pill" [attr.data-type]="item.assessment_type">
+                {{ typeLabel(item.assessment_type) }}
+              </span>
+            </div>
+          </td>
+
+          <!-- Status -->
+          <td>
+            <span class="status-pill" [class.status-completed]="item.status === 'completed'"
+              [class.status-progress]="item.status === 'in_progress'" [class.status-expired]="item.status === 'expired'"
+              [class.status-pending]="item.status === 'not_started'">
+              {{ statusLabel(item.status) }}
+            </span>
+          </td>
+
+          <!-- Proctoring / Violations -->
+          <td>
+            @if (item.status === 'not_started') {
+            <span class="text-muted">—</span>
+            } @else if (item.tab_switch_count === 0 || !item.tab_switch_count) {
+            <span class="proctor-pill proctor-clean">
+              <span class="proctor-dot dot-clean"></span>
+              Clean (0)
+            </span>
+            } @else if (item.tab_switch_count < 3) { <span class="proctor-pill proctor-warning">
+              <span class="proctor-dot dot-warning"></span>
+              {{ item.tab_switch_count }} {{ item.tab_switch_count === 1 ? 'Switch' : 'Switches' }}
+              </span>
+              } @else {
+              <span class="proctor-pill proctor-danger">
+                <span class="proctor-dot dot-danger"></span>
+                {{ item.tab_switch_count }} Switches (Terminated)
+              </span>
+              }
+          </td>
+
+          <!-- Score -->
+          <td>
+            @if (item.status === 'completed') {
+            <span class="points-val">
+              <strong>{{ item.total_score | number:'1.0-1' }}</strong> / {{ item.max_score | number:'1.0-1' }}
+            </span>
+            } @else {
+            <span class="text-muted">—</span>
+            }
+          </td>
+
+          <!-- Performance -->
+          <td>
+            @if (item.status === 'completed') {
+            <div class="pct-cell">
+              <span class="pct-badge" [ngClass]="getGrade(item.overall_percentage).class">
+                {{ item.overall_percentage | number:'1.0-0' }}%
+              </span>
+              <div class="table-track">
+                <div class="table-fill" [style.width.%]="item.overall_percentage"
+                  [ngClass]="getGrade(item.overall_percentage).class">
                 </div>
-              </td>
+              </div>
+            </div>
+            } @else {
+            <span class="text-muted">—</span>
+            }
+          </td>
 
-              <!-- Assessment -->
-              <td>
-                <div class="assessment-cell">
-                  <span class="test-name">{{ item.template_name }}</span>
-                  <span class="type-pill" [attr.data-type]="item.assessment_type">
-                    {{ typeLabel(item.assessment_type) }}
-                  </span>
-                </div>
-              </td>
+          <!-- Date -->
+          <td>
+            @if (item.completed_at || item.started_at) {
+            <span class="date-text">
+              {{ (item.completed_at || item.started_at) | date:'mediumDate' }}
+            </span>
+            } @else {
+            <span class="text-muted">Assigned</span>
+            }
+          </td>
 
-              <!-- Status -->
-              <td>
-                <span
-                  class="status-pill"
-                  [class.status-completed]="item.status === 'completed'"
-                  [class.status-progress]="item.status === 'in_progress'"
-                  [class.status-expired]="item.status === 'expired'"
-                  [class.status-pending]="item.status === 'not_started'">
-                  {{ statusLabel(item.status) }}
-                </span>
-              </td>
-
-              <!-- Proctoring / Violations -->
-              <td>
-                @if (item.status === 'not_started') {
-                  <span class="text-muted">—</span>
-                } @else if (item.tab_switch_count === 0 || !item.tab_switch_count) {
-                  <span class="proctor-pill proctor-clean">
-                    <span class="proctor-dot dot-clean"></span>
-                    Clean (0)
-                  </span>
-                } @else if (item.tab_switch_count < 3) {
-                  <span class="proctor-pill proctor-warning">
-                    <span class="proctor-dot dot-warning"></span>
-                    {{ item.tab_switch_count }} {{ item.tab_switch_count === 1 ? 'Switch' : 'Switches' }}
-                  </span>
-                } @else {
-                  <span class="proctor-pill proctor-danger">
-                    <span class="proctor-dot dot-danger"></span>
-                    {{ item.tab_switch_count }} Switches (Terminated)
-                  </span>
-                }
-              </td>
-
-              <!-- Score -->
-              <td>
-                @if (item.status === 'completed') {
-                  <span class="points-val">
-                    <strong>{{ item.total_score | number:'1.0-1' }}</strong> / {{ item.max_score | number:'1.0-1' }}
-                  </span>
-                } @else {
-                  <span class="text-muted">—</span>
-                }
-              </td>
-
-              <!-- Performance -->
-              <td>
-                @if (item.status === 'completed') {
-                  <div class="pct-cell">
-                    <span class="pct-badge" [ngClass]="getGrade(item.overall_percentage).class">
-                      {{ item.overall_percentage | number:'1.0-0' }}%
-                    </span>
-                    <div class="table-track">
-                      <div
-                        class="table-fill"
-                        [style.width.%]="item.overall_percentage"
-                        [ngClass]="getGrade(item.overall_percentage).class">
-                      </div>
-                    </div>
-                  </div>
-                } @else {
-                  <span class="text-muted">—</span>
-                }
-              </td>
-
-              <!-- Date -->
-              <td>
-                @if (item.completed_at || item.started_at) {
-                  <span class="date-text">
-                    {{ (item.completed_at || item.started_at) | date:'mediumDate' }}
-                  </span>
-                } @else {
-                  <span class="text-muted">Assigned</span>
-                }
-              </td>
-
-              <!-- Actions -->
-              <td class="actions-col">
-                @if (item.status === 'completed' && item.session_id) {
-                  <div class="btn-group">
-                    <button
-                      class="btn-action-primary"
-                      type="button"
-                      title="View Report Card"
-                      (click)="viewReport(item.session_id)">
-                      Report Card
-                    </button>
-                    <button
-                      class="btn-action-secondary"
-                      type="button"
-                      title="View Detailed Scores"
-                      (click)="viewScores(item.session_id)">
-                      Scores
-                    </button>
-                  </div>
-                } @else if (item.status === 'expired') {
-                  <span class="expired-label">Expired (No submission)</span>
-                } @else if (item.status === 'not_started') {
-                  <span class="pending-label">Not attended yet</span>
-                } @else {
-                  <span class="in-prog-label">Taking test...</span>
-                }
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
+          <!-- Actions -->
+          <td class="actions-col">
+            @if (item.status === 'completed' && item.session_id) {
+            <div class="btn-group">
+              <button class="btn-action-primary" type="button" title="View Report Card"
+                (click)="viewReport(item.session_id)">
+                Report Card
+              </button>
+              <button class="btn-action-secondary" type="button" title="View Detailed Scores"
+                (click)="viewScores(item.session_id)">
+                Scores
+              </button>
+            </div>
+            } @else if (item.status === 'expired') {
+            <span class="expired-label">Expired (No submission)</span>
+            } @else if (item.status === 'not_started') {
+            <span class="pending-label">Not attended yet</span>
+            } @else {
+            <span class="in-prog-label">Taking test...</span>
+            }
+          </td>
+        </tr>
+        }
+      </tbody>
+    </table>
+  </div>
   }
 
   <!-- Learner All-Time Assessment History Modal -->
   @if (historyLearner(); as hl) {
-    <div class="modal-backdrop" (click)="closeLearnerHistory()">
-      <div class="history-modal-card" (click)="$event.stopPropagation()">
-        <div class="history-modal-header">
-          <div>
-            <span class="eyebrow">ALL-TIME LEARNER ASSESSMENT RECORD</span>
-            <h2>{{ hl.name }}</h2>
-            <p class="history-subtitle">{{ hl.email || ('User #' + hl.userId) }} · {{ historyResults().length }} record{{ historyResults().length === 1 ? '' : 's' }} ever attended</p>
-          </div>
-          <button type="button" class="btn-modal-close" (click)="closeLearnerHistory()">✕</button>
+  <div class="modal-backdrop" (click)="closeLearnerHistory()">
+    <div class="history-modal-card" (click)="$event.stopPropagation()">
+      <div class="history-modal-header">
+        <div>
+          <span class="eyebrow">ALL-TIME LEARNER ASSESSMENT RECORD</span>
+          <h2>{{ hl.name }}</h2>
+          <p class="history-subtitle">{{ hl.email || ('User #' + hl.userId) }} · {{ historyResults().length }} record{{
+            historyResults().length === 1 ? '' : 's' }} ever attended</p>
         </div>
+        <button type="button" class="btn-modal-close" (click)="closeLearnerHistory()">✕</button>
+      </div>
 
-        <div class="history-modal-body">
-          @if (historyLoading()) {
-            <div class="history-loading">Loading complete assessment history...</div>
-          } @else if (historyResults().length === 0) {
-            <div class="history-empty">No assessment attempts recorded for this learner account yet.</div>
-          } @else {
-            <table class="history-table">
-              <thead>
-                <tr>
-                  <th>Assessment</th>
-                  <th>Status</th>
-                  <th>Score</th>
-                  <th>Attended Date</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (rec of historyResults(); track rec.session_id || ($index + '-' + rec.template_id)) {
-                  <tr>
-                    <td>
-                      <strong>{{ rec.template_name }}</strong>
-                      <div class="rec-meta">{{ rec.assessment_type }}</div>
-                    </td>
-                    <td>{{ rec.status }}</td>
-                    <td>
-                      @if (rec.status === 'completed') {
-                        <strong>{{ rec.overall_percentage | number:'1.0-1' }}%</strong>
-                        <span class="rec-meta">({{ rec.total_score }}/{{ rec.max_score }})</span>
-                      } @else {
-                        <span>—</span>
-                      }
-                    </td>
-                    <td>{{ (rec.completed_at || rec.started_at) | date:'medium' }}</td>
-                    <td>
-                      @if (rec.status === 'completed' && rec.session_id) {
-                        <div class="btn-group">
-                          <button type="button" class="btn-action-primary" (click)="viewReport(rec.session_id)">Report</button>
-                          <button type="button" class="btn-action-secondary" (click)="viewScores(rec.session_id)">Scores</button>
-                        </div>
-                      } @else {
-                        <span>—</span>
-                      }
-                    </td>
-                  </tr>
+      <div class="history-modal-body">
+        @if (historyLoading()) {
+        <div class="history-loading">Loading complete assessment history...</div>
+        } @else if (historyResults().length === 0) {
+        <div class="history-empty">No assessment attempts recorded for this learner account yet.</div>
+        } @else {
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Assessment</th>
+              <th>Status</th>
+              <th>Score</th>
+              <th>Attended Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (rec of historyResults(); track rec.session_id || ($index + '-' + rec.template_id)) {
+            <tr>
+              <td>
+                <strong>{{ rec.template_name }}</strong>
+                <div class="rec-meta">{{ rec.assessment_tag || rec.assessment_type }}</div>
+              </td>
+              <td>{{ rec.status }}</td>
+              <td>
+                @if (rec.status === 'completed') {
+                <strong>{{ rec.overall_percentage | number:'1.0-1' }}%</strong>
+                <span class="rec-meta">({{ rec.total_score }}/{{ rec.max_score }})</span>
+                } @else {
+                <span>—</span>
                 }
-              </tbody>
-            </table>
-          }
-        </div>
+              </td>
+              <td>{{ (rec.completed_at || rec.started_at) | date:'medium' }}</td>
+              <td>
+                @if (rec.status === 'completed' && rec.session_id) {
+                <div class="btn-group">
+                  <button type="button" class="btn-action-primary" (click)="viewReport(rec.session_id)">Report</button>
+                  <button type="button" class="btn-action-secondary"
+                    (click)="viewScores(rec.session_id)">Scores</button>
+                </div>
+                } @else {
+                <span>—</span>
+                }
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+        }
       </div>
     </div>
+  </div>
   }
 
 </div>
