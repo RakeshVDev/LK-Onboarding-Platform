@@ -805,3 +805,343 @@
     }
   }
 }
+
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR ASSESSMENT REPORT HUB              */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .report-page {
+    color: #f1f5f9;
+  }
+
+  .top-nav-bar {
+    .btn-back-link,
+    .btn-breakdown,
+    .print-button {
+      background: #1e293b;
+      border-color: #334155;
+      color: #cbd5e1;
+
+      &:hover {
+        background: #334155;
+        border-color: #475569;
+        color: #ffffff;
+      }
+    }
+  }
+
+  .print-button {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &:hover {
+      background: #334155;
+      border-color: #475569;
+      color: #ffffff;
+    }
+  }
+
+  .report-header {
+    .report-brand-strip {
+      border-bottom-color: #1f2937;
+    }
+
+    .header-left {
+      h1 {
+        color: #f8fafc;
+      }
+      .meta-row {
+        color: #94a3b8;
+        strong {
+          color: #f8fafc;
+        }
+        .meta-dot {
+          color: #475569;
+        }
+      }
+      .type-tag {
+        background: #1e293b;
+        border-color: #334155;
+        color: #c7d2fe;
+      }
+    }
+
+    .header-right .skill-level-card {
+      background: #111827;
+      border-color: #1f2937;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+      .level-label {
+        color: #818cf8;
+      }
+      .level-title {
+        color: #f8fafc;
+      }
+    }
+  }
+
+  .panel {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+
+    h2, h3, h4 {
+      color: #f8fafc;
+    }
+
+    p {
+      color: #94a3b8;
+    }
+  }
+
+  .summary-panel {
+    .summary-text {
+      color: #cbd5e1;
+    }
+
+    .metrics-dashboard {
+      .metric-tile {
+        background: #182230;
+        border-color: #1f2937;
+
+        .metric-label {
+          color: #94a3b8;
+        }
+
+        .metric-val {
+          color: #f8fafc;
+        }
+
+        .metric-sub {
+          color: #64748b;
+        }
+
+        &.tile-primary {
+          background: #1e1b4b;
+          border-color: #3730a3;
+          .metric-val { color: #a5b4fc; }
+          .metric-sub { color: #818cf8; }
+        }
+
+        &.tile-success {
+          background: #064e3b;
+          border-color: #047857;
+          .metric-val { color: #6ee7b7; }
+          .metric-sub { color: #34d399; }
+        }
+
+        &.tile-warning {
+          background: #451a03;
+          border-color: #78350f;
+          .metric-val { color: #fde047; }
+          .metric-sub { color: #fbbf24; }
+        }
+
+        &.tile-danger {
+          background: #450a0a;
+          border-color: #7f1d1d;
+          .metric-val { color: #fca5a5; }
+          .metric-sub { color: #f87171; }
+        }
+      }
+    }
+  }
+
+  .intelligence-radar-panel {
+    .weighted-pill {
+      background: #1e1b4b;
+      border-color: #3730a3;
+      color: #c7d2fe;
+      strong { color: #ffffff; }
+    }
+
+    .dim-mini-card {
+      background: #182230;
+      border-color: #1f2937;
+
+      .dim-mini-title {
+        color: #f8fafc;
+      }
+      .dim-mini-score {
+        color: #818cf8;
+      }
+      .dim-band {
+        color: #94a3b8;
+      }
+    }
+  }
+
+  .domain-intel-panel {
+    .intel-box {
+      background: #182230;
+      border-color: #1f2937;
+
+      .intel-box-head {
+        h3 {
+          color: #f8fafc;
+        }
+        .intel-badge {
+          background: #1e1b4b;
+          border-color: #3730a3;
+          color: #c7d2fe;
+        }
+      }
+
+      .intel-kv-row {
+        color: #94a3b8;
+        strong {
+          color: #f8fafc;
+        }
+      }
+
+      .intel-warn {
+        background: #450a0a;
+        color: #fca5a5;
+      }
+    }
+
+    .diff-pills .diff-pill {
+      background: #1e293b;
+      border-color: #334155;
+      color: #cbd5e1;
+    }
+
+    .focus-box {
+      background: #451a03;
+      border-color: #78350f;
+
+      h4 {
+        color: #fde047;
+      }
+      ul {
+        color: #fef08a;
+      }
+
+      &.fit-box {
+        background: #064e3b;
+        border-color: #047857;
+
+        h4 {
+          color: #86efac;
+        }
+        ul {
+          color: #bbf7d0;
+        }
+      }
+    }
+  }
+
+  .category-card {
+    background: #182230;
+    border-color: #1f2937;
+
+    .category-heading {
+      h3 { color: #f8fafc; }
+      .cat-pct { color: #818cf8; }
+    }
+
+    .progress-track {
+      background: #1e293b;
+    }
+
+    .cat-footer {
+      color: #94a3b8;
+    }
+  }
+
+  .interpretation-card {
+    background: #182230;
+    border-color: #1f2937;
+
+    h3 {
+      color: #f8fafc;
+    }
+    p {
+      color: #94a3b8;
+    }
+  }
+
+  .insight-grid {
+    .insight-list li {
+      color: #cbd5e1;
+    }
+  }
+
+  .recommendation-panel {
+    .recommendation-list li {
+      background: #182230;
+      border-color: #1f2937;
+      color: #cbd5e1;
+
+      .rec-icon {
+        color: #818cf8;
+      }
+    }
+  }
+
+  .full-report-details {
+    summary h3 {
+      color: #f8fafc;
+    }
+  }
+
+  .tech-track-next-step-panel {
+    background: #111827;
+    border-color: #1f2937;
+    border-left-color: #6366f1;
+
+    .next-step-content {
+      .eyebrow {
+        color: #818cf8;
+      }
+      h2 {
+        color: #f8fafc;
+      }
+      p {
+        color: #94a3b8;
+      }
+    }
+  }
+
+  .report-footer {
+    border-top-color: #1f2937;
+    color: #64748b;
+
+    .footer-brand strong {
+      color: #f8fafc;
+    }
+  }
+
+  .loading-state {
+    .loading-spinner {
+      border-color: #1f2937;
+      border-top-color: #6366f1;
+    }
+    h3 {
+      color: #f8fafc;
+    }
+    p {
+      color: #94a3b8;
+    }
+  }
+
+  .error-message {
+    background: #450a0a;
+    border-color: #7f1d1d;
+    color: #fca5a5;
+
+    h2 { color: #fca5a5; }
+    p { color: #fecaca; }
+
+    .error-actions .btn-back {
+      background: #1e293b;
+      border-color: #334155;
+      color: #cbd5e1;
+    }
+  }
+}
+

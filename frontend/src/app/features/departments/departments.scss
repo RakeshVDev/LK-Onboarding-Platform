@@ -946,3 +946,347 @@
   }
 }
 
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR DEPARTMENTS MODULE                 */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .departments-page {
+    color: #f1f5f9;
+  }
+
+  .page-header {
+    h1 {
+      color: #f8fafc;
+    }
+    p {
+      color: #94a3b8;
+    }
+  }
+
+  .stat-card {
+    background: #111827;
+    border-color: #1f2937;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+
+    .stat-icon {
+      &.purple {
+        background: #1e1b4b;
+        color: #c4b5fd;
+      }
+      &.green {
+        background: #064e3b;
+        color: #6ee7b7;
+      }
+      &.gray {
+        background: #1e293b;
+        color: #94a3b8;
+      }
+    }
+
+    .stat-label {
+      color: #94a3b8;
+    }
+
+    .stat-val {
+      color: #f8fafc;
+    }
+  }
+
+  .toolbar {
+    .search-box {
+      input {
+        background: #1e293b;
+        border-color: #334155;
+        color: #f8fafc;
+
+        &::placeholder {
+          color: #64748b;
+        }
+
+        &:focus {
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+      }
+
+      .search-icon {
+        color: #94a3b8;
+      }
+
+      .btn-clear {
+        color: #64748b;
+        &:hover {
+          color: #cbd5e1;
+        }
+      }
+    }
+
+    .counter-badge {
+      color: #94a3b8;
+    }
+  }
+
+  .state-card {
+    background: #111827;
+    border-color: #1f2937;
+
+    h3 {
+      color: #f8fafc;
+    }
+
+    p {
+      color: #94a3b8;
+    }
+
+    .spinner {
+      border-color: #1e293b;
+      border-top-color: #6366f1;
+    }
+  }
+
+  .dept-card {
+    background: #111827;
+    border-color: #1f2937;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+    &:hover {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      border-color: #374151;
+    }
+
+    .dept-icon-box {
+      background: #1e293b;
+      border-color: #334155;
+      color: #f8fafc;
+    }
+
+    .track-badge {
+      background: #1e293b;
+      color: #cbd5e1;
+    }
+
+    .dept-title {
+      color: #f8fafc;
+    }
+
+    .dept-desc {
+      color: #94a3b8;
+    }
+
+    .card-actions {
+      border-top-color: #1f2937;
+
+      .btn-action {
+        background: #1e293b;
+        border-color: #334155;
+        color: #cbd5e1;
+
+        &:hover {
+          background: #334155;
+          border-color: #475569;
+          color: #ffffff;
+        }
+
+        &.btn-edit {
+          color: #a5b4fc;
+          border-color: #4338ca;
+
+          &:hover {
+            background: #1e1b4b;
+          }
+        }
+
+        &.btn-toggle {
+          &.deactivate {
+            color: #fbbf24;
+            border-color: #78350f;
+
+            &:hover {
+              background: #2e1d05;
+            }
+          }
+
+          &.activate {
+            color: #4ade80;
+            border-color: #064e3b;
+
+            &:hover {
+              background: #022c22;
+            }
+          }
+        }
+
+        &.btn-delete {
+          color: #f87171;
+          border-color: #7f1d1d;
+
+          &:hover {
+            background: #450a0a;
+          }
+        }
+      }
+    }
+  }
+
+  /* Modal in Dark Theme */
+  .modal-backdrop {
+    background: rgba(3, 7, 18, 0.78);
+  }
+
+  .modal-card {
+    background: #111827;
+    border: 1px solid #1f2937;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+
+    .modal-header {
+      border-bottom-color: #1f2937;
+
+      h2 {
+        color: #f8fafc;
+      }
+
+      .btn-close {
+        color: #94a3b8;
+        &:hover {
+          color: #f1f5f9;
+        }
+      }
+    }
+
+    .modal-body {
+      .form-group {
+        label {
+          color: #e2e8f0;
+        }
+
+        input,
+        textarea {
+          background: #1e293b;
+          border-color: #334155;
+          color: #f8fafc;
+
+          &:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+          }
+        }
+      }
+    }
+
+    .modal-footer {
+      background: #0f172a;
+      border-top-color: #1f2937;
+
+      .btn-modal-cancel {
+        background: #1e293b;
+        border-color: #334155;
+        color: #cbd5e1;
+
+        &:hover {
+          background: #334155;
+          color: #ffffff;
+        }
+      }
+    }
+  }
+
+  /* Tabs & Requests Panel */
+  .view-tabs-bar {
+    border-bottom-color: #1f2937;
+
+    .tab-btn {
+      color: #94a3b8;
+
+      &:hover {
+        color: #f1f5f9;
+      }
+
+      &.active {
+        color: #818cf8;
+        border-bottom-color: #818cf8;
+      }
+    }
+  }
+
+  .requests-panel {
+    .requests-filter-bar {
+      .filter-pills .pill-btn {
+        background: #1e293b;
+        border-color: #334155;
+        color: #cbd5e1;
+
+        &:hover {
+          background: #334155;
+        }
+
+        &.active {
+          background: #4f46e5;
+          color: #ffffff;
+          border-color: #4f46e5;
+        }
+      }
+
+      .btn-refresh {
+        background: #1e293b;
+        border-color: #334155;
+        color: #cbd5e1;
+
+        &:hover {
+          background: #334155;
+          color: #ffffff;
+        }
+      }
+    }
+
+    .request-card {
+      background: #111827;
+      border-color: #1f2937;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+      &:hover {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      }
+
+      .request-header strong {
+        color: #f8fafc;
+      }
+
+      .request-user-info {
+        .user-name {
+          color: #f8fafc;
+        }
+        .user-email {
+          color: #94a3b8;
+        }
+      }
+
+      .request-meta .meta-item {
+        color: #94a3b8;
+        strong {
+          color: #cbd5e1;
+        }
+      }
+
+      .request-notes {
+        background: #1e293b;
+        color: #cbd5e1;
+        border-color: #334155;
+      }
+
+      .select-dept-override {
+        label {
+          color: #cbd5e1;
+        }
+        select {
+          background: #1e293b;
+          border-color: #334155;
+          color: #f8fafc;
+        }
+      }
+    }
+  }
+}
+
+

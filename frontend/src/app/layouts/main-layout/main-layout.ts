@@ -9,6 +9,7 @@ import {
 import { AuthService, CurrentUser } from '../../core/services/auth.service';
 import { AssessmentStatusService } from '../../core/services/assessment-status.service';
 import { OnboardingService } from '../../core/services/onboarding.service';
+import { ThemeService } from '../../core/services/theme.service';
 import { BrandLogo } from '../../shared/components/brand-logo/brand-logo';
 
 @Component({
@@ -26,6 +27,7 @@ export class MainLayout implements OnInit {
   public readonly authService = inject(AuthService);
   public readonly assessmentStatusService = inject(AssessmentStatusService);
   public readonly onboardingService = inject(OnboardingService);
+  public readonly themeService = inject(ThemeService);
   private readonly router = inject(Router);
   private readonly elementRef = inject(ElementRef);
 
@@ -51,6 +53,35 @@ export class MainLayout implements OnInit {
       (this.user?.role || '').toLowerCase() === 'learner' ||
       this.authService.hasRole('learner')
     );
+  }
+
+  get currentSectionName(): string {
+    const url = this.router.url;
+    if (url.includes('dashboard')) return 'Dashboard';
+    if (url.includes('users')) return 'User Management';
+    if (url.includes('cohorts')) return 'Cohorts & Batches';
+    if (url.includes('courses')) return 'Courses';
+    if (url.includes('live-classes')) return 'Live Classes';
+    if (url.includes('departments')) return 'Departments';
+    if (url.includes('assessments')) return 'Assessment Suite';
+    if (url.includes('results')) return 'Results';
+    if (url.includes('reports')) return 'Reports';
+    if (url.includes('profile')) return 'My Profile';
+    return 'Overview';
+  }
+
+  get currentSectionGroup(): string {
+    const url = this.router.url;
+    if (url.includes('dashboard')) return 'Workspace';
+    if (url.includes('courses') || url.includes('cohorts') || url.includes('live-classes') || url.includes('departments')) {
+      return 'Academic & Learning';
+    }
+    if (url.includes('assessments') || url.includes('results') || url.includes('reports') || url.includes('my-')) {
+      return 'Evaluation Suite';
+    }
+    if (url.includes('users')) return 'Administration';
+    if (url.includes('profile')) return 'Account';
+    return 'Workspace';
   }
 
   get isAssessmentOnlyMode(): boolean {

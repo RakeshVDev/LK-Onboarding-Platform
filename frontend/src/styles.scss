@@ -1,11 +1,53 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
-  --primary-active: #3730a3;
+  /* ==========================================================
+     PHASE 2 UNIFIED ENTERPRISE DESIGN TOKENS (LIGHT MODE)
+     ========================================================== */
+  --app-bg: #F7F8FC;
+  --surface-primary: #FFFFFF;
+  --surface-secondary: #F8FAFC;
+  --surface-elevated: #FFFFFF;
+  --text-primary: #101828;
+  --text-secondary: #667085;
+  --text-muted: #98A2B3;
+  --border-primary: #E4E7EC;
+  --border-secondary: #F2F4F7;
+  --accent-primary: #635BFF;
+  --success-color: #10B981;
+  --warning-color: #F59E0B;
+  --danger-color: #EF4444;
+  --input-bg: #FFFFFF;
+  --input-border: #D0D5DD;
+  --table-header-bg: #F9FAFB;
+  --sidebar-bg: #FFFFFF;
+  --header-bg: #FFFFFF;
+  --modal-bg: #FFFFFF;
+  --dropdown-bg: #FFFFFF;
+  --shadow-card: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+
+  /* Compatibility & Legacy Aliases */
+  --primary: #635bff;
+  --primary-hover: #4f46e5;
+  --primary-active: #4338ca;
   --primary-light: #eef2ff;
-  --primary-glow: rgba(79, 70, 229, 0.28);
+  --primary-glow: rgba(99, 91, 255, 0.28);
+  --bg-app: var(--app-bg);
+  --card-bg: var(--surface-primary);
+  --card-border: var(--border-primary);
+  --border-color: var(--border-primary);
+  --border-light: var(--border-secondary);
+
+  /* Enterprise Palette */
+  --deep-navy: #101828;
+  --navy-surface: #0c111d;
+  --slate-body: #344054;
+  --slate-muted: #475467;
+  --indigo-accent: #635bff;
+  --csm-orange: #f36f21;
+  --csm-orange-light: #fff7ed;
+  --csm-blue: #0066b2;
+  --csm-blue-light: #f0f9ff;
 
   --teal: #0d9488;
   --teal-hover: #0f766e;
@@ -25,32 +67,99 @@
   --slate-50: #f8fafc;
   --white: #ffffff;
 
-  --success: #10b981;
+  --success: var(--success-color);
   --success-hover: #059669;
   --success-light: #ecfdf5;
   --success-border: #a7f3d0;
 
-  --warning: #f59e0b;
+  --warning: var(--warning-color);
   --warning-hover: #d97706;
   --warning-light: #fffbeb;
   --warning-border: #fde68a;
 
-  --danger: #ef4444;
+  --danger: var(--danger-color);
   --danger-hover: #dc2626;
   --danger-light: #fef2f2;
   --danger-border: #fecaca;
 
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
-  --shadow-lg: 0 10px 25px -4px rgba(15, 23, 42, 0.1), 0 4px 10px -4px rgba(15, 23, 42, 0.05);
-  --shadow-xl: 0 20px 35px -6px rgba(15, 23, 42, 0.12), 0 8px 16px -6px rgba(15, 23, 42, 0.06);
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(16, 24, 40, 0.08), 0 2px 6px -2px rgba(16, 24, 40, 0.04);
+  --shadow-lg: 0 10px 25px -4px rgba(16, 24, 40, 0.1), 0 4px 10px -4px rgba(16, 24, 40, 0.05);
+  --shadow-xl: 0 20px 35px -6px rgba(16, 24, 40, 0.12), 0 8px 16px -6px rgba(16, 24, 40, 0.06);
 
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 18px;
   --radius-full: 9999px;
+}
+
+[data-theme="dark"],
+html.dark,
+body.dark-theme {
+  /* ==========================================================
+     PHASE 2 UNIFIED ENTERPRISE DESIGN TOKENS (DARK MODE)
+     ========================================================== */
+  --app-bg: #0B1220;
+  --surface-primary: #182230;
+  --surface-secondary: #111827;
+  --surface-elevated: #1F2937;
+  --text-primary: #F9FAFB;
+  --text-secondary: #A7B0C0;
+  --text-muted: #667085;
+  --border-primary: #344054;
+  --border-secondary: #1F2937;
+  --accent-primary: #818CF8;
+  --success-color: #10B981;
+  --warning-color: #F59E0B;
+  --danger-color: #EF4444;
+  --input-bg: #111827;
+  --input-border: #344054;
+  --table-header-bg: #111827;
+  --sidebar-bg: #111827;
+  --header-bg: #111827;
+  --modal-bg: #182230;
+  --dropdown-bg: #182230;
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.45);
+
+  /* Compatibility & Legacy Aliases */
+  --primary: #818cf8;
+  --primary-hover: #6366f1;
+  --primary-active: #4f46e5;
+  --primary-light: #1e1b4b;
+  --primary-glow: rgba(129, 140, 248, 0.28);
+  --bg-app: var(--app-bg);
+  --card-bg: var(--surface-primary);
+  --card-border: var(--border-primary);
+  --border-color: var(--border-primary);
+  --border-light: var(--border-secondary);
+
+  --deep-navy: #f8fafc;
+  --navy-surface: #1e293b;
+  --slate-body: #e2e8f0;
+  --slate-muted: #94a3b8;
+  --slate-950: #f8fafc;
+  --slate-900: #f1f5f9;
+  --slate-800: #e2e8f0;
+  --slate-700: #cbd5e1;
+  --slate-600: #94a3b8;
+  --slate-500: #64748b;
+  --slate-400: #475569;
+  --slate-300: #334155;
+  --slate-200: #1e293b;
+  --slate-100: #0f172a;
+  --slate-50: #0b1220;
+  --white: #182230;
+
+  background: var(--app-bg);
+  color: var(--text-primary);
+
+  body {
+    background: var(--app-bg);
+    color: var(--text-primary);
+  }
 }
 
 *,
@@ -349,18 +458,20 @@ button.btn-danger {
 }
 
 /* ==========================================================
-   CSM™ ENTERPRISE SURFACES & MOTION POLISH
+   ASE ENTERPRISE SURFACES, CARDS & DESIGN SYSTEM
    ========================================================== */
 
-.csm-card {
+.csm-card,
+.card-enterprise {
   background: #ffffff;
   border: 1px solid var(--slate-200);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-sm);
+    border-color: var(--slate-300);
   }
 }
 
@@ -390,7 +501,100 @@ button.btn-danger {
   border: 1px solid #c7d2fe;
 }
 
+/* Status Badges */
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+
+  &.success,
+  &[data-status='active'],
+  &[data-status='completed'],
+  &[data-status='passed'] {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+  }
+
+  &.warning,
+  &[data-status='pending'],
+  &[data-status='in_progress'] {
+    background: #fffbeb;
+    color: #d97706;
+    border: 1px solid #fde68a;
+  }
+
+  &.danger,
+  &[data-status='inactive'],
+  &[data-status='expired'],
+  &[data-status='failed'] {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+  }
+
+  &.info,
+  &[data-status='scheduled'] {
+    background: #f0f9ff;
+    color: #0284c7;
+    border: 1px solid #bae6fd;
+  }
+
+  &.live,
+  &[data-status='live'] {
+    background: #fef2f2;
+    color: #e11d48;
+    border: 1px solid #fecdd3;
+    font-weight: 700;
+  }
+}
+
+/* Micro pulse indicator */
+.dot-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.7);
+  animation: pulse-ring 1.8s infinite cubic-bezier(0.66, 0, 0, 1);
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.7);
+  }
+
+  70% {
+    box-shadow: 0 0 0 6px rgba(225, 29, 72, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(225, 29, 72, 0);
+  }
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @media print {
+
   .sidebar,
   .topbar,
   .no-print {
@@ -402,5 +606,560 @@ button.btn-danger {
     background: #ffffff !important;
     margin: 0 !important;
     padding: 0 !important;
+  }
+}
+
+/* ==========================================================
+   ENTERPRISE UNIVERSAL DARK THEME SYSTEM
+   Applies across every page, module, component and popup
+   ========================================================== */
+[data-theme="dark"],
+html.dark,
+body.dark-theme {
+  background-color: var(--app-bg, #0B1220) !important;
+  color: var(--text-primary, #F9FAFB) !important;
+
+  /* 1. Universal Card & Panel Surfaces */
+  .csm-card,
+  .card-enterprise,
+  .stat-card,
+  .dept-card,
+  .template-card,
+  .cohort-card,
+  .course-card,
+  .kpi-card,
+  .user-card,
+  .batch-card,
+  .request-card,
+  .state-card,
+  .table-card,
+  .users-panel,
+  .form-panel,
+  .modal-card,
+  .modal-box,
+  .modal-container,
+  .analytics-card,
+  .profile-card,
+  .profile-section-card,
+  .class-card,
+  .session-card,
+  .empty-state,
+  .loading-state,
+  .track-card,
+  .overview-card,
+  .cohort-trainings-card,
+  .discussion-card,
+  .material-card,
+  .assignment-card,
+  .assessment-card,
+  .report-card,
+  .exam-completed-card,
+  .skill-level-card,
+  .executive-summary-card,
+  .category-card,
+  .radar-card,
+  .feedback-card,
+  .selection-hero,
+  .submission-box,
+  .instruction-modal,
+  .meta-card,
+  .rules-section,
+  .form-card,
+  .question-card,
+  .reading-passage-panel,
+  .exam-header,
+  .score-card,
+  .summary-card,
+  .breakdown-card,
+  .panel,
+  .summary-panel,
+  .metric-tile,
+  .table-container,
+  .bank-topbar,
+  .empty-questions-card,
+  .bulk-upload-card,
+  .tab-pill-bar,
+  .question-item-card,
+  .interpretation-card,
+  .intel-box,
+  .dim-mini-card {
+    background-color: var(--surface-primary, #182230) !important;
+    border-color: var(--border-primary, #344054) !important;
+    color: var(--text-primary, #F9FAFB) !important;
+    box-shadow: var(--shadow-card, 0 4px 12px rgba(0, 0, 0, 0.45)) !important;
+  }
+
+  /* 2. Enterprise Typography in Dark Mode */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  strong:not(.badge):not(.pill):not(.status),
+  .stat-val,
+  .kpi-value,
+  .dept-title,
+  .cohort-title,
+  .course-title,
+  .user-name,
+  .card-title {
+    color: var(--text-primary, #F9FAFB) !important;
+  }
+
+  .subtitle,
+  .stat-label,
+  .kpi-label,
+  .dept-desc,
+  .cohort-desc,
+  .course-desc,
+  .description,
+  .field-hint,
+  .meta-text,
+  .counter-badge,
+  p:not(.alert):not(.badge):not(.pill):not(.status) {
+    color: var(--text-secondary, #A7B0C0) !important;
+  }
+
+  /* 3. Universal Inputs, Selects & Search Bars */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]),
+  textarea,
+  select,
+  .search-box input,
+  .search-input input,
+  .form-grid input,
+  .form-grid select,
+  .filter-select,
+  .ctrl-select {
+    background-color: var(--surface-secondary, #111827) !important;
+    border-color: var(--border-primary, #344054) !important;
+    color: var(--text-primary, #F9FAFB) !important;
+
+    &::placeholder {
+      color: var(--text-muted, #667085) !important;
+    }
+
+    &:focus {
+      background-color: var(--surface-secondary, #111827) !important;
+      border-color: var(--accent-primary, #818CF8) !important;
+      box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25) !important;
+    }
+  }
+
+  /* 4. Enterprise Tables & Data Grids */
+  .table-container,
+  .table-wrapper,
+  table {
+    background-color: var(--surface-primary, #182230) !important;
+    border-color: var(--border-primary, #344054) !important;
+    color: var(--text-secondary, #A7B0C0) !important;
+
+    thead,
+    thead th,
+    th {
+      background-color: var(--surface-secondary, #111827) !important;
+      border-color: var(--border-primary, #344054) !important;
+      color: var(--text-muted, #94A3B8) !important;
+    }
+
+    tbody tr {
+      background-color: var(--surface-primary, #182230) !important;
+      border-color: var(--border-primary, #344054) !important;
+
+      &:hover {
+        background-color: var(--surface-elevated, #1F2937) !important;
+      }
+    }
+
+    tbody td,
+    td {
+      border-color: var(--border-primary, #344054) !important;
+      color: var(--text-secondary, #A7B0C0) !important;
+    }
+  }
+
+  /* 5. Assessment Specific Refinements */
+  .template-meta {
+    border-top-color: var(--border-primary, #344054) !important;
+    border-bottom-color: var(--border-primary, #344054) !important;
+
+    strong {
+      color: var(--text-primary, #F9FAFB) !important;
+    }
+
+    span {
+      color: var(--text-secondary, #A7B0C0) !important;
+    }
+  }
+
+  .category-item {
+    span:first-child {
+      color: var(--text-primary, #F9FAFB) !important;
+      font-weight: 500 !important;
+    }
+
+    span:last-child {
+      color: var(--text-secondary, #A7B0C0) !important;
+    }
+  }
+
+  .btn-outline.btn-questions {
+    background: #1e1b4b !important;
+    border-color: #3730a3 !important;
+    color: #c4b5fd !important;
+
+    &:hover {
+      background: #312e81 !important;
+      color: #ffffff !important;
+    }
+  }
+
+  .btn-outline.btn-preview {
+    background: var(--surface-elevated, #1F2937) !important;
+    border-color: var(--border-primary, #344054) !important;
+    color: #93c5fd !important;
+
+    &:hover {
+      background: #1e3a8a !important;
+      color: #ffffff !important;
+    }
+  }
+
+  .assign-pill {
+    background: var(--surface-elevated, #1F2937) !important;
+    border-color: var(--border-primary, #344054) !important;
+    color: var(--text-secondary, #A7B0C0) !important;
+
+    &[data-scope="cohort"] {
+      background: #164e63 !important;
+      border-color: #0891b2 !important;
+      color: #67e8f9 !important;
+    }
+
+    &[data-scope="learner"] {
+      background: #3b0764 !important;
+      border-color: #7e22ce !important;
+      color: #d8b4fe !important;
+    }
+  }
+
+  .due-pill {
+    background: #451a03 !important;
+    border-color: #78350f !important;
+    color: #fde047 !important;
+  }
+
+  .type-pill {
+    background: #1e1b4b !important;
+    border-color: #3730a3 !important;
+    color: #c7d2fe !important;
+  }
+
+  /* 5b. Banners, Summary Boxes & Special Strips in Dark Mode */
+  .onboarding-stage-strip {
+    background: #111827 !important;
+    border-color: #1e3a8a !important;
+    color: #93c5fd !important;
+
+    .stage-strip-copy strong {
+      color: #60a5fa !important;
+    }
+    .stage-strip-copy span {
+      color: #bfdbfe !important;
+    }
+  }
+
+  .onboarding-gate-banner {
+    &.gate-pending {
+      background: #451a03 !important;
+      border-color: #78350f !important;
+      color: #fde047 !important;
+      strong, p { color: #fde047 !important; }
+    }
+    &.gate-complete {
+      background: #064e3b !important;
+      border-color: #047857 !important;
+      color: #86efac !important;
+      strong, p { color: #86efac !important; }
+    }
+  }
+
+  .completed-summary-box {
+    background: #111827 !important;
+    border-color: #1f2937 !important;
+    color: #f8fafc !important;
+
+    .cell-label {
+      color: #94a3b8 !important;
+    }
+    strong {
+      color: #f8fafc !important;
+      &.cell-pct {
+        color: #818cf8 !important;
+      }
+      &.text-green {
+        color: #34d399 !important;
+      }
+    }
+    .completed-timestamp {
+      color: #64748b !important;
+      border-top-color: #1f2937 !important;
+    }
+  }
+
+  .in-progress-box {
+    background: #451a03 !important;
+    border-color: #78350f !important;
+    strong { color: #fde047 !important; }
+    p { color: #fef08a !important; }
+  }
+
+  .expired-box {
+    background: #1e293b !important;
+    border-color: #334155 !important;
+    strong { color: #f87171 !important; }
+    p { color: #fca5a5 !important; }
+  }
+
+  .exam-timer {
+    background: #111827 !important;
+    border-color: #334155 !important;
+    color: #f8fafc !important;
+    .timer-label { color: #94a3b8 !important; }
+    .timer-digits { color: #f8fafc !important; }
+    .timer-icon { color: #818cf8 !important; }
+  }
+
+  .proctor-badge {
+    background: #111827 !important;
+    border-color: #334155 !important;
+    .proctor-badge-label { color: #94a3b8 !important; }
+    .proctor-badge-val { color: #f8fafc !important; }
+  }
+
+  .score-summary {
+    .score-caption { color: #94a3b8 !important; }
+    .score-pts { color: #f8fafc !important; }
+    .progress-track { background: #1e293b !important; }
+  }
+
+  .category-breakdown {
+    .cat-name { color: #cbd5e1 !important; }
+    .cat-val { color: #f8fafc !important; }
+    .cat-track { background: #1e293b !important; }
+  }
+
+  .grade-box {
+    &.grade-exceptional {
+      background: #064e3b !important;
+      color: #6ee7b7 !important;
+    }
+    &.grade-proficient {
+      background: #1e1b4b !important;
+      color: #c4b5fd !important;
+    }
+    &.grade-developing {
+      background: #451a03 !important;
+      color: #fde047 !important;
+    }
+    &.grade-focus {
+      background: #450a0a !important;
+      color: #fca5a5 !important;
+    }
+  }
+
+  .stepper .step {
+    background: #111827 !important;
+    border-color: #1f2937 !important;
+    strong { color: #f8fafc !important; }
+    small { color: #94a3b8 !important; }
+    .step-dot {
+      background: #1e293b !important;
+      color: #94a3b8 !important;
+    }
+    &.step-done {
+      border-color: #064e3b !important;
+      background: #022c22 !important;
+      .step-dot { background: #10b981 !important; color: #ffffff !important; }
+    }
+    &.step-active {
+      border-color: #1e3a8a !important;
+      background: #0f172a !important;
+      .step-dot { background: #3b82f6 !important; color: #ffffff !important; }
+    }
+  }
+
+  /* 6. Universal Action & Secondary Buttons */
+  .btn-secondary,
+  button.btn-secondary,
+  a.btn-secondary,
+  .secondary-button,
+  .btn-action,
+  .btn-refresh,
+  .icon-button,
+  .btn-results-link,
+  .btn-sync-header,
+  .btn-scores,
+  .btn-view-breakdown,
+  .btn-breakdown,
+  .btn-back-link,
+  .back-button,
+  .btn-view-report,
+  .print-button,
+  .btn-preview-assessment,
+  .btn-preview-outline,
+  .btn-export {
+    background: var(--surface-elevated, #1F2937) !important;
+    border-color: var(--border-primary, #344054) !important;
+    color: #cbd5e1 !important;
+
+    &:hover:not(:disabled) {
+      background: #283548 !important;
+      border-color: #4B5563 !important;
+      color: #ffffff !important;
+    }
+  }
+
+  .btn-stage-cta {
+    background: #2563eb !important;
+    color: #ffffff !important;
+    &:hover { background: #1d4ed8 !important; }
+  }
+
+  /* 7. Department & System Specific Components */
+  .dept-icon-box {
+    background: var(--surface-elevated, #1F2937) !important;
+    border-color: var(--border-primary, #344054) !important;
+    color: var(--text-primary, #F9FAFB) !important;
+  }
+
+  .track-badge {
+    background: var(--surface-elevated, #1F2937) !important;
+    color: var(--text-secondary, #A7B0C0) !important;
+  }
+
+  .view-tabs-bar,
+  .sub-nav,
+  .tabs-nav,
+  .cohort-tabs {
+    border-bottom-color: var(--border-primary, #344054) !important;
+
+    .tab-btn,
+    .tab-item {
+      color: var(--text-secondary, #A7B0C0) !important;
+
+      &:hover {
+        color: var(--text-primary, #F9FAFB) !important;
+      }
+
+      &.active {
+        color: var(--accent-primary, #818CF8) !important;
+        border-bottom-color: var(--accent-primary, #818CF8) !important;
+      }
+    }
+  }
+
+  /* 8. Modals & Dialogs */
+  .modal-backdrop {
+    background: rgba(3, 7, 18, 0.8) !important;
+  }
+
+  .modal-header {
+    border-bottom-color: var(--border-primary, #344054) !important;
+  }
+
+  .modal-footer {
+    background-color: var(--surface-secondary, #111827) !important;
+    border-top-color: var(--border-primary, #344054) !important;
+
+    .btn-modal-cancel {
+      background: var(--surface-elevated, #1F2937) !important;
+      border-color: var(--border-primary, #344054) !important;
+      color: var(--text-secondary, #A7B0C0) !important;
+
+      &:hover {
+        background: #283548 !important;
+        color: #ffffff !important;
+      }
+    }
+  }
+}
+
+/* ==========================================================
+   ENTERPRISE RESPONSIVE DESIGN & OVERFLOW SAFEGUARDS
+   Tested at 375px, 430px, 768px, 1024px, 1366px, 1440px, 1920px
+   ========================================================== */
+.table-wrapper,
+.table-container,
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modal-card,
+.modal-box,
+.modal-container {
+  max-width: min(640px, calc(100vw - 32px)) !important;
+  max-height: calc(100dvh - 40px) !important;
+  overflow-y: auto !important;
+}
+
+/* Fluid typography and mobile layout collapse */
+@media (max-width: 768px) {
+
+  .dashboard-container,
+  .cohort-page,
+  .courses-page,
+  .departments-page,
+  .users-page,
+  .assessment-page,
+  .results-container {
+    padding: 16px 12px !important;
+  }
+
+  .page-header,
+  .cohort-header,
+  .page-heading {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 16px !important;
+
+    .header-right-deck,
+    .header-actions {
+      width: 100% !important;
+      justify-content: flex-start !important;
+      flex-wrap: wrap !important;
+    }
+  }
+
+  .stats-grid,
+  .users-kpi-grid,
+  .batches-cards-grid,
+  .template-grid,
+  .dept-grid,
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .topbar {
+    padding: 0 14px !important;
+  }
+
+  .crumb-root,
+  .crumb-separator {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 22px !important;
+  }
+
+  .btn {
+    padding: 8px 14px !important;
+    font-size: 13px !important;
   }
 }

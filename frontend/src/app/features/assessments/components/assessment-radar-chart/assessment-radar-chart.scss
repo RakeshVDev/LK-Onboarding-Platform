@@ -237,3 +237,98 @@
   }
 }
 
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR RADAR CHART                        */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .radar-card {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+    h3 {
+      color: #f8fafc;
+    }
+
+    .radar-sub {
+      color: #94a3b8;
+    }
+  }
+
+  .tool-chip {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &.active {
+      background: #1e1b4b;
+      color: #a5b4fc;
+      border-color: #4f46e5;
+    }
+
+    &:hover {
+      border-color: #64748b;
+    }
+  }
+
+  .mode-switch {
+    background: #1e293b;
+
+    .mode-btn {
+      color: #94a3b8;
+
+      &.active {
+        background: #111827;
+        color: #f8fafc;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      }
+    }
+  }
+
+  .legend-pill {
+    background: #182230;
+    border-color: #1f2937;
+    color: #cbd5e1;
+
+    &:hover {
+      background: #1e293b;
+    }
+
+    .legend-score {
+      background: #1e1b4b;
+      color: #c7d2fe;
+    }
+  }
+
+  .radar-empty {
+    background: #182230;
+    border-color: #334155;
+    color: #94a3b8;
+  }
+
+  .dim-bar-row {
+    background: #182230;
+    border-color: #1f2937;
+
+    .dim-axis-name {
+      color: #f8fafc;
+    }
+
+    .series-mini-name {
+      color: #94a3b8;
+    }
+
+    .bar-track {
+      background: #1e293b;
+    }
+
+    .series-val {
+      color: #f8fafc;
+    }
+  }
+}
+
+

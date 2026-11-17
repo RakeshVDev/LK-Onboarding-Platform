@@ -254,3 +254,160 @@ p {
   border-radius: 16px;
 }
 
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR DEPARTMENT SELECTION               */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .department-selection-page {
+    color: #f1f5f9;
+  }
+
+  .selection-hero {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+
+    h1 {
+      color: #f8fafc;
+    }
+    p {
+      color: #94a3b8;
+    }
+
+    .btn-refresh {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #93c5fd;
+
+      &:hover {
+        background: #334155;
+        color: #ffffff;
+      }
+    }
+
+    .btn-back {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+
+      &:hover {
+        background: #334155;
+        color: #ffffff;
+      }
+    }
+
+    .btn-submit {
+      background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+      color: #ffffff;
+      &:hover:not(:disabled) {
+        background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
+      }
+    }
+  }
+
+  .step {
+    background: #111827;
+    border-color: #1f2937;
+
+    strong {
+      color: #f8fafc;
+    }
+    small {
+      color: #94a3b8;
+    }
+
+    .step-dot {
+      background: #1e293b;
+      color: #94a3b8;
+    }
+
+    &.step-done {
+      border-color: #064e3b;
+      background: #022c22;
+      .step-dot {
+        background: #10b981;
+        color: #ffffff;
+      }
+    }
+
+    &.step-active {
+      border-color: #1e3a8a;
+      background: #0f172a;
+      .step-dot {
+        background: #3b82f6;
+        color: #ffffff;
+      }
+    }
+  }
+
+  .banner-error {
+    background: #450a0a;
+    border-color: #7f1d1d;
+    color: #fca5a5;
+  }
+
+  .banner-success {
+    background: #064e3b;
+    border-color: #047857;
+    color: #86efac;
+  }
+
+  .banner-pending {
+    background: #451a03;
+    border-color: #78350f;
+    color: #fde047;
+  }
+
+  .dept-card {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+
+    &:hover {
+      border-color: #374151;
+    }
+
+    &.selected {
+      border-color: #6366f1;
+      background: #1e1b4b;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+    }
+
+    .dept-card-header strong {
+      color: #f8fafc;
+    }
+
+    p {
+      color: #94a3b8;
+    }
+  }
+
+  .submission-box {
+    background: #111827;
+    border-color: #1f2937;
+
+    label {
+      color: #cbd5e1;
+    }
+
+    textarea {
+      background: #1e293b;
+      border-color: #334155;
+      color: #f8fafc;
+
+      &:focus {
+        border-color: #6366f1;
+      }
+    }
+  }
+
+  .state-card {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+  }
+}
+
+

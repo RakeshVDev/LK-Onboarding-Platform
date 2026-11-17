@@ -1108,3 +1108,266 @@
     color: #065f46;
   }
 }
+
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR LEARNER ASSESSMENTS                */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .learner-page,
+  .learner-assessments-page,
+  .dashboard-container {
+    color: #f1f5f9;
+  }
+
+  .page-header {
+    h1 {
+      color: #f8fafc;
+    }
+    p {
+      color: #94a3b8;
+    }
+  }
+
+  .btn-sync-header {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &:hover:not(:disabled) {
+      background: #334155;
+      color: #ffffff;
+      border-color: #475569;
+    }
+  }
+
+  .btn-results-link {
+    background: #1e293b;
+    border-color: #334155;
+    color: #a5b4fc;
+
+    &:hover {
+      background: #312e81;
+      border-color: #6366f1;
+      color: #ffffff;
+    }
+  }
+
+  .btn-results-locked {
+    background: #1e293b;
+    border-color: #334155;
+    color: #64748b;
+  }
+
+  .cohort-tag-row {
+    .cohort-tag-label {
+      color: #94a3b8;
+    }
+    .cohort-chip {
+      background: #1e293b;
+      border-color: #334155;
+      color: #93c5fd;
+    }
+  }
+
+  .assessment-card,
+  .summary-card,
+  .stat-card,
+  .card {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+
+    &:hover {
+      border-color: #374151;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    }
+
+    h1, h2, h3, h4, strong {
+      color: #f8fafc;
+    }
+
+    p, span.label, .meta-text, .description {
+      color: #94a3b8;
+    }
+  }
+
+  .assignment-meta-chips .meta-pill {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &.meta-cohort {
+      background: #164e63;
+      color: #67e8f9;
+      border-color: #0891b2;
+    }
+    &.meta-direct {
+      background: #3b0764;
+      color: #d8b4fe;
+      border-color: #7e22ce;
+    }
+    &.meta-all {
+      background: #1e293b;
+      color: #cbd5e1;
+      border-color: #334155;
+    }
+    &.meta-due {
+      background: #451a03;
+      color: #fde047;
+      border-color: #78350f;
+    }
+  }
+
+  /* Completed Assessment Summary Box */
+  .completed-summary-box {
+    background: #182230;
+    border-color: #1f2937;
+
+    .summary-stat-row .stat-cell {
+      .cell-label {
+        color: #94a3b8;
+      }
+      strong {
+        color: #f8fafc;
+
+        &.cell-pct {
+          color: #818cf8;
+        }
+        &.text-green {
+          color: #34d399;
+        }
+      }
+    }
+
+    .completed-timestamp {
+      color: #64748b;
+      border-top-color: #1f2937;
+    }
+  }
+
+  .in-progress-box {
+    background: #451a03;
+    border-color: #78350f;
+
+    .in-progress-info {
+      strong {
+        color: #fde047;
+      }
+      p {
+        color: #fef08a;
+      }
+    }
+  }
+
+  .expired-box {
+    background: #1e293b;
+    border-color: #334155;
+
+    .expired-info {
+      strong {
+        color: #f87171;
+      }
+      p {
+        color: #fca5a5;
+      }
+    }
+  }
+
+  .card-actions-cluster {
+    .btn-view-report {
+      background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+      color: #ffffff;
+      &:hover {
+        background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
+      }
+    }
+
+    .btn-view-breakdown {
+      background: #1e293b;
+      border-color: #334155;
+      color: #cbd5e1;
+
+      &:hover {
+        background: #334155;
+        border-color: #475569;
+        color: #ffffff;
+      }
+    }
+  }
+
+  .assessment-details .detail-item {
+    color: #94a3b8;
+
+    strong {
+      color: #f8fafc;
+    }
+    .detail-icon {
+      color: #818cf8;
+    }
+  }
+
+  .gate-pending {
+    background: #451a03;
+    border-color: #78350f;
+    color: #fde047;
+    strong, p { color: #fde047; }
+  }
+
+  .gate-complete {
+    background: #064e3b;
+    border-color: #047857;
+    color: #86efac;
+    strong, p { color: #86efac; }
+  }
+
+  .btn-secondary,
+  .btn-outline {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+
+  /* Instruction Modal in Dark Mode */
+  .instruction-modal {
+    background: #111827;
+    border-color: #1f2937;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+
+    .modal-header {
+      border-bottom-color: #1f2937;
+      h2 { color: #f8fafc; }
+      .btn-close { color: #94a3b8; &:hover { color: #f8fafc; } }
+    }
+
+    .meta-strip .meta-card {
+      background: #1e293b;
+      border-color: #334155;
+      .meta-label { color: #94a3b8; }
+      strong { color: #f8fafc; }
+    }
+
+    .rules-section {
+      h3 { color: #f8fafc; }
+      .rules-list li {
+        background: #1e293b;
+        border-color: #334155;
+        color: #cbd5e1;
+        strong { color: #f8fafc; }
+      }
+    }
+
+    .modal-footer {
+      background: #0f172a;
+      border-top-color: #1f2937;
+    }
+  }
+}
+

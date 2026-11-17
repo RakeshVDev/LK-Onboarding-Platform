@@ -43,12 +43,11 @@
           <app-brand-logo
             variant="print"
             size="md"
-            badgeText="OFFICIAL"
-            subtitle="Enterprise Evaluation & Psychometric Report">
+            badgeText="OFFICIAL">
           </app-brand-logo>
         </div>
         <div class="badge-row">
-          <span class="eyebrow">CSM™ ENTERPRISE ASSESSMENT · LEARNER DEVELOPMENT &amp; EVALUATION</span>
+          <span class="eyebrow">ASE ASSESSMENT TOOL · OFFICIAL REPORT</span>
           <span class="type-tag" [attr.data-type]="report.assessment_type">{{ report.assessment_type ? (report.assessment_type.replace('_', ' ') | titlecase) : 'Official' }}</span>
         </div>
         <h1>{{ reportTitle }}</h1>

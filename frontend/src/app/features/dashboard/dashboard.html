@@ -12,51 +12,492 @@
   </div>
   } @else if (user()) {
 
-  <!-- TOP HERO WELCOME BAR -->
-  <header class="dash-hero">
-    <div class="hero-main">
-      <div class="hero-badge-row">
-        <span class="role-track-pill" [attr.data-role]="user()?.role">
-          {{ getRoleLabel(user()?.role) }}
-        </span>
-        <span class="date-chip">
-          <span class="cal-icon">📅</span> {{ todayFormatted() }}
-        </span>
+  <!-- ========================================================= -->
+  <!-- EXECUTIVE HEADER & WORKSPACE ACTIONS                      -->
+  <!-- ========================================================= -->
+  <header class="trainery-top-header">
+    <div class="dashboard-heading-meta">
+      <div class="meta-tag-row">
+        <span class="meta-badge-role">{{ getRoleLabel(user()?.role) }} Center</span>
+        <span class="meta-badge-live">● Operational</span>
       </div>
-
-      <h1 class="hero-greeting">{{ greeting() }}, {{ user()?.full_name }}! 👋</h1>
-      <p class="hero-subtitle">
-        @if (user()?.role === 'learner') {
-          Welcome to your ASE Assessment Tool workspace. Complete your assigned skill assessments and track your induction progress in real time.
-        } @else if (user()?.role === 'teacher') {
-          Welcome to your Academic Faculty Suite. Oversee cohort progress, evaluate assessment submissions, and curate question banks.
-        } @else {
-          Welcome to the Enterprise Operations Center. Monitor organizational telemetry, assessment analytics, and manage access controls.
-        }
-      </p>
+      <h1 class="dashboard-page-title">Executive Operations Center</h1>
     </div>
 
-    <!-- Quick User Profile Card -->
-    <a routerLink="/profile" class="hero-profile-card" title="Click to view full profile">
-      <div class="dash-avatar">
-        {{ userInitial }}
-        <span class="live-status-dot"></span>
-      </div>
-      <div class="profile-details">
-        <span class="user-name">{{ user()?.full_name }}</span>
-        <span class="user-role">{{ getRoleLabel(user()?.role) }}</span>
-        <span class="profile-link-hint">Manage Profile &rarr;</span>
-      </div>
-    </a>
+    <div class="header-action-pills">
+      <button type="button" class="btn-trai-insights" (click)="refreshLearnerAssessments()" title="Sync live telemetry">
+        <span class="sparkle-icon">✨</span>
+        <span>{{ syncingAssessments() ? 'Syncing...' : 'Assessment Insights' }}</span>
+      </button>
+
+      @if (user()?.role === 'learner') {
+      <a routerLink="/my-assessments" class="btn-trainery-primary">
+        <span>+ Take Assessment</span>
+      </a>
+      } @else if (user()?.role === 'teacher') {
+      <a routerLink="/assessments" class="btn-trainery-primary">
+        <span>+ Create Assessment</span>
+      </a>
+      } @else {
+      <a routerLink="/assessments" class="btn-trainery-primary">
+        <span>+ New Assessment</span>
+      </a>
+      }
+    </div>
   </header>
 
   <!-- ========================================================= -->
-  <!-- 1. LEARNER / NEW JOINEE DASHBOARD                         -->
+  <!-- EXECUTIVE WELCOME SPOTLIGHT HERO                          -->
   <!-- ========================================================= -->
+  <div class="executive-welcome-hero">
+    <div class="hero-left-content">
+      <div class="hero-badges-row">
+        <span class="hero-role-badge">
+          <span class="role-icon">⚡</span>
+          {{ getRoleLabel(user()?.role) | uppercase }}
+        </span>
+        <span class="hero-date-badge">
+          <span class="cal-icon">📅</span>
+          {{ todayFormatted() }}
+        </span>
+        <span class="hero-status-badge">
+          <span class="status-pulse-dot"></span>
+          Operational
+        </span>
+      </div>
+
+      <h1 class="hero-title">
+        {{ greeting() }}, {{ user()?.full_name || 'Team Member' }}! 👋
+      </h1>
+
+      <p class="hero-subtitle">
+        @if (user()?.role === 'learner') {
+        Welcome to your Skill Development &amp; Induction Workspace. Track onboarding milestones, complete assigned
+        assessments, and access curriculum tracks.
+        } @else if (user()?.role === 'teacher') {
+        Welcome to the Faculty Evaluation Center. Oversee cohort performance, evaluate submissions, and conduct live
+        training sessions.
+        } @else {
+        Welcome to the Enterprise Operations Center. Monitor organizational telemetry, assessment analytics, and manage
+        access controls.
+        }
+      </p>
+
+      <div class="hero-user-chip">
+        <div class="chip-avatar">
+          {{ userInitial }}
+          <span class="chip-online-dot"></span>
+        </div>
+        <div class="chip-details">
+          <strong class="chip-name">{{ user()?.full_name }}</strong>
+          <span class="chip-role">{{ getRoleLabel(user()?.role) }}</span>
+        </div>
+        <a routerLink="/profile" class="chip-link">
+          Manage Profile &rarr;
+        </a>
+      </div>
+    </div>
+
+    <div class="hero-actions-col">
+      @if (user()?.role === 'learner') {
+      <a routerLink="/my-assessments" class="hero-cta-btn btn-primary-cta">
+        <span>Take Assessment &rarr;</span>
+      </a>
+      <a routerLink="/courses" class="hero-cta-btn btn-glass-cta">
+        <span>Browse Courses &rarr;</span>
+      </a>
+      } @else if (user()?.role === 'teacher') {
+      <a routerLink="/assessments" class="hero-cta-btn btn-primary-cta">
+        <span>+ Create Assessment</span>
+      </a>
+      <a routerLink="/live-classes" class="hero-cta-btn btn-glass-cta">
+        <span>Schedule Live Class</span>
+      </a>
+      } @else {
+      <a routerLink="/assessments" class="hero-cta-btn btn-primary-cta">
+        <span>+ New Assessment</span>
+      </a>
+      <a routerLink="/users" class="hero-cta-btn btn-glass-cta">
+        <span>Manage Users &rarr;</span>
+      </a>
+      }
+    </div>
+  </div>
+
+  <!-- Dashboard Title & Dynamic Controls Bar -->
+  <div class="trainery-title-bar">
+    <div class="title-col">
+      <h2 class="trainery-main-title">
+        @if (user()?.role === 'learner') {
+        Learning &amp; Evaluation Center
+        } @else if (user()?.role === 'teacher') {
+        Faculty &amp; Assessment Suite
+        } @else {
+        Operations &amp; Governance Center
+        }
+      </h2>
+    </div>
+
+    <div class="controls-col">
+      <button type="button" class="btn-ctrl-filter" (click)="refreshLearnerAssessments()" title="Refresh telemetry">
+        <svg class="ctrl-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>{{ syncingAssessments() ? 'Syncing...' : 'Refresh' }}</span>
+      </button>
+
+      <div class="ctrl-dropdown-wrapper">
+        <select class="ctrl-select" [(ngModel)]="selectedFilterDepartment">
+          <option value="all">All departments</option>
+          @for (dept of availableDepartments(); track dept.id) {
+          <option [value]="dept.id">{{ dept.name }}</option>
+          }
+        </select>
+        <svg class="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+
+      <div class="period-chip">
+        <span class="cal-icon">📅</span>
+        <span>{{ todayFormatted() }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trainery Tab Navigation Bar -->
+  <nav class="trainery-tabs" aria-label="Dashboard Views">
+    <button type="button" class="tab-item" [class.active]="activeTab() === 'overview'"
+      (click)="setActiveTab('overview')">
+      Overview
+    </button>
+    <button type="button" class="tab-item" [class.active]="activeTab() === 'courses'" (click)="setActiveTab('courses')">
+      Course Summary
+    </button>
+    <button type="button" class="tab-item" [class.active]="activeTab() === 'assessments'"
+      (click)="setActiveTab('assessments')">
+      Skill Assessments
+    </button>
+    <button type="button" class="tab-item" [class.active]="activeTab() === 'analytics'"
+      (click)="setActiveTab('analytics')">
+      Analytics
+    </button>
+  </nav>
+
+  <!-- ========================================================= -->
+  <!-- TAB 1: OVERVIEW                                           -->
+  <!-- ========================================================= -->
+  @if (activeTab() === 'overview') {
+
+  <!-- 4 Dynamic KPI Cards Row -->
+  <section class="trainery-kpi-row">
+    <!-- Card 1: Active Assessments / Courses -->
+    <div class="kpi-card">
+      <span class="kpi-title">
+        {{ user()?.role === 'learner' ? 'Assigned Assessments' : 'Total Test Templates' }}
+      </span>
+      <div class="kpi-number-row">
+        <strong class="kpi-value">
+          {{ user()?.role === 'learner' ? totalAssignedCount() : (templates().length ||
+          adminResultsStats().totalAssessments) }}
+        </strong>
+      </div>
+      <span class="kpi-trend positive">
+        {{ user()?.role === 'learner' ? (completedAssignedCount() + ' Completed') : (cohortsCount() + ' Active Cohorts')
+        }}
+      </span>
+    </div>
+
+    <!-- Card 2: Avg completion rate / Pass Rate -->
+    <div class="kpi-card">
+      <span class="kpi-title">
+        {{ user()?.role === 'learner' ? 'Completion Rate' : 'Global Mean Score' }}
+      </span>
+      <div class="kpi-number-row">
+        <strong class="kpi-value">
+          {{ user()?.role === 'learner' ? (trainingProgressPercent() + '%') : (adminResultsStats().averageScore + '%')
+          }}
+        </strong>
+      </div>
+      <span class="kpi-trend positive">
+        {{ user()?.role === 'learner' ? (learnerAverageScore() > 0 ? (learnerAverageScore() + '% Verified Score') : 'In
+        Progress') : (adminResultsStats().completedCount + ' Submissions') }}
+      </span>
+    </div>
+
+    <!-- Card 3: Pending Action -->
+    <div class="kpi-card">
+      <span class="kpi-title">
+        {{ user()?.role === 'learner' ? 'Pending Assessments' : 'Pending Track Requests' }}
+      </span>
+      <div class="kpi-number-row">
+        <strong class="kpi-value"
+          [class.text-orange]="(user()?.role === 'learner' ? pendingAssignedCount() : pendingRequestsCount()) > 0">
+          {{ user()?.role === 'learner' ? pendingAssignedCount() : pendingRequestsCount() }}
+        </strong>
+      </div>
+      <span class="kpi-subtext"
+        [class.text-orange]="(user()?.role === 'learner' ? pendingAssignedCount() : pendingRequestsCount()) > 0">
+        {{ (user()?.role === 'learner' ? pendingAssignedCount() : pendingRequestsCount()) > 0 ? 'Requires attention' :
+        'Up to date' }}
+      </span>
+    </div>
+
+    <!-- Card 4: Platform Scale -->
+    <div class="kpi-card">
+      <span class="kpi-title">
+        {{ user()?.role === 'learner' ? 'Enrolled Curriculum' : 'Platform Users' }}
+      </span>
+      <div class="kpi-number-row">
+        <strong class="kpi-value text-blue">
+          {{ user()?.role === 'learner' ? coursesCount() : (userStats().total || 'Active') }}
+        </strong>
+      </div>
+      <span class="kpi-subtext text-blue">
+        {{ user()?.role === 'learner' ? 'Available Training Modules' : (departmentsCount() + ' Departments') }}
+      </span>
+    </div>
+  </section>
+
+  <!-- 2-Column Analytics Visualizations -->
+  <section class="trainery-analytics-grid">
+    <!-- Left Card: Category Breakdown -->
+    <div class="analytics-card card-donut">
+      <h3 class="analytics-title">Assessments by Category</h3>
+      @if (categoryBreakdown().length > 0) {
+      <div class="donut-chart-wrapper">
+        <div class="donut-visual">
+          <svg viewBox="0 0 140 140" class="donut-svg">
+            <circle cx="70" cy="70" r="54" fill="none" stroke="#e2e8f0" stroke-width="16"></circle>
+            @for (cat of categoryBreakdown(); track cat.name; let idx = $index) {
+            <circle cx="70" cy="70" r="54" fill="none" [attr.stroke]="cat.color" stroke-width="16"
+              [attr.stroke-dasharray]="(cat.percentage * 3.392) + ' 339.2'" [attr.stroke-dashoffset]="-idx * 60">
+            </circle>
+            }
+          </svg>
+          <div class="donut-center-label">
+            <span class="donut-count">
+              {{ user()?.role === 'learner' ? totalAssignedCount() : (templates().length ||
+              adminResultsStats().totalAssessments) }}
+            </span>
+          </div>
+        </div>
+
+        <div class="donut-legend">
+          @for (cat of categoryBreakdown(); track cat.name) {
+          <div class="legend-item">
+            <span class="legend-dot" [style.background]="cat.color"></span>
+            <span class="legend-label">{{ cat.name }}</span>
+            <span class="legend-val">{{ cat.percentage }}%</span>
+          </div>
+          }
+        </div>
+      </div>
+      } @else {
+      <div class="empty-analytics-msg">
+        <span>📊</span>
+        <p>No assessment categories configured yet.</p>
+      </div>
+      }
+
+      <!-- Dynamic Platform Insight Callout Box -->
+      <div class="trai-insight-box">
+        <span class="insight-tag">PLATFORM INSIGHT</span>
+        <p class="insight-text">{{ dynamicInsight() }}</p>
+      </div>
+    </div>
+
+    <!-- Right Card: Track Progress -->
+    <div class="analytics-card card-progress-bars">
+      <h3 class="analytics-title">
+        {{ user()?.role === 'learner' ? 'Batch & Track Progress' : 'Cohort Track Benchmarks' }}
+      </h3>
+      @if (trackCompletionList().length > 0) {
+      <div class="completion-bars-list">
+        @for (item of trackCompletionList(); track item.name) {
+        <div class="bar-row">
+          <span class="bar-name" [title]="item.name">{{ item.name }}</span>
+          <div class="bar-track">
+            <div class="bar-fill" [style.width.%]="item.percentage" [style.background]="item.color"></div>
+          </div>
+          <span class="bar-pct" [style.color]="item.color">{{ item.percentage }}%</span>
+        </div>
+        }
+      </div>
+      } @else {
+      <div class="empty-analytics-msg">
+        <span>📈</span>
+        <p>No cohort progress data available yet.</p>
+      </div>
+      }
+    </div>
+  </section>
+
+  <!-- Real Data Table Section -->
+  <section class="trainery-table-section">
+    <div class="table-card">
+      <div class="table-card-header">
+        <div class="table-title-group">
+          <h3 class="table-heading">
+            {{ user()?.role === 'learner' ? 'Assigned Assessments' : 'Assessment Question Banks & Templates' }}
+          </h3>
+          <span class="table-count-badge">
+            {{ user()?.role === 'learner' ? filteredAssignedAssessments().length : filteredTemplates().length }} Total
+          </span>
+        </div>
+
+        <div class="table-header-center">
+          <div class="table-search-box">
+            <span class="search-svg">🔍</span>
+            <input type="text" [(ngModel)]="tableSearch" placeholder="Search assessments by title or type..." />
+          </div>
+        </div>
+
+        <div class="table-header-link">
+          <a [routerLink]="user()?.role === 'learner' ? '/my-assessments' : '/assessments'" class="link-action">
+            View All &rarr;
+          </a>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        @if (user()?.role === 'learner') {
+        @if (filteredAssignedAssessments().length === 0) {
+        <div class="empty-table-state">
+          <span>📝</span>
+          <h4>No assessments matching search</h4>
+          <p>When an assessment is assigned to your account or cohort, it will appear here with live deadlines.</p>
+          <a routerLink="/courses" class="btn-create-first">Explore Courses &rarr;</a>
+        </div>
+        } @else {
+        <table class="trainery-data-table">
+          <thead>
+            <tr>
+              <th class="col-name">ASSESSMENT NAME</th>
+              <th class="col-type">CATEGORY</th>
+              <th class="col-status">STATUS</th>
+              <th class="col-learners">QUESTIONS</th>
+              <th class="col-completion">RESULT / TIME</th>
+              <th class="col-due">DUE DATE</th>
+              <th class="col-action">ACTION</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of filteredAssignedAssessments(); track item.template_id) {
+            <tr>
+              <td class="col-name">
+                <div class="cell-name-dot">
+                  <span class="dot-indicator" [class.dot-green]="item.status === 'COMPLETED'"
+                    [class.dot-orange]="item.status === 'IN_PROGRESS'"
+                    [class.dot-purple]="item.status === 'NOT_STARTED'"></span>
+                  <span class="name-text">{{ item.name }}</span>
+                </div>
+              </td>
+              <td class="col-type">
+                <span class="pill-type-tms">{{ item.category_label || item.assessment_type || 'Evaluation' }}</span>
+              </td>
+              <td class="col-status">
+                <span
+                  [class]="item.status === 'COMPLETED' ? 'pill-status-active' : (item.status === 'IN_PROGRESS' ? 'pill-status-inprogress' : 'pill-status-pending')">
+                  {{ getStatusBadgeLabel(item.status) }}
+                </span>
+              </td>
+              <td class="col-learners">{{ item.question_count }} Questions</td>
+              <td class="col-completion">
+                <div class="table-progress-wrap">
+                  <div class="table-progress-bar">
+                    <div class="table-progress-fill" [class.green]="item.status === 'COMPLETED'"
+                      [class.orange]="item.status === 'IN_PROGRESS'" [class.purple]="item.status === 'NOT_STARTED'"
+                      [style.width.%]="item.status === 'COMPLETED' ? 100 : (item.status === 'IN_PROGRESS' ? 50 : 10)">
+                    </div>
+                  </div>
+                  <span class="table-pct-label">
+                    {{ item.status === 'COMPLETED' ? ((item.overall_percentage ?? 0) + '% Score') :
+                    (item.duration_minutes + ' Mins') }}
+                  </span>
+                </div>
+              </td>
+              <td class="col-due">{{ (item.due_at | date:'mediumDate') || 'Open Access' }}</td>
+              <td class="col-action">
+                @if (item.status === 'COMPLETED' && item.session_id) {
+                <a [routerLink]="['/assessments/report', item.session_id]" class="link-action">View Report</a>
+                } @else if (item.status === 'IN_PROGRESS' && item.session_id) {
+                <a [routerLink]="['/assessments/take', item.session_id]" class="link-action">Continue</a>
+                } @else {
+                <a routerLink="/my-assessments" [queryParams]="{ startTemplateId: item.template_id }"
+                  class="link-action">Start Test</a>
+                }
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+        }
+        } @else {
+        @if (filteredTemplates().length === 0) {
+        <div class="empty-table-state">
+          <span>⚡</span>
+          <h4>No test templates match search</h4>
+          <p>Create examination templates with question banks to distribute across cohorts.</p>
+          <a routerLink="/assessments" class="btn-create-first">+ Create Template</a>
+        </div>
+        } @else {
+        <table class="trainery-data-table">
+          <thead>
+            <tr>
+              <th class="col-name">TEMPLATE NAME</th>
+              <th class="col-type">DOMAIN TYPE</th>
+              <th class="col-status">STATUS</th>
+              <th class="col-learners">DURATION</th>
+              <th class="col-completion">QUESTIONS</th>
+              <th class="col-due">TARGET SCOPE</th>
+              <th class="col-action">ACTION</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (tpl of filteredTemplates().slice(0, 8); track tpl.id) {
+            <tr>
+              <td class="col-name">
+                <div class="cell-name-dot">
+                  <span class="dot-indicator dot-purple"></span>
+                  <span class="name-text">{{ tpl.name }}</span>
+                </div>
+              </td>
+              <td class="col-type">
+                <span class="pill-type-tms">{{ tpl.assessment_type || 'General' }}</span>
+              </td>
+              <td class="col-status">
+                <span class="pill-status-active">{{ tpl.is_active ? 'Active' : 'Draft' }}</span>
+              </td>
+              <td class="col-learners">{{ tpl.duration_minutes || 60 }} Mins</td>
+              <td class="col-completion">
+                <div class="table-progress-wrap">
+                  <div class="table-progress-bar">
+                    <div class="table-progress-fill purple" [style.width.%]="tpl.question_count > 0 ? 100 : 0"></div>
+                  </div>
+                  <span class="table-pct-label text-purple">{{ tpl.question_count }} Questions</span>
+                </div>
+              </td>
+              <td class="col-due">{{ tpl.assignment_scope || 'All Cohorts' }}</td>
+              <td class="col-action">
+                <a routerLink="/assessments" class="link-action">Manage &rarr;</a>
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+        }
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- Role-Specific Modules & Alerts -->
   @if (user()?.role === 'learner') {
   <div class="role-dashboard learner-layout">
-
-    <!-- LIVE ASSESSMENT NOTIFICATIONS PANEL (Incomplete / Assigned / In Progress / Expired) -->
+    <!-- LIVE ASSESSMENT NOTIFICATIONS PANEL -->
     @if (notifications().length > 0) {
     <section class="notifications-panel" aria-live="polite">
       <div class="notifications-header">
@@ -70,12 +511,9 @@
         </div>
         <div class="notif-sync-controls">
           @if (lastSyncedAt()) {
-            <span class="last-sync-label">Synced {{ lastSyncedAt() | date:'shortTime' }}</span>
+          <span class="last-sync-label">Synced {{ lastSyncedAt() | date:'shortTime' }}</span>
           }
-          <button
-            type="button"
-            class="btn-sync-now"
-            [disabled]="syncingAssessments()"
+          <button type="button" class="btn-sync-now" [disabled]="syncingAssessments()"
             (click)="refreshLearnerAssessments()">
             <span>{{ syncingAssessments() ? 'Syncing...' : '↻ Sync Status' }}</span>
           </button>
@@ -84,79 +522,77 @@
 
       <div class="notifications-list">
         @for (item of notifications(); track item.template_id) {
-          <article class="notification-card" [attr.data-status]="item.status">
-            <div class="notif-left">
-              <div class="notif-icon-box" [attr.data-type]="item.assessment_type">
-                {{ getAssessmentIcon(item.assessment_type) }}
-              </div>
-              <div class="notif-content">
-                <div class="notif-top-line">
-                  <strong class="notif-headline">
-                    @if (item.status === 'IN_PROGRESS') {
-                      {{ item.notification_title || 'Assessment In Progress' }}
-                    } @else if (item.status === 'EXPIRED') {
-                      {{ item.notification_title || 'Assessment Expired' }}
-                    } @else {
-                      {{ item.notification_title || 'New Assessment Assigned' }}
-                    }
-                  </strong>
-
-                  <span class="notif-status-pill" [attr.data-status]="item.status">
-                    @if (item.status === 'IN_PROGRESS') {
-                      <span class="pill-dot blue"></span> In Progress
-                    } @else if (item.status === 'EXPIRED') {
-                      <span class="pill-dot red"></span> Expired
-                    } @else {
-                      <span class="pill-dot amber"></span> Pending
-                    }
-                  </span>
-
-                  <span class="notif-category-chip">{{ item.category_label }}</span>
-
-                  @if (item.cohort_name) {
-                    <span class="notif-cohort-chip">Cohort: {{ item.cohort_name }}</span>
-                  }
-                </div>
-
-                <h3 class="notif-assessment-name">{{ item.name }}</h3>
-
-                <div class="notif-meta-row">
-                  <span><strong>{{ item.question_count }}</strong> Questions</span>
-                  <span>·</span>
-                  <span><strong>{{ item.duration_minutes }}</strong> Minutes</span>
-                  <span>·</span>
-                  <span>Assigned {{ item.assigned_at | date:'mediumDate' }}</span>
-                  @if (item.due_at) {
-                    <span>·</span>
-                    <span class="due-tag">Due {{ item.due_at | date:'medium' }}</span>
-                  }
+        <article class="notification-card" [attr.data-status]="item.status">
+          <div class="notif-left">
+            <div class="notif-icon-box" [attr.data-type]="item.assessment_type">
+              {{ getAssessmentIcon(item.assessment_type) }}
+            </div>
+            <div class="notif-content">
+              <div class="notif-top-line">
+                <strong class="notif-headline">
                   @if (item.status === 'IN_PROGRESS') {
-                    <span>·</span>
-                    <span class="timer-tag">
-                      ⏱ Remaining: <strong>{{ formatRemainingTime(getLiveRemainingSeconds(item)) }}</strong>
-                    </span>
+                  {{ item.notification_title || 'Assessment In Progress' }}
+                  } @else if (item.status === 'EXPIRED') {
+                  {{ item.notification_title || 'Assessment Expired' }}
+                  } @else {
+                  {{ item.notification_title || 'New Assessment Assigned' }}
                   }
-                </div>
+                </strong>
+
+                <span class="notif-status-pill" [attr.data-status]="item.status">
+                  @if (item.status === 'IN_PROGRESS') {
+                  <span class="pill-dot blue"></span> In Progress
+                  } @else if (item.status === 'EXPIRED') {
+                  <span class="pill-dot red"></span> Expired
+                  } @else {
+                  <span class="pill-dot amber"></span> Pending
+                  }
+                </span>
+
+                <span class="notif-category-chip">{{ item.category_label }}</span>
+
+                @if (item.cohort_name) {
+                <span class="notif-cohort-chip">Cohort: {{ item.cohort_name }}</span>
+                }
+              </div>
+
+              <h3 class="notif-assessment-name">{{ item.name }}</h3>
+
+              <div class="notif-meta-row">
+                <span><strong>{{ item.question_count }}</strong> Questions</span>
+                <span>·</span>
+                <span><strong>{{ item.duration_minutes }}</strong> Minutes</span>
+                <span>·</span>
+                <span>Assigned {{ item.assigned_at | date:'mediumDate' }}</span>
+                @if (item.due_at) {
+                <span>·</span>
+                <span class="due-tag">Due {{ item.due_at | date:'medium' }}</span>
+                }
+                @if (item.status === 'IN_PROGRESS') {
+                <span>·</span>
+                <span class="timer-tag">
+                  ⏱ Remaining: <strong>{{ formatRemainingTime(getLiveRemainingSeconds(item)) }}</strong>
+                </span>
+                }
               </div>
             </div>
+          </div>
 
-            <div class="notif-actions">
-              @if (item.status === 'IN_PROGRESS' && item.can_continue && item.session_id) {
-                <a [routerLink]="['/assessments/take', item.session_id]" class="btn-notif btn-continue">
-                  <span>Continue Assessment &rarr;</span>
-                </a>
-              } @else if (item.status === 'NOT_STARTED' && item.can_start) {
-                <a
-                  routerLink="/my-assessments"
-                  [queryParams]="{ startTemplateId: item.template_id }"
-                  class="btn-notif btn-start-notif">
-                  <span>Start Assessment &rarr;</span>
-                </a>
-              } @else {
-                <span class="expired-readonly-note">Submission Window Closed</span>
-              }
-            </div>
-          </article>
+          <div class="notif-actions">
+            @if (item.status === 'IN_PROGRESS' && item.can_continue && item.session_id) {
+            <a [routerLink]="['/assessments/take', item.session_id]" class="btn-notif btn-continue">
+              <span>Continue Assessment &rarr;</span>
+            </a>
+            } @else if (item.status === 'NOT_STARTED' && item.can_start) {
+            <a routerLink="/my-assessments" [queryParams]="{ startTemplateId: item.template_id }"
+              class="btn-notif btn-start-notif">
+              <span>Start Assessment &rarr;</span>
+            </a>
+            } @else {
+            <span class="expired-readonly-note">Submission Window Closed</span>
+            }
+          </div>
+        </article>
         }
       </div>
     </section>
@@ -189,8 +625,7 @@
           </div>
         </div>
 
-        <div
-          class="milestone-step"
+        <div class="milestone-step"
           [class.step-completed]="totalAssignedCount() > 0 && completedAssignedCount() >= totalAssignedCount()"
           [class.step-active]="totalAssignedCount() === 0 || completedAssignedCount() < totalAssignedCount()">
           <div class="step-icon">
@@ -205,8 +640,7 @@
           </div>
         </div>
 
-        <div
-          class="milestone-step"
+        <div class="milestone-step"
           [class.step-completed]="coursesCount() > 0 && totalAssignedCount() > 0 && completedAssignedCount() >= totalAssignedCount()"
           [class.step-active]="completedAssignedCount() >= 1 && completedAssignedCount() < totalAssignedCount()">
           <div class="step-icon">▣</div>
@@ -228,275 +662,95 @@
       </div>
     </section>
 
-    <!-- ========================================================= -->
-    <!-- TECH TRACK / DEPARTMENT SELECTION & ALLOCATION CARD      -->
-    <!-- ========================================================= -->
+    <!-- Department Allocation Status Card -->
     <section class="department-track-card">
       @if (trackSubmitSuccess()) {
-        <div class="alert-success-box">
-          <span>✓</span> {{ trackSubmitSuccess() }}
-        </div>
+      <div class="alert-success-box">
+        <span>✓</span> {{ trackSubmitSuccess() }}
+      </div>
       }
       @if (trackSubmitError()) {
-        <div class="alert-error-box">
-          <span>⚠</span> {{ trackSubmitError() }}
-        </div>
+      <div class="alert-error-box">
+        <span>⚠</span> {{ trackSubmitError() }}
+      </div>
       }
 
-      <!-- Case 1: Approved -->
       @if (myDeptRequest()?.status === 'approved') {
-        <div class="track-status-banner track-approved">
-          <div class="status-icon-box">✓</div>
-          <div class="status-content">
-            <span class="track-eyebrow">DEPARTMENT ALLOCATED &amp; VERIFIED</span>
-            <h3>You are assigned to the {{ myDeptRequest()?.department_name }} Track</h3>
-            <p>
-              Your tech stack preference has been reviewed and approved by your instructor/administrator.
-              All specialized study materials, syllabus modules, and course resources are now accessible.
-            </p>
-            <div class="approved-actions">
-              <a routerLink="/courses" class="btn-track-primary">
-                <span>View My Courses &amp; Study Materials →</span>
-              </a>
-              <a routerLink="/cohorts" class="btn-track-primary" style="margin-left: 10px;">
-                <span>Open My Cohort Workspace →</span>
-              </a>
-              <a routerLink="/live-classes" class="btn-track-primary" style="margin-left: 10px;">
-                <span>Open Department Live Classes →</span>
-              </a>
-            </div>
+      <div class="track-status-banner track-approved">
+        <div class="status-icon-box">✓</div>
+        <div class="status-content">
+          <span class="track-eyebrow">DEPARTMENT ALLOCATED &amp; VERIFIED</span>
+          <h3>You are assigned to the {{ myDeptRequest()?.department_name }} Track</h3>
+          <p>
+            Your tech stack preference has been reviewed and approved by your instructor/administrator.
+            All specialized study materials, syllabus modules, and course resources are now accessible.
+          </p>
+          <div class="approved-actions">
+            <a routerLink="/courses" class="btn-track-primary">
+              <span>View My Courses &amp; Study Materials →</span>
+            </a>
+            <a routerLink="/cohorts" class="btn-track-primary" style="margin-left: 10px;">
+              <span>Open My Cohort Workspace →</span>
+            </a>
+            <a routerLink="/live-classes" class="btn-track-primary" style="margin-left: 10px;">
+              <span>Open Department Live Classes →</span>
+            </a>
           </div>
         </div>
+      </div>
 
-        @if (upcomingLiveClasses().length > 0) {
-          <div class="live-classes-preview-strip">
-            <div class="live-strip-header">
-              <h4>📡 Upcoming Live Classes ({{ myDeptRequest()?.department_name }})</h4>
-              <a routerLink="/live-classes" class="live-link-btn">View All Live Sessions &rarr;</a>
-            </div>
-            <div class="live-mini-grid">
-              @for (cls of upcomingLiveClasses(); track cls.id) {
-                <div class="live-mini-card" [class.is-live]="cls.status === 'live'">
-                  <div class="live-mini-top">
-                    <span>{{ cls.status === 'live' ? '🔴 LIVE NOW' : '📅 SCHEDULED' }}</span>
-                    <span>{{ cls.platform }}</span>
-                  </div>
-                  <strong>{{ cls.title }}</strong>
-                  <span class="live-mini-meta">{{ cls.scheduled_start | date:'medium' }} · {{ cls.duration_minutes }}m</span>
-                  <span class="live-mini-teacher">Instructor: <strong>{{ cls.instructor_name || 'Assigned Host' }}</strong></span>
-                  @if (cls.status === 'live') {
-                    <button type="button" class="btn-join-live-mini" (click)="joinLiveClass(cls, $event)">
-                      Join Live →
-                    </button>
-                  }
-                </div>
-              }
-            </div>
-          </div>
-        }
-      }
-
-      <!-- Case 2: Pending Approval or Selection -->
-      @else {
-        <div class="track-status-banner track-pending">
-          <div class="status-icon-box">⏳</div>
-          <div class="status-content">
-            <span class="track-eyebrow">SEQUENTIAL ONBOARDING GATE</span>
-            <h3>
-              {{ myDeptRequest()?.department_name
-                ? 'Requested Track: ' + myDeptRequest()?.department_name + ' (Pending Approval)'
-                : 'Department Allocation Pending Approval' }}
-            </h3>
-            <p>
-              Platform courses and cohorts remain locked until an Administrator activates your onboarding
-              step and approves your department selection.
-            </p>
-            <div class="approved-actions">
-              <a routerLink="/department-selection" class="btn-track-primary">
-                <span>Open Department Selection &rarr;</span>
-              </a>
-            </div>
-          </div>
+      @if (upcomingLiveClasses().length > 0) {
+      <div class="live-classes-preview-strip">
+        <div class="live-strip-header">
+          <h4>📡 Upcoming Live Classes ({{ myDeptRequest()?.department_name }})</h4>
+          <a routerLink="/live-classes" class="live-link-btn">View All Live Sessions &rarr;</a>
         </div>
-      }
-    </section>
-
-    <!-- Learner KPI Stat Cards -->
-    <section class="stats-row">
-      <div class="stat-card">
-        <div class="stat-icon-wrap icon-purple">
-          <span>📝</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Assessments Completed</span>
-          <strong class="stat-value">{{ completedAssignedCount() }} of {{ totalAssignedCount() }}</strong>
-          <span class="stat-trend positive">
-            @if (assignedStats().in_progress_count > 0 || assignedStats().not_started_count > 0) {
-              {{ assignedStats().not_started_count + assignedStats().in_progress_count }} Action Pending
-            } @else if (totalAssignedCount() > 0) {
-              All Assigned Completed
-            } @else {
-              Awaiting Assignment
+        <div class="live-mini-grid">
+          @for (cls of upcomingLiveClasses(); track cls.id) {
+          <div class="live-mini-card" [class.is-live]="cls.status === 'live'">
+            <div class="live-mini-top">
+              <span>{{ cls.status === 'live' ? '🔴 LIVE NOW' : '📅 SCHEDULED' }}</span>
+              <span>{{ cls.platform }}</span>
+            </div>
+            <strong>{{ cls.title }}</strong>
+            <span class="live-mini-meta">{{ cls.scheduled_start | date:'medium' }} · {{ cls.duration_minutes }}m</span>
+            <span class="live-mini-teacher">Instructor: <strong>{{ cls.instructor_name || 'Assigned Host'
+                }}</strong></span>
+            @if (cls.status === 'live') {
+            <button type="button" class="btn-join-live-mini" (click)="joinLiveClass(cls, $event)">
+              Join Live →
+            </button>
             }
-          </span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon-wrap icon-emerald">
-          <span>🏆</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Performance Average</span>
-          <strong class="stat-value">
-            @if (completedAssignedCount() > 0) {
-              {{ learnerAverageScore() }}%
-            } @else {
-              Pending
-            }
-          </strong>
-          <span class="stat-trend positive">Official Score</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon-wrap icon-blue">
-          <span>▣</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Training Courses</span>
-          <strong class="stat-value">{{ coursesCount() }} Courses</strong>
-          <span class="stat-trend neutral">Enrolled Curriculum</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon-wrap icon-amber">
-          <span>◷</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Assigned Cohort</span>
-          <strong class="stat-value stat-value-compact">{{ assignedCohortLabel() }}</strong>
-          <span class="stat-trend neutral">Active Induction</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Dynamic Assigned Assessments Launcher Center -->
-    <section class="section-container">
-      <div class="section-topbar">
-        <div>
-          <span class="sub-eyebrow">EXAMINATION SUITE</span>
-          <h2>Assigned Skill Assessments ({{ totalAssignedCount() }})</h2>
-          <p>Every assessment currently assigned to your account or cohort appears below with its live status.</p>
-        </div>
-        <div class="topbar-actions">
-          <button
-            type="button"
-            class="btn-sync-subtle"
-            [disabled]="syncingAssessments()"
-            (click)="refreshLearnerAssessments()">
-            {{ syncingAssessments() ? 'Refreshing...' : '↻ Refresh List' }}
-          </button>
-          <a routerLink="/my-assessments" class="btn-secondary-link">
-            <span>Open Assessments Page &rarr;</span>
-          </a>
-          <a routerLink="/my-results" class="btn-secondary-link">
-            <span>View All Results &amp; Reports &rarr;</span>
-          </a>
-        </div>
-      </div>
-
-      @if (assignedAssessments().length === 0) {
-        <div class="empty-assigned-card">
-          <div class="empty-icon">▤</div>
-          <h3>No assessments assigned right now</h3>
-          <p>When an administrator or instructor assigns an assessment to you or your cohort, it will appear here automatically.</p>
-        </div>
-      } @else {
-        <div class="tests-grid">
-          @for (item of assignedAssessments(); track item.template_id) {
-            <article
-              class="test-launch-card"
-              [attr.data-type]="item.assessment_type"
-              [attr.data-status]="item.status">
-              <div class="card-top-tag" [attr.data-type]="item.assessment_type"></div>
-              <div class="test-card-body">
-                <div class="test-header">
-                  <span class="test-symbol">{{ getAssessmentIcon(item.assessment_type) }}</span>
-                  <div class="card-badges-right">
-                    <span class="test-badge">{{ item.category_label }}</span>
-                    <span class="lifecycle-badge" [attr.data-status]="item.status">
-                      {{ getStatusBadgeLabel(item.status) }}
-                    </span>
-                  </div>
-                </div>
-
-                <h3>{{ item.name }}</h3>
-                <p>
-                  {{
-                    item.description ||
-                    'Complete this assessment within your allotted duration to receive an official report card.'
-                  }}
-                </p>
-
-                <div class="test-details-strip">
-                  <span><strong>{{ item.question_count }}</strong> Questions</span>
-                  <span><strong>{{ item.duration_minutes }}</strong> Minutes</span>
-                  @if (item.status === 'IN_PROGRESS') {
-                    <span class="strip-live-time">
-                      <strong>{{ formatRemainingTime(getLiveRemainingSeconds(item)) }}</strong> Left
-                    </span>
-                  } @else if (item.due_at) {
-                    <span>Due <strong>{{ item.due_at | date:'MMM d' }}</strong></span>
-                  } @else {
-                    <span><strong>One</strong> Attempt</span>
-                  }
-                </div>
-
-                <div class="test-action-wrap">
-                  @if (item.status === 'COMPLETED' && item.session_id) {
-                    <div class="completed-actions-row">
-                      <a
-                        [routerLink]="['/assessments/report', item.session_id]"
-                        class="btn-test-action btn-completed"
-                        title="View Official Report Card">
-                        <span>✓ Report ({{ item.overall_percentage ?? 0 }}%)</span>
-                      </a>
-                      <a
-                        [routerLink]="['/assessments/results', item.session_id]"
-                        class="btn-breakdown-link"
-                        title="Question Breakdown">
-                        <span>Breakdown &rarr;</span>
-                      </a>
-                    </div>
-                  } @else if (item.status === 'IN_PROGRESS' && item.can_continue && item.session_id) {
-                    <a
-                      [routerLink]="['/assessments/take', item.session_id]"
-                      class="btn-test-action btn-continue-card">
-                      <span>Continue Assessment ({{ formatRemainingTime(getLiveRemainingSeconds(item)) }}) &rarr;</span>
-                    </a>
-                  } @else if (item.status === 'NOT_STARTED' && item.can_start) {
-                    <a
-                      routerLink="/my-assessments"
-                      [queryParams]="{ startTemplateId: item.template_id }"
-                      class="btn-test-action btn-start">
-                      <span>Start Assessment &rarr;</span>
-                    </a>
-                  } @else {
-                    <button type="button" class="btn-test-action btn-expired" disabled>
-                      <span>Deadline Expired</span>
-                    </button>
-                  }
-                </div>
-              </div>
-            </article>
+          </div>
           }
         </div>
+      </div>
+      }
+      } @else {
+      <div class="track-status-banner track-pending">
+        <div class="status-icon-box">⏳</div>
+        <div class="status-content">
+          <span class="track-eyebrow">SEQUENTIAL ONBOARDING GATE</span>
+          <h3>
+            {{ myDeptRequest()?.department_name
+            ? 'Requested Track: ' + myDeptRequest()?.department_name + ' (Pending Approval)'
+            : 'Department Allocation Pending Approval' }}
+          </h3>
+          <p>
+            Platform courses and cohorts remain locked until an Administrator activates your onboarding
+            step and approves your department selection.
+          </p>
+          <div class="approved-actions">
+            <a routerLink="/department-selection" class="btn-track-primary">
+              <span>Open Department Selection &rarr;</span>
+            </a>
+          </div>
+        </div>
+      </div>
       }
     </section>
 
-    <!-- Learner Quick Shortcuts & Training Center -->
+    <!-- Learner Quick Shortcuts -->
     <section class="section-container">
       <div class="shortcuts-row">
         <a routerLink="/courses" class="shortcut-card">
@@ -536,77 +790,27 @@
         </a>
       </div>
     </section>
-
   </div>
   }
 
-  <!-- ========================================================= -->
-  <!-- 2. TEACHER / INSTRUCTOR DASHBOARD                         -->
-  <!-- ========================================================= -->
+  <!-- Teacher Specific Highlights in Overview -->
   @if (user()?.role === 'teacher') {
   <div class="role-dashboard teacher-layout">
-
     @if (pendingRequestsCount() > 0) {
-      <div class="pending-allocations-alert">
-        <div class="alert-icon-wrap">🔔</div>
-        <div class="alert-text-wrap">
-          <strong>{{ pendingRequestsCount() }} New Joinee Track Allocation{{ pendingRequestsCount() === 1 ? '' : 's' }} Pending Approval</strong>
-          <p>Review new joinees' tech stack preferences and approve their departments to unlock course materials and syllabus.</p>
-        </div>
-        <a routerLink="/departments" class="btn-review-allocations">
-          <span>Review &amp; Approve Track →</span>
-        </a>
+    <div class="pending-allocations-alert">
+      <div class="alert-icon-wrap">🔔</div>
+      <div class="alert-text-wrap">
+        <strong>{{ pendingRequestsCount() }} New Joinee Track Allocation{{ pendingRequestsCount() === 1 ? '' : 's' }}
+          Pending Approval</strong>
+        <p>Review new joinees' tech stack preferences and approve their departments to unlock course materials and
+          syllabus.</p>
       </div>
+      <a routerLink="/departments" class="btn-review-allocations">
+        <span>Review &amp; Approve Track →</span>
+      </a>
+    </div>
     }
 
-    <!-- Teacher KPI Stats -->
-    <section class="stats-row">
-      <div class="stat-card">
-        <div class="stat-icon-wrap icon-blue">
-          <span>◷</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Active Cohorts</span>
-          <strong class="stat-value">{{ cohortsCount() }} Batches</strong>
-          <span class="stat-trend positive">Under Instruction</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon-wrap icon-purple">
-          <span>👥</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Learners Evaluated</span>
-          <strong class="stat-value">{{ adminResultsStats().uniqueLearners }} Students</strong>
-          <span class="stat-trend positive">Across All Tests</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon-wrap icon-emerald">
-          <span>📝</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Total Submissions</span>
-          <strong class="stat-value">{{ adminResultsStats().completedCount }}</strong>
-          <span class="stat-trend neutral">Completed Attempts</span>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon-wrap icon-amber">
-          <span>📊</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Batch Average Score</span>
-          <strong class="stat-value">{{ adminResultsStats().averageScore }}%</strong>
-          <span class="stat-trend positive">Mean Cohort Score</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Teacher Action Hub -->
     <section class="section-container">
       <div class="section-topbar">
         <div>
@@ -679,105 +883,54 @@
       </div>
 
       @if (upcomingLiveClasses().length > 0) {
-        <div class="live-classes-preview-strip">
-          <div class="live-strip-header">
-            <h4>📡 Upcoming Department Live Sessions</h4>
-            <a routerLink="/live-classes" class="live-link-btn">Manage Sessions &rarr;</a>
-          </div>
-          <div class="live-mini-grid">
-            @for (cls of upcomingLiveClasses(); track cls.id) {
-              <div class="live-mini-card" [class.is-live]="cls.status === 'live'">
-                <div class="live-mini-top">
-                  <span>{{ cls.status === 'live' ? '🔴 LIVE NOW' : '📅 SCHEDULED' }}</span>
-                  <span>{{ cls.department_name || 'Department #' + cls.department_id }}</span>
-                </div>
-                <strong>{{ cls.title }}</strong>
-                <span class="live-mini-meta">{{ cls.scheduled_start | date:'medium' }} · {{ cls.platform }}</span>
-                <span class="live-mini-teacher">Instructor: <strong>{{ cls.instructor_name || 'Assigned Host' }}</strong></span>
-                @if (cls.status === 'live') {
-                  <button type="button" class="btn-join-live-mini" (click)="joinLiveClass(cls, $event)">
-                    Join Live →
-                  </button>
-                }
-              </div>
+      <div class="live-classes-preview-strip">
+        <div class="live-strip-header">
+          <h4>📡 Upcoming Department Live Sessions</h4>
+          <a routerLink="/live-classes" class="live-link-btn">Manage Sessions &rarr;</a>
+        </div>
+        <div class="live-mini-grid">
+          @for (cls of upcomingLiveClasses(); track cls.id) {
+          <div class="live-mini-card" [class.is-live]="cls.status === 'live'">
+            <div class="live-mini-top">
+              <span>{{ cls.status === 'live' ? '🔴 LIVE NOW' : '📅 SCHEDULED' }}</span>
+              <span>{{ cls.department_name || 'Department #' + cls.department_id }}</span>
+            </div>
+            <strong>{{ cls.title }}</strong>
+            <span class="live-mini-meta">{{ cls.scheduled_start | date:'medium' }} · {{ cls.platform }}</span>
+            <span class="live-mini-teacher">Instructor: <strong>{{ cls.instructor_name || 'Assigned Host'
+                }}</strong></span>
+            @if (cls.status === 'live') {
+            <button type="button" class="btn-join-live-mini" (click)="joinLiveClass(cls, $event)">
+              Join Live →
+            </button>
             }
           </div>
+          }
         </div>
+      </div>
       }
     </section>
-
   </div>
   }
 
-  <!-- ========================================================= -->
-  <!-- 3. ADMIN & SUPER ADMIN DASHBOARD                          -->
-  <!-- ========================================================= -->
+  <!-- Admin & Superadmin Highlights in Overview -->
   @if (user()?.role === 'admin' || user()?.role === 'superadmin') {
   <div class="role-dashboard admin-layout">
-
     @if (pendingRequestsCount() > 0) {
-      <div class="pending-allocations-alert">
-        <div class="alert-icon-wrap">🔔</div>
-        <div class="alert-text-wrap">
-          <strong>{{ pendingRequestsCount() }} New Joinee Track Allocation{{ pendingRequestsCount() === 1 ? '' : 's' }} Pending Approval</strong>
-          <p>Review new joinees' tech stack preferences and approve their departments to unlock course materials and syllabus.</p>
-        </div>
-        <a routerLink="/departments" class="btn-review-allocations">
-          <span>Review &amp; Approve Track →</span>
-        </a>
+    <div class="pending-allocations-alert">
+      <div class="alert-icon-wrap">🔔</div>
+      <div class="alert-text-wrap">
+        <strong>{{ pendingRequestsCount() }} New Joinee Track Allocation{{ pendingRequestsCount() === 1 ? '' : 's' }}
+          Pending Approval</strong>
+        <p>Review new joinees' tech stack preferences and approve their departments to unlock course materials and
+          syllabus.</p>
       </div>
+      <a routerLink="/departments" class="btn-review-allocations">
+        <span>Review &amp; Approve Track →</span>
+      </a>
+    </div>
     }
 
-    <!-- Executive KPI Metric Row -->
-    <section class="stats-row">
-      <div class="stat-card stat-card-admin">
-        <div class="stat-icon-wrap icon-purple">
-          <span>👥</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Total Platform Users</span>
-          <strong class="stat-value">{{ userStats().total || 'Active' }}</strong>
-          <span class="stat-trend positive">
-            {{ userStats().learners }} Learners · {{ userStats().teachers }} Teachers
-          </span>
-        </div>
-      </div>
-
-      <div class="stat-card stat-card-admin">
-        <div class="stat-icon-wrap icon-emerald">
-          <span>🏢</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Departments</span>
-          <strong class="stat-value">{{ departmentsCount() }} Units</strong>
-          <span class="stat-trend neutral">Enterprise Structure</span>
-        </div>
-      </div>
-
-      <div class="stat-card stat-card-admin">
-        <div class="stat-icon-wrap icon-blue">
-          <span>📝</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Total Exam Attempts</span>
-          <strong class="stat-value">{{ adminResultsStats().totalAssessments || adminResultsStats().completedCount }}</strong>
-          <span class="stat-trend positive">{{ adminResultsStats().uniqueLearners }} Unique Students</span>
-        </div>
-      </div>
-
-      <div class="stat-card stat-card-admin">
-        <div class="stat-icon-wrap icon-amber">
-          <span>📊</span>
-        </div>
-        <div class="stat-meta">
-          <span class="stat-label">Global Average Score</span>
-          <strong class="stat-value">{{ adminResultsStats().averageScore }}%</strong>
-          <span class="stat-trend positive">All Test Types</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Admin Operational Control Grid -->
     <section class="section-container">
       <div class="section-topbar">
         <div>
@@ -788,15 +941,14 @@
       </div>
 
       <div class="admin-modules-grid">
-
-        <!-- User Management Card -->
         <article class="module-card premium-card">
           <div class="module-top">
             <span class="module-icon">♙</span>
             <span class="module-badge">User Access</span>
           </div>
           <h3>User Management &amp; RBAC</h3>
-          <p>Provision new joiners, configure account access roles (Admin, Teacher, Learner), and toggle user status.</p>
+          <p>Provision new joiners, configure account access roles (Admin, Teacher, Learner), and toggle user status.
+          </p>
           <div class="card-footer-action">
             <a routerLink="/users" class="btn-module-action">
               <span>Manage Users &rarr;</span>
@@ -804,7 +956,6 @@
           </div>
         </article>
 
-        <!-- Assessment Management Card -->
         <article class="module-card premium-card">
           <div class="module-top">
             <span class="module-icon">⚡</span>
@@ -819,7 +970,6 @@
           </div>
         </article>
 
-        <!-- Learner Results Hub -->
         <article class="module-card premium-card">
           <div class="module-top">
             <span class="module-icon">▥</span>
@@ -834,7 +984,6 @@
           </div>
         </article>
 
-        <!-- Departments Card -->
         <article class="module-card premium-card">
           <div class="module-top">
             <span class="module-icon">▤</span>
@@ -848,7 +997,6 @@
             </a>
           </div>
         </article>
-
       </div>
     </section>
 
@@ -873,7 +1021,7 @@
           <span class="shortcut-arrow">&rarr;</span>
         </a>
 
-        <a routerLink="/assessments/create" class="shortcut-card">
+        <a routerLink="/assessments" class="shortcut-card">
           <div class="shortcut-icon">✦</div>
           <div>
             <h4>Create Assessment</h4>
@@ -902,34 +1050,406 @@
       </div>
 
       @if (upcomingLiveClasses().length > 0) {
-        <div class="live-classes-preview-strip">
-          <div class="live-strip-header">
-            <h4>📡 Scheduled Platform Live Classes</h4>
-            <a routerLink="/live-classes" class="live-link-btn">Open Live Scheduler &rarr;</a>
+      <div class="live-classes-preview-strip">
+        <div class="live-strip-header">
+          <h4>📡 Scheduled Platform Live Classes</h4>
+          <a routerLink="/live-classes" class="live-link-btn">Open Live Scheduler &rarr;</a>
+        </div>
+        <div class="live-mini-grid">
+          @for (cls of upcomingLiveClasses(); track cls.id) {
+          <div class="live-mini-card" [class.is-live]="cls.status === 'live'">
+            <div class="live-mini-top">
+              <span>{{ cls.status === 'live' ? '🔴 LIVE NOW' : '📅 SCHEDULED' }}</span>
+              <span>{{ cls.department_name || 'Department #' + cls.department_id }}</span>
+            </div>
+            <strong>{{ cls.title }}</strong>
+            <span class="live-mini-meta">{{ cls.scheduled_start | date:'medium' }} · {{ cls.platform }}</span>
+            <span class="live-mini-teacher">Instructor: <strong>{{ cls.instructor_name || 'Assigned Host'
+                }}</strong></span>
+            @if (cls.status === 'live') {
+            <button type="button" class="btn-join-live-mini" (click)="joinLiveClass(cls, $event)">
+              Join Live →
+            </button>
+            }
           </div>
-          <div class="live-mini-grid">
-            @for (cls of upcomingLiveClasses(); track cls.id) {
-              <div class="live-mini-card" [class.is-live]="cls.status === 'live'">
-                <div class="live-mini-top">
-                  <span>{{ cls.status === 'live' ? '🔴 LIVE NOW' : '📅 SCHEDULED' }}</span>
-                  <span>{{ cls.department_name || 'Department #' + cls.department_id }}</span>
-                </div>
-                <strong>{{ cls.title }}</strong>
-                <span class="live-mini-meta">{{ cls.scheduled_start | date:'medium' }} · {{ cls.platform }}</span>
-                <span class="live-mini-teacher">Instructor: <strong>{{ cls.instructor_name || 'Assigned Host' }}</strong></span>
-                @if (cls.status === 'live') {
-                  <button type="button" class="btn-join-live-mini" (click)="joinLiveClass(cls, $event)">
-                    Join Live →
-                  </button>
-                }
-              </div>
+          }
+        </div>
+      </div>
+      }
+    </section>
+  </div>
+  }
+
+  }
+
+  <!-- ========================================================= -->
+  <!-- TAB 2: COURSE SUMMARY                                     -->
+  <!-- ========================================================= -->
+  @else if (activeTab() === 'courses') {
+  <section class="tab-pane-section courses-tab-pane">
+    <div class="tab-pane-header">
+      <div class="pane-title-group">
+        <span class="tab-eyebrow">ACADEMIC &amp; CURRICULUM</span>
+        <h2 class="tab-title">Enterprise Courses &amp; Training Tracks</h2>
+        <p class="tab-subtitle">Access your technical curriculum, structured modules, and study materials.</p>
+      </div>
+      <div class="tab-actions-row">
+        <div class="pane-search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" [(ngModel)]="courseSearch" placeholder="Filter courses by title, track, or keyword..." />
+        </div>
+        <a routerLink="/courses" class="btn-pane-action">
+          <span>Open Full Courses Page &rarr;</span>
+        </a>
+      </div>
+    </div>
+
+    @if (filteredCourses().length === 0) {
+    <div class="empty-pane-card">
+      <span class="empty-icon">▣</span>
+      <h3>No courses found</h3>
+      <p>{{ courseSearch() ? 'No courses match your search criteria.' : 'Courses will appear here once published by
+        instructors.' }}</p>
+      <a routerLink="/courses" class="btn-create-first">Go to Courses Page &rarr;</a>
+    </div>
+    } @else {
+    <div class="courses-curriculum-grid">
+      @for (course of filteredCourses(); track course.id) {
+      <article class="curriculum-card">
+        <div class="curriculum-card-top">
+          <span class="course-dept-pill">{{ course.department_name || 'Technical Track' }}</span>
+          <span class="course-status-pill" [class.published]="course.is_published">
+            {{ course.is_published ? 'Active Curriculum' : 'Draft' }}
+          </span>
+        </div>
+        <h3 class="course-title">{{ course.title }}</h3>
+        <p class="course-desc">
+          {{ course.description || 'Structured enterprise syllabus covering core competencies, practical workflows, and
+          real-world architectures.' }}
+        </p>
+        <div class="curriculum-meta-row">
+          <span class="meta-tag">Track: <strong>{{ course.department_name || 'Standard' }}</strong></span>
+          <span class="meta-tag">Course ID: <strong>#{{ course.id }}</strong></span>
+        </div>
+        <div class="curriculum-card-footer">
+          <a routerLink="/courses" class="btn-launch-course">
+            <span>View Course Details &rarr;</span>
+          </a>
+        </div>
+      </article>
+      }
+    </div>
+    }
+  </section>
+  }
+
+  <!-- ========================================================= -->
+  <!-- TAB 3: SKILL ASSESSMENTS                                  -->
+  <!-- ========================================================= -->
+  @else if (activeTab() === 'assessments') {
+  <section class="tab-pane-section assessments-tab-pane">
+    <div class="tab-pane-header">
+      <div class="pane-title-group">
+        <span class="tab-eyebrow">EXAMINATION SUITE</span>
+        <h2 class="tab-title">
+          {{ user()?.role === 'learner' ? 'Assigned Skill Assessments' : 'Assessment Question Banks & Examination
+          Templates' }}
+        </h2>
+        <p class="tab-subtitle">
+          {{ user()?.role === 'learner' ? 'All evaluations assigned to your account or cohort with live countdown timers
+          and status.' : 'Curate domain questions, configure test parameters, and assign examinations across cohorts.'
+          }}
+        </p>
+      </div>
+      <div class="tab-actions-row">
+        <div class="pane-search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" [(ngModel)]="assessmentSearch" placeholder="Search assessments..." />
+        </div>
+        @if (user()?.role === 'learner') {
+        <a routerLink="/my-results" class="btn-pane-action">
+          <span>View All Results &rarr;</span>
+        </a>
+        } @else {
+        <a routerLink="/assessments" class="btn-pane-action">
+          <span>Manage All Templates &rarr;</span>
+        </a>
+        }
+      </div>
+    </div>
+
+    @if (user()?.role === 'learner') {
+    @if (filteredAssignedAssessments().length === 0) {
+    <div class="empty-pane-card">
+      <span class="empty-icon">📝</span>
+      <h3>No assigned assessments found</h3>
+      <p>{{ assessmentSearch() ? 'No assessments match your search query.' : 'When an evaluation is assigned to your
+        profile, it will appear here.' }}</p>
+      <a routerLink="/my-assessments" class="btn-create-first">Open Assessment Center &rarr;</a>
+    </div>
+    } @else {
+    <div class="tests-grid">
+      @for (item of filteredAssignedAssessments(); track item.template_id) {
+      <article class="test-launch-card" [attr.data-type]="item.assessment_type" [attr.data-status]="item.status">
+        <div class="card-top-tag" [attr.data-type]="item.assessment_type"></div>
+        <div class="test-card-body">
+          <div class="test-header">
+            <span class="test-symbol">{{ getAssessmentIcon(item.assessment_type) }}</span>
+            <div class="card-badges-right">
+              <span class="test-badge">{{ item.category_label }}</span>
+              <span class="lifecycle-badge" [attr.data-status]="item.status">
+                {{ getStatusBadgeLabel(item.status) }}
+              </span>
+            </div>
+          </div>
+
+          <h3>{{ item.name }}</h3>
+          <p>
+            {{ item.description || 'Complete this assessment within your allotted duration to receive an official report
+            card.' }}
+          </p>
+
+          <div class="test-details-strip">
+            <span><strong>{{ item.question_count }}</strong> Questions</span>
+            <span><strong>{{ item.duration_minutes }}</strong> Minutes</span>
+            @if (item.status === 'IN_PROGRESS') {
+            <span class="strip-live-time">
+              <strong>{{ formatRemainingTime(getLiveRemainingSeconds(item)) }}</strong> Left
+            </span>
+            } @else if (item.due_at) {
+            <span>Due <strong>{{ item.due_at | date:'MMM d' }}</strong></span>
+            } @else {
+            <span><strong>One</strong> Attempt</span>
+            }
+          </div>
+
+          <div class="test-action-wrap">
+            @if (item.status === 'COMPLETED' && item.session_id) {
+            <div class="completed-actions-row">
+              <a [routerLink]="['/assessments/report', item.session_id]" class="btn-test-action btn-completed"
+                title="View Official Report Card">
+                <span>✓ Report ({{ item.overall_percentage ?? 0 }}%)</span>
+              </a>
+              <a [routerLink]="['/assessments/results', item.session_id]" class="btn-breakdown-link"
+                title="Question Breakdown">
+                <span>Breakdown &rarr;</span>
+              </a>
+            </div>
+            } @else if (item.status === 'IN_PROGRESS' && item.can_continue && item.session_id) {
+            <a [routerLink]="['/assessments/take', item.session_id]" class="btn-test-action btn-continue-card">
+              <span>Continue ({{ formatRemainingTime(getLiveRemainingSeconds(item)) }}) &rarr;</span>
+            </a>
+            } @else if (item.status === 'NOT_STARTED' && item.can_start) {
+            <a routerLink="/my-assessments" [queryParams]="{ startTemplateId: item.template_id }"
+              class="btn-test-action btn-start">
+              <span>Start Assessment &rarr;</span>
+            </a>
+            } @else {
+            <button type="button" class="btn-test-action btn-expired" disabled>
+              <span>Deadline Expired</span>
+            </button>
             }
           </div>
         </div>
+      </article>
       }
+    </div>
+    }
+    } @else {
+    @if (filteredTemplates().length === 0) {
+    <div class="empty-pane-card">
+      <span class="empty-icon">⚡</span>
+      <h3>No test templates found</h3>
+      <p>{{ assessmentSearch() ? 'No templates match your search query.' : 'Create your first assessment template to
+        begin evaluations.' }}</p>
+      <a routerLink="/assessments" class="btn-create-first">+ Create Template</a>
+    </div>
+    } @else {
+    <div class="tests-grid">
+      @for (tpl of filteredTemplates(); track tpl.id) {
+      <article class="test-launch-card">
+        <div class="card-top-tag"></div>
+        <div class="test-card-body">
+          <div class="test-header">
+            <span class="test-symbol">⚡</span>
+            <div class="card-badges-right">
+              <span class="test-badge">{{ tpl.assessment_type || 'General' }}</span>
+              <span class="lifecycle-badge" [class.active-tpl]="tpl.is_active">
+                {{ tpl.is_active ? 'Active' : 'Draft' }}
+              </span>
+            </div>
+          </div>
+
+          <h3>{{ tpl.name }}</h3>
+          <p>{{ tpl.description || 'Standardized evaluation template with structured question pools.' }}</p>
+
+          <div class="test-details-strip">
+            <span><strong>{{ tpl.question_count }}</strong> Questions</span>
+            <span><strong>{{ tpl.duration_minutes || 60 }}</strong> Minutes</span>
+            <span>Scope: <strong>{{ tpl.assignment_scope || 'All Cohorts' }}</strong></span>
+          </div>
+
+          <div class="test-action-wrap">
+            <a routerLink="/assessments" class="btn-test-action btn-start">
+              <span>Manage Template &rarr;</span>
+            </a>
+          </div>
+        </div>
+      </article>
+      }
+    </div>
+    }
+    }
+  </section>
+  }
+
+  <!-- ========================================================= -->
+  <!-- TAB 4: ANALYTICS                                          -->
+  <!-- ========================================================= -->
+  @else if (activeTab() === 'analytics') {
+  <section class="tab-pane-section analytics-tab-pane">
+    <div class="tab-pane-header">
+      <div class="pane-title-group">
+        <span class="tab-eyebrow">TELEMETRY &amp; PERFORMANCE</span>
+        <h2 class="tab-title">Platform Evaluation Telemetry &amp; Insights</h2>
+        <p class="tab-subtitle">Real-time benchmark tracking, category distribution, and cohort progress metrics.</p>
+      </div>
+      <div class="tab-actions-row">
+        <button type="button" class="btn-pane-action" (click)="refreshLearnerAssessments()">
+          <span>↻ Sync Telemetry</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 Deep Telemetry Cards -->
+    <div class="trainery-kpi-row">
+      <div class="kpi-card">
+        <span class="kpi-title">Benchmark Standard</span>
+        <div class="kpi-number-row">
+          <strong class="kpi-value text-blue">
+            {{ user()?.role === 'learner' ? (learnerAverageScore() > 0 ? (learnerAverageScore() + '%') : '75% Target') :
+            (adminResultsStats().averageScore + '%') }}
+          </strong>
+        </div>
+        <span class="kpi-trend positive">Enterprise Proficiency Standard</span>
+      </div>
+
+      <div class="kpi-card">
+        <span class="kpi-title">Evaluation Velocity</span>
+        <div class="kpi-number-row">
+          <strong class="kpi-value">
+            {{ user()?.role === 'learner' ? (trainingProgressPercent() + '%') : (adminResultsStats().completedCount + '
+            Submissions') }}
+          </strong>
+        </div>
+        <span class="kpi-trend positive">Active Lifecycle</span>
+      </div>
+
+      <div class="kpi-card">
+        <span class="kpi-title">Curriculum Cohorts</span>
+        <div class="kpi-number-row">
+          <strong class="kpi-value">
+            {{ cohortsCount() }} Batches
+          </strong>
+        </div>
+        <span class="kpi-subtext text-blue">{{ departmentsCount() }} Dedicated Tracks</span>
+      </div>
+
+      <div class="kpi-card">
+        <span class="kpi-title">System Status</span>
+        <div class="kpi-number-row">
+          <strong class="kpi-value" style="color: #059669;">100%</strong>
+        </div>
+        <span class="kpi-trend positive">ASE Telemetry Engine Operational</span>
+      </div>
+    </div>
+
+    <!-- 2-Column Visualizations -->
+    <section class="trainery-analytics-grid">
+      <!-- Left Card: Category Breakdown -->
+      <div class="analytics-card card-donut">
+        <h3 class="analytics-title">Assessments by Category</h3>
+        @if (categoryBreakdown().length > 0) {
+        <div class="donut-chart-wrapper">
+          <div class="donut-visual">
+            <svg viewBox="0 0 140 140" class="donut-svg">
+              <circle cx="70" cy="70" r="54" fill="none" stroke="#e2e8f0" stroke-width="16"></circle>
+              @for (cat of categoryBreakdown(); track cat.name; let idx = $index) {
+              <circle cx="70" cy="70" r="54" fill="none" [attr.stroke]="cat.color" stroke-width="16"
+                [attr.stroke-dasharray]="(cat.percentage * 3.392) + ' 339.2'" [attr.stroke-dashoffset]="-idx * 60">
+              </circle>
+              }
+            </svg>
+            <div class="donut-center-label">
+              <span class="donut-count">
+                {{ user()?.role === 'learner' ? totalAssignedCount() : (templates().length ||
+                adminResultsStats().totalAssessments) }}
+              </span>
+            </div>
+          </div>
+
+          <div class="donut-legend">
+            @for (cat of categoryBreakdown(); track cat.name) {
+            <div class="legend-item">
+              <span class="legend-dot" [style.background]="cat.color"></span>
+              <span class="legend-label">{{ cat.name }}</span>
+              <span class="legend-val">{{ cat.percentage }}%</span>
+            </div>
+            }
+          </div>
+        </div>
+        } @else {
+        <div class="empty-analytics-msg">
+          <span>📊</span>
+          <p>No assessment categories configured yet.</p>
+        </div>
+        }
+
+        <div class="trai-insight-box">
+          <span class="insight-tag">PLATFORM INSIGHT</span>
+          <p class="insight-text">{{ dynamicInsight() }}</p>
+        </div>
+      </div>
+
+      <!-- Right Card: Track Progress -->
+      <div class="analytics-card card-progress-bars">
+        <h3 class="analytics-title">
+          {{ user()?.role === 'learner' ? 'Batch & Track Progress' : 'Cohort Track Benchmarks' }}
+        </h3>
+        @if (trackCompletionList().length > 0) {
+        <div class="completion-bars-list">
+          @for (item of trackCompletionList(); track item.name) {
+          <div class="bar-row">
+            <span class="bar-name" [title]="item.name">{{ item.name }}</span>
+            <div class="bar-track">
+              <div class="bar-fill" [style.width.%]="item.percentage" [style.background]="item.color"></div>
+            </div>
+            <span class="bar-pct" [style.color]="item.color">{{ item.percentage }}%</span>
+          </div>
+          }
+        </div>
+        } @else {
+        <div class="empty-analytics-msg">
+          <span>📈</span>
+          <p>No cohort progress data available yet.</p>
+        </div>
+        }
+      </div>
     </section>
 
-  </div>
+    <!-- Telemetry Audit Banner -->
+    <div class="telemetry-audit-card">
+      <div class="audit-left">
+        <span class="audit-badge">SECURE RUNTIME</span>
+        <h4>ASE Engine Live Telemetry Active</h4>
+        <p>Continuous heartbeat monitoring, auto-sync token validation, and multi-tenant department isolation active.
+        </p>
+      </div>
+      <div class="audit-right">
+        <span class="audit-timestamp">Last Synced: {{ todayFormatted() }}</span>
+      </div>
+    </div>
+  </section>
   }
 
   }
