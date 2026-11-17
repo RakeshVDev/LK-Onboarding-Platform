@@ -1373,6 +1373,9 @@ export class Cohorts implements OnInit {
   }
 
   async syncRealLiveSessions(): Promise<void> {
+    if (!this.liveClassesService?.listSessions || !this.cohortService?.setSessions) {
+      return;
+    }
     try {
       const res = await firstValueFrom(this.liveClassesService.listSessions());
       const realSessions = Array.isArray(res?.sessions) ? res.sessions : [];
@@ -1410,8 +1413,6 @@ export class Cohorts implements OnInit {
         });
 
         this.cohortService.setSessions(mapped);
-      } else {
-        this.cohortService.setSessions([]);
       }
     } catch (err) {
       console.warn('Could not sync real live sessions in cohorts:', err);
