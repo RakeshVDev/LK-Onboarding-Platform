@@ -1,5 +1,5 @@
 
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import {
@@ -34,6 +34,31 @@ export class Users implements OnInit {
   readonly savingDepartments = signal(false);
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
+
+  readonly selectedRoleFilter = signal<string>('all');
+  readonly selectedStatusFilter = signal<string>('all');
+
+  readonly totalUsersCount = computed(() => this.users().length);
+  readonly activeUsersCount = computed(() => this.users().filter(u => u.is_active).length);
+  readonly inactiveUsersCount = computed(() => this.users().filter(u => !u.is_active).length);
+  readonly adminUsersCount = computed(() => this.users().filter(u => u.role === 'admin' || u.role === 'superadmin').length);
+  readonly teacherUsersCount = computed(() => this.users().filter(u => u.role === 'teacher').length);
+  readonly learnerUsersCount = computed(() => this.users().filter(u => u.role === 'learner').length);
+
+  readonly filteredUsers = computed(() => {
+    let list = this.users();
+    const roleF = this.selectedRoleFilter();
+    if (roleF !== 'all') {
+      list = list.filter(u => u.role === roleF);
+    }
+    const statusF = this.selectedStatusFilter();
+    if (statusF === 'active') {
+      list = list.filter(u => u.is_active);
+    } else if (statusF === 'inactive') {
+      list = list.filter(u => !u.is_active);
+    }
+    return list;
+  });
 
   search = '';
   fullName = '';

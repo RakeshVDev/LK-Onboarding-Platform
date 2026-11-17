@@ -436,3 +436,51 @@
     font-weight: 700;
   }
 }
+
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR PROFILE MODULE                     */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .profile-page,
+  .profile-container {
+    color: #f1f5f9;
+  }
+
+  .profile-card,
+  .profile-header-card,
+  .profile-section-card,
+  .perm-card,
+  .card {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+
+    h1, h2, h3, h4, strong {
+      color: #f8fafc;
+    }
+
+    p, span.label, .meta-text {
+      color: #94a3b8;
+    }
+
+    .perm-list li {
+      color: #cbd5e1;
+    }
+  }
+
+  input,
+  select,
+  textarea {
+    background: #1e293b;
+    border-color: #334155;
+    color: #f8fafc;
+
+    &:focus {
+      border-color: #6366f1;
+    }
+  }
+}
+

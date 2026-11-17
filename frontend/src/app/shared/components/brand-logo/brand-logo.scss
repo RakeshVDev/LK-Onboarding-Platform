@@ -67,6 +67,17 @@
   }
 }
 
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .csm-platform-name {
+    color: #f8fafc;
+  }
+  .csm-brand-sub {
+    color: #94a3b8;
+  }
+}
+
 .csm-brand-copy {
   display: flex;
   flex-direction: column;
@@ -153,6 +164,17 @@
 
   .csm-logo-img {
     height: 28px;
+  }
+}
+
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .csm-platform-name {
+    color: #f8fafc;
+  }
+  .csm-brand-sub {
+    color: #94a3b8;
   }
 }
 

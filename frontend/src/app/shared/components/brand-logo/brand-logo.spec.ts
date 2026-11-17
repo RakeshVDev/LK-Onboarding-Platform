@@ -20,8 +20,7 @@ describe('BrandLogo', () => {
     expect(img).toBeTruthy();
     expect(img?.getAttribute('src')).toBe('/assets/images/csm-logo.png');
     expect(img?.getAttribute('alt')).toBe('CSM Logo');
-    expect(root.textContent).toContain('CSM Assessment');
-    expect(root.textContent).toContain('Skill & Evaluation Platform');
+    expect(root.textContent).toContain('ASE Assessment Tool');
   });
 
   it('supports variant, size, badgeText, and compact subtitle toggle', async () => {

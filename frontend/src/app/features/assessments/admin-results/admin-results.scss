@@ -590,3 +590,136 @@
     transform: rotate(360deg);
   }
 }
+
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR ADMIN RESULTS                      */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .admin-results-page,
+  .results-page {
+    color: #f1f5f9;
+  }
+
+  .stat-card,
+  .table-card,
+  .table-container,
+  .filter-card,
+  .loading-state,
+  .empty-state {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+
+    h1, h2, h3, h4, strong {
+      color: #f8fafc;
+    }
+
+    p, span.label, .meta-text {
+      color: #94a3b8;
+    }
+  }
+
+  .results-table {
+    th {
+      background: #0f172a;
+      color: #94a3b8;
+      border-bottom-color: #1f2937;
+    }
+
+    td {
+      border-bottom-color: #1f2937;
+      color: #cbd5e1;
+    }
+
+    tbody tr {
+      background: #111827;
+
+      &:hover {
+        background: #1e293b;
+      }
+    }
+
+    .user-cell {
+      .avatar {
+        background: #1e1b4b;
+        color: #c4b5fd;
+      }
+
+      .user-name,
+      strong {
+        color: #f8fafc;
+      }
+
+      .user-email,
+      span {
+        color: #94a3b8;
+      }
+    }
+
+    .score-cell,
+    .assessment-cell,
+    .date-cell {
+      color: #cbd5e1;
+      strong {
+        color: #f8fafc;
+      }
+    }
+
+    .progress-bar {
+      background: #1e293b;
+    }
+  }
+
+  table {
+    thead {
+      background: #0f172a;
+      th {
+        color: #94a3b8;
+      }
+    }
+
+    tbody {
+      td {
+        border-top-color: #1f2937;
+        color: #cbd5e1;
+      }
+
+      tr:hover {
+        background: #1e293b;
+      }
+    }
+  }
+
+  input,
+  select,
+  textarea {
+    background: #1e293b;
+    border-color: #334155;
+    color: #f8fafc;
+
+    &:focus {
+      border-color: #6366f1;
+    }
+  }
+
+  .toggle-pending {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .btn-secondary,
+  .btn-outline {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+}

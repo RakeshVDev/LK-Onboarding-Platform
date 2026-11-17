@@ -230,14 +230,14 @@ export class Cohorts implements OnInit {
   newSessionTitle = '';
   newSessionDepartmentId: number | null = null;
   newSessionTrainerId: number | null = null;
-  newSessionTrainer = 'Priya Sharma';
-  newSessionModule = 'Module 3: Frontend Mastery';
-  newSessionDate = 'Tomorrow, 10:00 AM IST';
-  newSessionTime = '10:00 AM – 12:00 PM IST';
-  newSessionDuration = '2 Hours';
-  newSessionLocation = 'Virtual Classroom 1 (Google Meet)';
+  newSessionTrainer = '';
+  newSessionModule = 'Core Technical Curriculum';
+  newSessionDate = '';
+  newSessionTime = '';
+  newSessionDuration = '60 Mins';
+  newSessionLocation = 'Virtual Classroom (Google Meet)';
   newSessionMeetingUrl = 'https://meet.google.com/ase-cohort-live';
-  newSessionTopicsText = 'Angular Signals, RxJS interop, State architectures';
+  newSessionTopicsText = '';
   newSessionIsLiveNow = false;
 
   // Teacher Assignment Creation & Grading
@@ -342,12 +342,12 @@ export class Cohorts implements OnInit {
           return parsed.full_name.trim();
         }
       }
-    } catch {}
+    } catch { }
     const lead = this.details()?.leadTrainer?.name;
-    if (lead && lead !== 'Current User' && lead.trim().length > 0) return lead.trim();
+    if (lead && lead !== 'Current User' && lead !== 'Priya Sharma' && lead.trim().length > 0) return lead.trim();
     const firstTeacher = this.availableInstructors()[0]?.full_name;
-    if (firstTeacher && firstTeacher !== 'Current User' && firstTeacher.trim().length > 0) return firstTeacher.trim();
-    return 'Priya Sharma';
+    if (firstTeacher && firstTeacher !== 'Current User' && firstTeacher !== 'Priya Sharma' && firstTeacher.trim().length > 0) return firstTeacher.trim();
+    return 'Assigned Faculty';
   }
 
   readonly activeLiveTrainerName = computed<string>(() => {
@@ -874,9 +874,11 @@ export class Cohorts implements OnInit {
     // Fetch all teachers and learners created by super admin
     this.loadSuperAdminTeachers();
     this.loadSuperAdminLearners();
+    this.newSessionTrainer = this.getCurrentTeacherName();
 
     // Load active engineering departments and student track allocation
     void this.loadDepartmentContext();
+    void this.syncRealLiveSessions();
 
     if (typeof window !== 'undefined') {
       const handleUsersChanged = () => {
@@ -1095,6 +1097,52 @@ export class Cohorts implements OnInit {
     } catch {
       const local = this.userManagementService.getLearners();
       this.superAdminLearners.set(local);
+    }
+  }
+
+  async syncRealLiveSessions(): Promise<void> {
+    try {
+      const res = await firstValueFrom(this.liveClassesService.listSessions());
+      const realSessions = Array.isArray(res?.sessions) ? res.sessions : [];
+      if (realSessions.length > 0) {
+        const mapped: TrainingSession[] = realSessions.map(s => {
+          const start = s.scheduled_start ? new Date(s.scheduled_start) : new Date();
+          const dateStr = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+          const timeStr = start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+          let status: 'today' | 'upcoming' | 'completed' = 'upcoming';
+          if (s.status === 'live') {
+            status = 'today';
+          } else if (s.status === 'completed' || s.status === 'cancelled') {
+            status = 'completed';
+          }
+
+          const topics = s.description ? s.description.split(/[\n,]+/).map(t => t.trim()).filter(Boolean) : [];
+
+          return {
+            id: `live-sess-${s.id}`,
+            title: s.title,
+            module: s.department_name ? `${s.department_name} Track` : 'Technical Curriculum',
+            trainer: s.instructor_name || this.getCurrentTeacherName(),
+            date: s.status === 'live' ? 'Today (Live Session)' : dateStr,
+            time: timeStr,
+            duration: s.duration_minutes ? `${s.duration_minutes} Mins` : '60 Mins',
+            status,
+            location: `${s.platform || 'Virtual Classroom'} (Live Session)`,
+            meetingUrl: s.meeting_url || 'https://meet.google.com/ase-cohort-live',
+            topics,
+            departmentName: s.department_name || 'All / Common',
+            departmentId: s.department_id,
+            isAttended: false
+          };
+        });
+
+        this.cohortService.setSessions(mapped);
+      } else {
+        this.cohortService.setSessions([]);
+      }
+    } catch (err) {
+      console.warn('Could not sync real live sessions in cohorts:', err);
     }
   }
 
@@ -1523,8 +1571,8 @@ export class Cohorts implements OnInit {
   // Publish Curriculum Modal Actions
   openPublishCurriculumModal(): void {
     const chap = this.selectedChapter();
-    this.publishModalTitle = chap?.title 
-      ? `Live Session: ${chap.title}` 
+    this.publishModalTitle = chap?.title
+      ? `Live Session: ${chap.title}`
       : 'Live Interactive Curriculum Delivery';
     this.publishModalDate = new Date().toISOString().split('T')[0];
     this.publishModalTime = '10:00 AM – 12:00 PM IST';
@@ -1710,9 +1758,9 @@ export class Cohorts implements OnInit {
         })
       ).then(async created => {
         if (allowImmediateLive && created?.id) {
-          await firstValueFrom(this.liveClassesService.updateSession(created.id, { status: 'live' })).catch(() => {});
+          await firstValueFrom(this.liveClassesService.updateSession(created.id, { status: 'live' })).catch(() => { });
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     this.isCreatingSession.set(false);

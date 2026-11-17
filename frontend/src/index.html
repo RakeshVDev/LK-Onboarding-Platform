@@ -2,10 +2,36 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>CSM™ | Enterprise Assessment & Onboarding Platform</title>
+    <title>ASE Assessment Tool</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="ASE Assessment Tool - Enterprise Skill Evaluation & Training Platform" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <script>
+      (function() {
+        try {
+          var mode = localStorage.getItem('ase_theme_mode');
+          var legacy = localStorage.getItem('ase_theme');
+          var isDark = false;
+          if (mode === 'dark') {
+            isDark = true;
+          } else if (mode === 'light') {
+            isDark = false;
+          } else if (legacy === 'dark') {
+            isDark = true;
+          } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            isDark = true;
+          }
+          if (isDark) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.setAttribute('data-theme', 'light');
+            document.documentElement.classList.remove('dark');
+          }
+        } catch(e) {}
+      })();
+    </script>
   </head>
   <body>
     <app-root></app-root>

@@ -649,3 +649,77 @@
     animation-duration: 1.5s;
   }
 }
+
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR LOGIN PAGE                         */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .login-page {
+    background: #070b14;
+    color: #f1f5f9;
+  }
+
+  .form-panel {
+    background: #0b1220;
+  }
+
+  .form-card {
+    background: #111827;
+    border-color: #1f2937;
+    box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.5);
+
+    .form-header {
+      h2 {
+        color: #f8fafc;
+      }
+      .subtitle {
+        color: #94a3b8;
+      }
+    }
+
+    .form-group label {
+      color: #cbd5e1;
+    }
+
+    .input-field {
+      input {
+        background: #182230;
+        border-color: #334155;
+        color: #f8fafc;
+
+        &::placeholder {
+          color: #64748b;
+        }
+
+        &:focus {
+          background: #182230;
+          border-color: #818cf8;
+          box-shadow: 0 0 0 3.5px rgba(129, 140, 248, 0.2);
+        }
+      }
+
+      .field-icon {
+        color: #64748b;
+      }
+
+      .toggle-password-btn {
+        color: #64748b;
+
+        &:hover {
+          color: #818cf8;
+          background: #1e293b;
+        }
+      }
+    }
+
+    .security-badge {
+      color: #94a3b8;
+    }
+
+    .footer-copy {
+      color: #64748b;
+    }
+  }
+}

@@ -484,3 +484,150 @@
   }
 }
 
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR QUESTION RENDERER                  */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .question-topbar {
+    border-bottom-color: #1f2937;
+
+    .q-badge {
+      color: #f8fafc;
+    }
+
+    .topic-badge {
+      background: #1e1b4b;
+      color: #c7d2fe;
+    }
+
+    .type-pill {
+      background: #1e293b;
+      border-color: #334155;
+      color: #94a3b8;
+    }
+  }
+
+  .question-content {
+    .instructions-callout {
+      background: #182230;
+      border-color: #1f2937;
+      border-left-color: #6366f1;
+
+      .inst-label {
+        color: #818cf8;
+      }
+
+      p {
+        color: #cbd5e1;
+      }
+    }
+
+    .question-statement {
+      color: #f8fafc;
+    }
+
+    .question-instruction {
+      color: #94a3b8;
+    }
+  }
+
+  .option-card {
+    background: #182230;
+    border-color: #334155;
+
+    .option-key {
+      background: #1e293b;
+      color: #cbd5e1;
+    }
+
+    .option-label {
+      color: #cbd5e1;
+    }
+
+    .option-radio {
+      border-color: #475569;
+    }
+
+    .option-checkbox {
+      background: #1e293b;
+      border-color: #475569;
+    }
+
+    &:hover:not(:disabled) {
+      background: #1f2937;
+      border-color: #64748b;
+    }
+
+    &.selected {
+      background: #1e1b4b;
+      border-color: #6366f1;
+
+      .option-key {
+        background: #6366f1;
+        color: #ffffff;
+      }
+
+      .option-label {
+        color: #f8fafc;
+      }
+    }
+
+    &.admin-correct {
+      background: #064e3b;
+      border-color: #10b981;
+
+      .option-key {
+        background: #10b981;
+        color: #ffffff;
+      }
+
+      .option-label {
+        color: #ecfdf5;
+      }
+    }
+  }
+
+  .free-response-box {
+    background: #182230;
+    border-color: #334155;
+
+    .fr-header {
+      background: #111827;
+      border-bottom-color: #334155;
+
+      .fr-mode-tag {
+        color: #f8fafc;
+      }
+      .fr-metrics {
+        color: #94a3b8;
+      }
+    }
+
+    .fr-input {
+      background: #182230;
+      color: #f8fafc;
+
+      &:disabled {
+        background: #111827;
+        color: #64748b;
+      }
+    }
+  }
+
+  .admin-solution-panel {
+    background: #064e3b;
+    border-color: #047857;
+
+    .solution-row strong {
+      color: #86efac;
+    }
+
+    .solution-explanation {
+      color: #bbf7d0;
+    }
+  }
+}
+
+

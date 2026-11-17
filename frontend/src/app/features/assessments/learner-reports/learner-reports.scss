@@ -136,3 +136,80 @@ p {
   color: #0f172a;
 }
 
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR LEARNER REPORTS                    */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .learner-reports-page {
+    color: #f1f5f9;
+  }
+
+  .page-header {
+    background: #111827;
+    border-color: #1f2937;
+
+    h1 {
+      color: #f8fafc;
+    }
+    p {
+      color: #94a3b8;
+    }
+    .eyebrow {
+      color: #818cf8;
+    }
+  }
+
+  .report-card,
+  .state-card {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+    h3, strong {
+      color: #f8fafc;
+    }
+
+    p {
+      color: #94a3b8;
+    }
+
+    .report-meta {
+      color: #94a3b8;
+    }
+  }
+
+  .type-chip {
+    background: #1e1b4b;
+    color: #c7d2fe;
+  }
+
+  .score-pill {
+    background: #064e3b;
+    color: #6ee7b7;
+  }
+
+  .btn-primary {
+    background: #4f46e5;
+    color: #ffffff;
+
+    &:hover {
+      background: #4338ca;
+    }
+  }
+
+  .btn-secondary {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #cbd5e1;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+}
+
+

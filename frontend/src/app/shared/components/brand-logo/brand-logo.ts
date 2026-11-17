@@ -11,8 +11,8 @@ import { Component, Input } from '@angular/core';
 export class BrandLogo {
   @Input() variant: 'light' | 'dark' | 'compact' | 'print' = 'light';
   @Input() size: 'sm' | 'md' | 'lg' = 'md';
-  @Input() showSubtitle = true;
-  @Input() subtitle = 'Skill & Evaluation Platform';
+  @Input() showSubtitle = false;
+  @Input() subtitle = '';
   @Input() badgeText = '';
 }
 

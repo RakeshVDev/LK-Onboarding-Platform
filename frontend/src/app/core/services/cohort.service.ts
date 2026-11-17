@@ -416,9 +416,9 @@ export class CohortService {
     } catch {}
 
     return {
-      id: 15,
-      full_name: 'Priya Sharma',
-      email: 'priya.sharma@example.com',
+      id: 0,
+      full_name: 'Assigned Instructor',
+      email: 'instructor@platform.internal',
       role: 'teacher'
     };
   }
@@ -631,15 +631,28 @@ export class CohortService {
       if (!data.details.activeLiveDuration) {
         data.details.activeLiveDuration = '2 Hours';
       }
-      if (!data.details.activeLiveTrainer || data.details.activeLiveTrainer === 'Current User') {
-        data.details.activeLiveTrainer = data.details.leadTrainer?.name || 'Priya Sharma';
+      if (data.details.leadTrainer?.name === 'Priya Sharma') {
+        const u = this.getCurrentUser();
+        data.details.leadTrainer.name = u.full_name || 'Assigned Lead Instructor';
+        data.details.leadTrainer.email = u.email || 'instructor@platform.internal';
+        data.details.leadTrainer.avatar = (u.full_name?.charAt(0) || 'I').toUpperCase();
+      }
+      if (!data.details.activeLiveTrainer || data.details.activeLiveTrainer === 'Current User' || data.details.activeLiveTrainer === 'Priya Sharma') {
+        data.details.activeLiveTrainer = data.details.leadTrainer?.name || this.getCurrentUser().full_name || 'Assigned Faculty';
       }
     }
 
     if (data && data.sessions) {
-      const defaultTrainer = data.details?.leadTrainer?.name || 'Priya Sharma';
+      // Purge any stale hardcoded mock sessions from local storage
+      data.sessions = data.sessions.filter(s =>
+        !s.id.startsWith('sess-') &&
+        s.trainer !== 'Priya Sharma' &&
+        s.trainer !== 'Vikram Joshi' &&
+        s.trainer !== 'Vikram Joshi (Guest Architect)'
+      );
+      const defaultTrainer = data.details?.leadTrainer?.name || this.getCurrentUser().full_name || 'Assigned Faculty';
       for (const s of data.sessions) {
-        if (!s.trainer || s.trainer === 'Current User') {
+        if (!s.trainer || s.trainer === 'Current User' || s.trainer === 'Priya Sharma') {
           s.trainer = defaultTrainer;
         }
       }
@@ -788,27 +801,14 @@ export class CohortService {
         currentWeek: 4,
         currentModule: 'Module 3: FastAPI & Angular Reactive Architecture',
         leadTrainer: {
-          name: 'Priya Sharma',
-          title: 'Staff Engineer & Lead Technical Instructor',
-          email: 'priya.sharma@example.com',
-          avatar: 'PS',
+          name: this.getCurrentUser().full_name || 'Assigned Lead Instructor',
+          title: 'Staff Engineer & Technical Instructor',
+          email: this.getCurrentUser().email || 'instructor@platform.internal',
+          avatar: (this.getCurrentUser().full_name?.charAt(0) || 'I').toUpperCase(),
           officeHours: 'Mon & Thu: 4:00 PM – 5:30 PM IST',
-          bio: '10+ years designing distributed systems, high-throughput microservices, and leading enterprise software engineering teams.'
+          bio: 'Faculty lead overseeing cohort curriculum delivery, interactive code reviews, and enterprise evaluation milestones.'
         },
-        mentors: [
-          {
-            name: 'Vikram Joshi',
-            title: 'Senior Cloud Architect',
-            email: 'vikram.j@example.com',
-            avatar: 'VJ'
-          },
-          {
-            name: 'Ananya Roy',
-            title: 'Principal Frontend Engineer',
-            email: 'ananya.r@example.com',
-            avatar: 'AR'
-          }
-        ],
+        mentors: [],
         description: 'Comprehensive 12-week intensive training program equipping Associate Software Engineers with end-to-end full-stack capabilities, cloud-native architecture, production-grade microservices, clean code standards, and agile collaboration.',
         objectives: [
           'Master clean architecture, SOLID principles, and enterprise design patterns.',
@@ -1128,405 +1128,7 @@ export class CohortService {
       ],
 
       // Screenshot 5: Training Schedule & Live Sessions (Live Today, Upcoming & Completed for all Departments)
-      sessions: [
-        // --- ALL / COMMON TRACK SESSIONS ---
-        {
-          id: 'sess-today',
-          title: 'Daily UX Writing & Frontend State Architecture with Angular Signals',
-          module: 'Module 3: Frontend Mastery',
-          trainer: 'Priya Sharma',
-          date: 'Today (Live Session)',
-          time: '10:00 AM – 12:30 PM IST',
-          duration: '2.5 Hours',
-          status: 'today',
-          location: 'Virtual Classroom 1 (Google Meet)',
-          meetingUrl: 'https://meet.google.com/ase-cohort-live',
-          slidesUrl: '#',
-          topics: [
-            'Fine-grained reactivity with Angular Signals',
-            'Signal-based computed properties and effects',
-            'Migrating BehaviorSubject services to Signals',
-            'Component communication without unnecessary re-renders'
-          ],
-          departmentName: 'All / Common',
-          departmentId: 11,
-          isAttended: true
-        },
-        {
-          id: 'sess-telemetry',
-          title: 'Guest Lecture: Observability, OpenTelemetry & Distributed Tracing',
-          module: 'Module 4: Systems & Cloud',
-          trainer: 'Vikram Joshi (Guest Architect)',
-          date: 'Friday, Nov 07, 2:00 PM IST',
-          time: '2:00 PM – 4:00 PM IST',
-          duration: '2 Hours',
-          status: 'upcoming',
-          location: 'Auditorium Stream & Q&A',
-          meetingUrl: 'https://meet.google.com/ase-cohort-live',
-          topics: [
-            'Distributed tracing across microservices',
-            'Structured logging with correlation IDs',
-            'Prometheus metrics and Grafana dashboards',
-            'Alerting thresholds and incident response runbooks'
-          ],
-          departmentName: 'All / Common',
-          departmentId: 11
-        },
-        {
-          id: 'sess-git-cicd',
-          title: 'Enterprise Git Flow, Trunk-Based Development & CI/CD Pipelines',
-          module: 'Module 1: Architecture Foundations',
-          trainer: 'Priya Sharma',
-          date: 'Completed — Week 1',
-          time: '10:00 AM – 12:00 PM IST',
-          duration: '2 Hours',
-          status: 'completed',
-          location: 'Virtual Classroom 1',
-          meetingUrl: 'https://meet.google.com/ase-cohort-live',
-          recordingUrl: 'https://storage.googleapis.com/ase-recordings/git-trunk-cicd.mp4',
-          slidesUrl: '#',
-          topics: [
-            'Trunk-based branch hygiene and squash merge strategies',
-            'Automated linting and security scanning in GitHub Actions',
-            'Semantic versioning and release automation'
-          ],
-          departmentName: 'All / Common',
-          departmentId: 11,
-          isAttended: true
-        },
-
-        // --- PYTHON TRACK SESSIONS ---
-        {
-          id: 'sess-py-live',
-          title: 'Live Workshop: FastAPI Asynchronous Microservices & Celery Task Queues',
-          module: 'Module 2: Microservices Backend',
-          trainer: 'Priya Sharma',
-          date: 'Today (Live Session)',
-          time: '11:00 AM – 1:00 PM IST',
-          duration: '2 Hours',
-          status: 'today',
-          location: 'Python Virtual Lab 1 (Google Meet)',
-          meetingUrl: 'https://meet.google.com/ase-python-live',
-          slidesUrl: '#',
-          topics: [
-            'AsyncIO event loop non-blocking socket handling',
-            'FastAPI dependency injection container',
-            'Pydantic v2 high-throughput schema serialization',
-            'Celery asynchronous worker dispatch with Redis broker'
-          ],
-          departmentName: 'Python',
-          departmentId: 8,
-          isAttended: true
-        },
-        {
-          id: 'sess-fastapi',
-          title: 'Hands-on Workshop: FastAPI Clean Architecture & Dependency Injection',
-          module: 'Module 2: Microservices Backend',
-          trainer: 'Priya Sharma',
-          date: 'Tomorrow, 10:00 AM IST',
-          time: '10:00 AM – 12:30 PM IST',
-          duration: '2.5 Hours',
-          status: 'upcoming',
-          location: 'Virtual Classroom 1',
-          meetingUrl: 'https://meet.google.com/ase-python-live',
-          recordingUrl: 'https://storage.googleapis.com/ase-recordings/mod2-fastapi-clean-arch.mp4',
-          slidesUrl: '#',
-          topics: [
-            'Layered service architecture (Routers, Services, Repositories)',
-            'Dependency injection patterns in FastAPI',
-            'Pydantic v2 schemas and validation contracts',
-            'Custom exception handlers and middleware'
-          ],
-          departmentName: 'Python',
-          departmentId: 8
-        },
-        {
-          id: 'sess-py-async',
-          title: 'Python AsyncIO Event Loops & Socket Non-Blocking Architecture',
-          module: 'Module 1: Architecture Foundations',
-          trainer: 'Priya Sharma',
-          date: 'Completed — Earlier This Week',
-          time: '10:00 AM – 12:00 PM IST',
-          duration: '2 Hours',
-          status: 'completed',
-          location: 'Python Virtual Lab 1',
-          meetingUrl: 'https://meet.google.com/ase-python-live',
-          recordingUrl: 'https://storage.googleapis.com/ase-recordings/python-asyncio-deepdive.mp4',
-          slidesUrl: '#',
-          topics: [
-            'Cooperative multitasking with coroutines and tasks',
-            'Aiohttp vs Httpx connection pooling',
-            'CPU-bound vs I/O-bound workload isolation with ProcessPoolExecutor'
-          ],
-          departmentName: 'Python',
-          departmentId: 8,
-          isAttended: true
-        },
-
-        // --- .NET TRACK SESSIONS ---
-        {
-          id: 'sess-dotnet-live',
-          title: 'Live Workshop: C# 12 Minimal APIs & Entity Framework Core Performance',
-          module: 'Module 2: Microservices Backend',
-          trainer: 'Vikram Joshi',
-          date: 'Today (Live Session)',
-          time: '10:30 AM – 12:30 PM IST',
-          duration: '2 Hours',
-          status: 'today',
-          location: '.NET Lab 2 (Google Meet)',
-          meetingUrl: 'https://meet.google.com/ase-dotnet-live',
-          slidesUrl: '#',
-          topics: [
-            'C# 12 primary constructors and collection expressions',
-            'Minimal API route groups and endpoint filters',
-            'EF Core 8 compiled models and split queries',
-            'Polly resilience pipelines with retry and circuit breakers'
-          ],
-          departmentName: '.NET',
-          departmentId: 7,
-          isAttended: true
-        },
-        {
-          id: 'sess-dotnet',
-          title: 'Deep Dive: ASP.NET Core Clean Architecture & Polly Resilience',
-          module: 'Module 2: Microservices Backend',
-          trainer: 'Vikram Joshi',
-          date: 'Tomorrow, 2:00 PM IST',
-          time: '2:00 PM – 4:00 PM IST',
-          duration: '2 Hours',
-          status: 'upcoming',
-          location: 'Virtual Classroom 2',
-          meetingUrl: 'https://meet.google.com/ase-dotnet-live',
-          topics: [
-            'MediatR pipelines and CQRS in C#',
-            'Polly retry and circuit breaker policies',
-            'Entity Framework Core 8 migration strategies',
-            'Asynchronous streaming in ASP.NET Core Web API'
-          ],
-          departmentName: '.NET',
-          departmentId: 7
-        },
-        {
-          id: 'sess-dotnet-ddd',
-          title: 'Domain-Driven Design (DDD) & CQRS Implementation with MediatR',
-          module: 'Module 1: Architecture Foundations',
-          trainer: 'Vikram Joshi',
-          date: 'Completed — Earlier This Week',
-          time: '2:00 PM – 4:00 PM IST',
-          duration: '2 Hours',
-          status: 'completed',
-          location: '.NET Lab 2',
-          meetingUrl: 'https://meet.google.com/ase-dotnet-live',
-          recordingUrl: 'https://storage.googleapis.com/ase-recordings/dotnet-clean-arch.mp4',
-          slidesUrl: '#',
-          topics: [
-            'Aggregate roots, entities, and value objects in C#',
-            'Separation of read models and write models',
-            'Domain events and outbox pattern persistence'
-          ],
-          departmentName: '.NET',
-          departmentId: 7,
-          isAttended: true
-        },
-
-        // --- JAVA TRACK SESSIONS ---
-        {
-          id: 'sess-java-live',
-          title: 'Live Workshop: Java 21 Virtual Threads & High-Concurrency Microservices',
-          module: 'Module 2: Microservices Backend',
-          trainer: 'Ananya Roy',
-          date: 'Today (Live Session)',
-          time: '11:30 AM – 1:30 PM IST',
-          duration: '2 Hours',
-          status: 'today',
-          location: 'Java Cloud Lab (Google Meet)',
-          meetingUrl: 'https://meet.google.com/ase-java-live',
-          slidesUrl: '#',
-          topics: [
-            'Project Loom virtual thread execution model',
-            'Spring Boot 3.2 Tomcat virtual thread executor configuration',
-            'Avoiding thread pinning during synchronized blocks',
-            'Structured concurrency with StructuredTaskScope'
-          ],
-          departmentName: 'Java',
-          departmentId: 9,
-          isAttended: true
-        },
-        {
-          id: 'sess-java',
-          title: 'Masterclass: Spring Boot 3 & Virtual Threads in Java 21',
-          module: 'Module 2: Microservices Backend',
-          trainer: 'Ananya Roy',
-          date: 'Thursday, 10:00 AM IST',
-          time: '10:00 AM – 12:30 PM IST',
-          duration: '2.5 Hours',
-          status: 'upcoming',
-          location: 'Virtual Classroom 3',
-          meetingUrl: 'https://meet.google.com/ase-java-live',
-          topics: [
-            'Project Loom Virtual Threads in high-throughput APIs',
-            'Spring Data JPA second-level caching',
-            'Spring Security 6 stateless JWT resource servers',
-            'Resilience4j circuit breakers'
-          ],
-          departmentName: 'Java',
-          departmentId: 9
-        },
-        {
-          id: 'sess-java-jwt',
-          title: 'Spring Security 6 Stateless OAuth2 & JWT Filtering Workshop',
-          module: 'Module 1: Architecture Foundations',
-          trainer: 'Ananya Roy',
-          date: 'Completed — Earlier This Week',
-          time: '10:00 AM – 12:00 PM IST',
-          duration: '2 Hours',
-          status: 'completed',
-          location: 'Java Cloud Lab',
-          meetingUrl: 'https://meet.google.com/ase-java-live',
-          recordingUrl: 'https://storage.googleapis.com/ase-recordings/java21-spring3.mp4',
-          slidesUrl: '#',
-          topics: [
-            'Custom SecurityFilterChain with stateless SessionCreationPolicy',
-            'Nimbus JWT decoder and bearer token resolution',
-            'Method-level authorization with @PreAuthorize'
-          ],
-          departmentName: 'Java',
-          departmentId: 9,
-          isAttended: true
-        },
-
-        // --- PHP TRACK SESSIONS ---
-        {
-          id: 'sess-php-live',
-          title: 'Live Workshop: Laravel 11 Microservices, Redis Caching & Horizon',
-          module: 'Module 2: Microservices Backend',
-          trainer: 'Priya Sharma',
-          date: 'Today (Live Session)',
-          time: '10:00 AM – 12:00 PM IST',
-          duration: '2 Hours',
-          status: 'today',
-          location: 'PHP Enterprise Room (Google Meet)',
-          meetingUrl: 'https://meet.google.com/ase-php-live',
-          slidesUrl: '#',
-          topics: [
-            'PHP 8.3 type declarations and read-only classes',
-            'Laravel 11 Service Container binding and resolution',
-            'Redis queues and horizontal worker scaling with Horizon',
-            'API rate limiting and transactional job dispatch'
-          ],
-          departmentName: 'PHP',
-          departmentId: 6,
-          isAttended: true
-        },
-        {
-          id: 'sess-php',
-          title: 'Workshop: Modern Laravel 11 REST API Design & Queue Workers',
-          module: 'Module 2: Microservices Backend',
-          trainer: 'Priya Sharma',
-          date: 'Friday, 10:00 AM IST',
-          time: '10:00 AM – 12:00 PM IST',
-          duration: '2 Hours',
-          status: 'upcoming',
-          location: 'Virtual Classroom 1',
-          meetingUrl: 'https://meet.google.com/ase-php-live',
-          topics: [
-            'PHP 8.3 type system and strict typing',
-            'Laravel 11 Service Providers and middleware pipelines',
-            'Redis queues and horizontal worker scaling with Horizon',
-            'Pest 3 feature test suites'
-          ],
-          departmentName: 'PHP',
-          departmentId: 6
-        },
-        {
-          id: 'sess-php-pest',
-          title: 'Enterprise TDD with Pest 3 & Modern PHP 8.3 Types',
-          module: 'Module 1: Architecture Foundations',
-          trainer: 'Priya Sharma',
-          date: 'Completed — Earlier This Week',
-          time: '10:00 AM – 12:00 PM IST',
-          duration: '2 Hours',
-          status: 'completed',
-          location: 'PHP Enterprise Room',
-          meetingUrl: 'https://meet.google.com/ase-php-live',
-          recordingUrl: 'https://storage.googleapis.com/ase-recordings/php-laravel11.mp4',
-          slidesUrl: '#',
-          topics: [
-            'Pest 3 higher-order expectations and datasets',
-            'Mocking external HTTP services with Http::fake()',
-            'Snapshot testing and architecture validation tests'
-          ],
-          departmentName: 'PHP',
-          departmentId: 6,
-          isAttended: true
-        },
-
-        // --- DATABASE ENGINEER TRACK SESSIONS ---
-        {
-          id: 'sess-db-live',
-          title: 'Live Workshop: Query Execution Plan Deep-Dive & Clustered B-Tree Tuning',
-          module: 'Module 2: Database Systems',
-          trainer: 'Vikram Joshi',
-          date: 'Today (Live Session)',
-          time: '11:00 AM – 1:00 PM IST',
-          duration: '2 Hours',
-          status: 'today',
-          location: 'DBA Architecture Room (Google Meet)',
-          meetingUrl: 'https://meet.google.com/ase-sql-live',
-          slidesUrl: '#',
-          topics: [
-            'Reading graphical execution plans and operator cost distribution',
-            'Eliminating RID lookups and key lookups via covering indexes',
-            'Impact of parameter sniffing and plan cache invalidation',
-            'Resolving deadlocks using Extended Events and trace flags'
-          ],
-          departmentName: 'Database Engineer',
-          departmentId: 10,
-          isAttended: true
-        },
-        {
-          id: 'sess-db-upcoming',
-          title: 'Advanced Database Partitioning, Sharding & Read-Replica Synchronization',
-          module: 'Module 2: Database Systems',
-          trainer: 'Vikram Joshi',
-          date: 'Tomorrow, 3:00 PM IST',
-          time: '3:00 PM – 5:00 PM IST',
-          duration: '2 Hours',
-          status: 'upcoming',
-          location: 'DBA Architecture Room',
-          meetingUrl: 'https://meet.google.com/ase-sql-live',
-          topics: [
-            'Horizontal range partitioning on sliding date windows',
-            'Change Data Capture (CDC) and transactional replication',
-            'AlwaysOn Availability Groups and readable secondary routing'
-          ],
-          departmentName: 'Database Engineer',
-          departmentId: 10
-        },
-        {
-          id: 'sess-sql',
-          title: 'SQL Mastery: Execution Plans, Index Tuning & Isolation Levels',
-          module: 'Module 2: Database Systems',
-          trainer: 'Vikram Joshi',
-          date: 'Completed — Earlier This Week',
-          time: '10:00 AM – 12:00 PM IST',
-          duration: '2 Hours',
-          status: 'completed',
-          location: 'Virtual Classroom 1',
-          meetingUrl: 'https://meet.google.com/ase-sql-live',
-          recordingUrl: 'https://storage.googleapis.com/ase-recordings/mod2-sql-execution-tuning.mp4',
-          slidesUrl: '#',
-          topics: [
-            'Clustered vs Non-Clustered index structures',
-            'Reading query plans and mitigating bookmark lookups',
-            'Transaction isolation levels (Read Committed vs Snapshot)',
-            'Deadlock analysis and graph interpretation'
-          ],
-          departmentName: 'Database Engineer',
-          departmentId: 10,
-          isAttended: true
-        }
-      ],
+      sessions: [],
 
       // Screenshot 4: Teacher Interactive Attendance Matrix
       attendanceMatrix: {
@@ -4496,6 +4098,14 @@ export class CohortService {
         sessions: updatedSessions
       });
     }
+  }
+
+  setSessions(sessions: TrainingSession[]): void {
+    const current = this.getCohortData();
+    this.saveState({
+      ...current,
+      sessions
+    });
   }
 
   deleteSession(sessionId: string): void {

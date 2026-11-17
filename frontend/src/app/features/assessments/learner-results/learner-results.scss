@@ -464,3 +464,280 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR LEARNER RESULTS                    */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .results-container,
+  .learner-results-page {
+    color: #f1f5f9;
+  }
+
+  .page-header {
+    h1 {
+      color: #f8fafc;
+    }
+    p {
+      color: #94a3b8;
+    }
+  }
+
+  .in-progress-banner {
+    background: #451a03;
+    border-color: #78350f;
+
+    .banner-icon {
+      color: #fde047;
+    }
+
+    .banner-body {
+      strong {
+        color: #fde047;
+      }
+      p {
+        color: #fef08a;
+      }
+    }
+  }
+
+  .stat-card {
+    background: #111827;
+    border-color: #1f2937;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+
+    .stat-label {
+      color: #94a3b8;
+    }
+
+    .stat-value {
+      color: #f8fafc;
+    }
+
+    .stat-icon {
+      &.purple { background: #1e1b4b; color: #c4b5fd; }
+      &.green { background: #064e3b; color: #6ee7b7; }
+      &.blue { background: #1e3a8a; color: #93c5fd; }
+      &.orange { background: #451a03; color: #fde047; }
+    }
+  }
+
+  .section-title {
+    h2 {
+      color: #f8fafc;
+    }
+    p {
+      color: #94a3b8;
+    }
+    .count-pill {
+      background: #1e1b4b;
+      color: #c7d2fe;
+      border: 1px solid #3730a3;
+    }
+  }
+
+  /* Target both .report-card and .result-card for complete safety */
+  .report-card,
+  .result-card,
+  .summary-card,
+  .state-card,
+  .filter-box,
+  .card {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+
+    &:hover {
+      border-color: #374151;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    }
+
+    h1, h2, h3, h4, strong {
+      color: #f8fafc;
+    }
+
+    p, span.label, .meta-text, .session-meta {
+      color: #94a3b8;
+    }
+  }
+
+  .report-card {
+    .card-header {
+      .header-left {
+        .type-pill {
+          background: #1e293b;
+          color: #cbd5e1;
+
+          &[data-type="psychometric"] { background: #3b0764; color: #d8b4fe; }
+          &[data-type="technical"] { background: #0c4a6e; color: #7dd3fc; }
+          &[data-type="english_grammar"] { background: #451a03; color: #fde047; }
+        }
+
+        h3 {
+          color: #f8fafc;
+        }
+
+        .session-meta {
+          color: #94a3b8;
+        }
+      }
+
+      .grade-box {
+        &.grade-exceptional {
+          background: #064e3b;
+          color: #6ee7b7;
+        }
+        &.grade-proficient {
+          background: #1e1b4b;
+          color: #c4b5fd;
+        }
+        &.grade-developing {
+          background: #451a03;
+          color: #fde047;
+        }
+        &.grade-focus {
+          background: #450a0a;
+          color: #fca5a5;
+        }
+      }
+    }
+
+    .score-summary {
+      .score-row {
+        .score-caption {
+          color: #94a3b8;
+        }
+        .score-pts {
+          color: #f8fafc;
+        }
+      }
+
+      .progress-track {
+        background: #1e293b;
+      }
+    }
+
+    .category-breakdown {
+      .cat-row {
+        .cat-name {
+          color: #cbd5e1;
+        }
+        .cat-val {
+          color: #f8fafc;
+        }
+      }
+
+      .cat-track {
+        background: #1e293b;
+      }
+    }
+
+    .card-footer {
+      .btn-view-report {
+        background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+        color: #ffffff;
+      }
+
+      .btn-scores {
+        background: #1e293b;
+        border-color: #334155;
+        color: #cbd5e1;
+
+        &:hover {
+          background: #334155;
+          border-color: #475569;
+          color: #ffffff;
+        }
+      }
+    }
+  }
+
+  .state-card {
+    background: #111827;
+    border-color: #1f2937;
+
+    strong, h2 {
+      color: #f8fafc;
+    }
+
+    p {
+      color: #94a3b8;
+    }
+  }
+
+  /* Modal in Dark Theme */
+  .modal-backdrop {
+    background: rgba(3, 7, 18, 0.8);
+  }
+
+  .modal-card {
+    background: #111827;
+    border: 1px solid #1f2937;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+
+    .modal-header {
+      border-bottom-color: #1f2937;
+
+      h2 {
+        color: #f8fafc;
+      }
+
+      .btn-close {
+        color: #94a3b8;
+        &:hover { color: #f8fafc; }
+      }
+    }
+
+    .breakdown-table {
+      thead th {
+        background: #1e293b;
+        color: #94a3b8;
+      }
+
+      tbody td {
+        border-bottom-color: #1f2937;
+        color: #cbd5e1;
+      }
+    }
+
+    .modal-footer {
+      background: #0f172a;
+      border-top-color: #1f2937;
+    }
+  }
+
+  table {
+    thead {
+      background: #0f172a;
+      th {
+        color: #94a3b8;
+      }
+    }
+
+    tbody {
+      td {
+        border-top-color: #1f2937;
+        color: #cbd5e1;
+      }
+
+      tr:hover {
+        background: #1e293b;
+      }
+    }
+  }
+
+  input,
+  select {
+    background: #1e293b;
+    border-color: #334155;
+    color: #f8fafc;
+
+    &:focus {
+      border-color: #6366f1;
+    }
+  }
+}
+

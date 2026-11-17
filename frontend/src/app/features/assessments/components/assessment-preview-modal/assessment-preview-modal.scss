@@ -764,3 +764,180 @@
   }
 }
 
+/* ========================================================= */
+/* DARK THEME SUPPORT FOR ASSESSMENT PREVIEW MODAL           */
+/* ========================================================= */
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .preview-shell {
+    background: #0b1220;
+    border-color: #1f2937;
+    color: #f1f5f9;
+  }
+
+  .single-renderer-card,
+  .preview-state-box,
+  .preview-exam-header,
+  .preview-palette-card,
+  .preview-question-workspace,
+  .sim-summary-card {
+    background: #111827;
+    border-color: #1f2937;
+    color: #f8fafc;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+    h2, h3, h4, strong {
+      color: #f8fafc;
+    }
+
+    p, span {
+      color: #94a3b8;
+    }
+  }
+
+  .single-preview-header h3 {
+    color: #f8fafc;
+  }
+
+  .sim-timer {
+    background: #182230;
+    border-color: #1f2937;
+
+    .st-label {
+      color: #94a3b8;
+    }
+
+    strong {
+      color: #f8fafc;
+    }
+  }
+
+  .btn-inst-toggle,
+  .btn-prev,
+  .btn-outline {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &:hover:not(:disabled) {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+
+  .btn-review {
+    background: #1e1b4b;
+    border-color: #3730a3;
+    color: #c4b5fd;
+
+    &.active {
+      background: #4f46e5;
+      color: #ffffff;
+    }
+  }
+
+  .preview-instructions-banner {
+    background: #1e1b4b;
+    border-color: #3730a3;
+    color: #c7d2fe;
+
+    strong {
+      color: #a5b4fc;
+    }
+  }
+
+  .pp-header {
+    border-bottom-color: #1f2937;
+
+    h4 {
+      color: #f8fafc;
+    }
+  }
+
+  .pp-btn {
+    background: #182230;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &.state-answered {
+      background: #064e3b;
+      border-color: #047857;
+      color: #6ee7b7;
+    }
+
+    &.state-not-answered {
+      background: #451a03;
+      border-color: #78350f;
+      color: #fde047;
+    }
+
+    &.state-review {
+      background: #2e1065;
+      border-color: #581c87;
+      color: #d8b4fe;
+    }
+
+    &.state-answered-review {
+      background: #1e1b4b;
+      border-color: #3730a3;
+      color: #a5b4fc;
+    }
+  }
+
+  .pp-legend {
+    background: #182230;
+    border-color: #1f2937;
+    color: #94a3b8;
+  }
+
+  .preview-bottom-bar {
+    border-top-color: #1f2937;
+  }
+
+  .sim-stat {
+    background: #182230;
+    border-color: #1f2937;
+
+    span {
+      color: #94a3b8;
+    }
+
+    strong {
+      color: #f8fafc;
+    }
+
+    &.is-green {
+      background: #064e3b;
+      border-color: #047857;
+      strong { color: #6ee7b7; }
+    }
+
+    &.is-amber {
+      background: #451a03;
+      border-color: #78350f;
+      strong { color: #fde047; }
+    }
+
+    &.is-purple {
+      background: #2e1065;
+      border-color: #581c87;
+      strong { color: #d8b4fe; }
+    }
+  }
+
+  .admin-score-sim {
+    background: #064e3b;
+    border-color: #047857;
+
+    .ass-label {
+      color: #86efac;
+    }
+
+    p {
+      color: #bbf7d0;
+    }
+  }
+}
+
+
