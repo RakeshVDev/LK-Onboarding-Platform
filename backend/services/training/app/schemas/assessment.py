@@ -35,6 +35,7 @@ class AssessmentTemplateCreate(BaseModel):
     reading_passage: str | None = None
 
     question_count: int = Field(default=20, gt=0, le=200)
+    duration_minutes: int | None = Field(default=None, ge=1, le=300)
 
     category_config: dict[str, Any] = Field(
         default_factory=dict,
@@ -316,6 +317,7 @@ class AssessmentTemplateUpdate(BaseModel):
     is_active: bool | None = None
     category_config: dict[str, Any] | None = None
     question_count: int | None = Field(default=None, gt=0, le=200)
+    duration_minutes: int | None = Field(default=None, ge=1, le=300)
     assignment_scope: str | None = Field(
         default=None,
         pattern="^(all|cohort|learner)$",

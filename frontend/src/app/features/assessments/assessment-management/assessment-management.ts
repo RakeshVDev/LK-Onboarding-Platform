@@ -137,7 +137,7 @@ export class AssessmentManagement implements OnInit {
     const cfg = template.category_config as Record<string, any> | undefined;
     if (!cfg || typeof cfg !== 'object') return [];
     return Object.entries(cfg)
-      .filter(([key, val]) => key !== 'question_set' && val && typeof val === 'object')
+      .filter(([key, val]) => key !== 'question_set' && key !== 'duration_minutes' && val && typeof val === 'object')
       .map(([key, val]) => ({
         key,
         label: val.label || key,

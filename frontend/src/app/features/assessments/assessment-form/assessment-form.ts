@@ -233,8 +233,12 @@ export class AssessmentForm implements OnInit {
     custom_tags_input: [''],
     reading_passage: [''],
     description: [''],
-    question_count: [25, [Validators.required, Validators.min(1), Validators.max(100)]]
+    question_count: [25, [Validators.required, Validators.min(1), Validators.max(200)]],
+    duration_minutes: [30, [Validators.required, Validators.min(1), Validators.max(300)]]
   });
+
+  readonly questionCountPresets: readonly number[] = [15, 20, 25, 30, 40, 50];
+  readonly durationPresets: readonly number[] = [15, 20, 30, 45, 60, 90];
 
   // Manual Question Authoring Form (Create + Edit + Dynamic Options)
   qQuestionType: BankQuestionFormatType = 'multiple_choice';
@@ -557,9 +561,29 @@ export class AssessmentForm implements OnInit {
 
     if (type === 'logical_reasoning' || type === 'cognitive') {
       this.form.controls.question_count.setValue(25);
+      this.form.controls.duration_minutes.setValue(30);
+    } else if (type === 'programming' || type === 'algorithm') {
+      this.form.controls.question_count.setValue(20);
+      this.form.controls.duration_minutes.setValue(30);
+    } else if (type === 'comprehension') {
+      this.form.controls.question_count.setValue(10);
+      this.form.controls.duration_minutes.setValue(25);
     } else {
       this.form.controls.question_count.setValue(20);
+      this.form.controls.duration_minutes.setValue(15);
     }
+    this.cdr.detectChanges();
+  }
+
+  applyQuestionCountPreset(count: number): void {
+    this.form.controls.question_count.setValue(count);
+    this.form.controls.question_count.markAsDirty();
+    this.cdr.detectChanges();
+  }
+
+  applyDurationPreset(minutes: number): void {
+    this.form.controls.duration_minutes.setValue(minutes);
+    this.form.controls.duration_minutes.markAsDirty();
     this.cdr.detectChanges();
   }
 
@@ -610,6 +634,16 @@ export class AssessmentForm implements OnInit {
           reading_passage: template.reading_passage ?? '',
           description: template.description ?? '',
           question_count: template.question_count || (template.assessment_type === 'logical_reasoning' ? 25 : 20),
+          duration_minutes:
+            template.duration_minutes ||
+            (template.assessment_type === 'logical_reasoning' ||
+            template.assessment_type === 'cognitive' ||
+            template.assessment_type === 'programming' ||
+            template.assessment_type === 'algorithm'
+              ? 30
+              : template.assessment_type === 'comprehension'
+                ? 25
+                : 15),
         });
 
         const rawConfiguredSet = String(
@@ -700,7 +734,8 @@ export class AssessmentForm implements OnInit {
     const deptId = this.form.controls.department_id.value ?? null;
     const name = this.form.controls.name.value.trim();
     const description = this.form.controls.description.value.trim() || null;
-    const questionCount = Number(this.form.controls.question_count.value) || 20;
+    const questionCount = Math.max(1, Math.min(200, Math.round(Number(this.form.controls.question_count.value) || 20)));
+    const durationMinutes = Math.max(1, Math.min(300, Math.round(Number(this.form.controls.duration_minutes.value) || 15)));
     const dueIso = this.toIsoDueAt();
     const cohortIdsPayload = this.assignmentScope === 'cohort' ? this.selectedCohortIds : [];
     const learnerIdsPayload = this.assignmentScope === 'learner' ? this.selectedLearnerIds : [];
@@ -708,17 +743,21 @@ export class AssessmentForm implements OnInit {
     const cats = CATEGORY_MAP[type] || [];
     const catConfig: Record<string, any> = {};
     const perCat = Math.max(1, Math.floor(questionCount / (cats.length || 1)));
+    let remainder = Math.max(0, questionCount - perCat * cats.length);
 
     for (const c of cats) {
+      const extra = remainder > 0 ? 1 : 0;
+      if (remainder > 0) remainder -= 1;
       catConfig[c.key] = {
         label: c.label,
-        question_count: perCat
+        question_count: perCat + extra
       };
     }
 
     if (this.selectedQuestionSet !== 'AUTO') {
       catConfig['question_set'] = this.selectedQuestionSet;
     }
+    catConfig['duration_minutes'] = durationMinutes;
 
     this.saving = true;
     this.cdr.detectChanges();
@@ -735,6 +774,7 @@ export class AssessmentForm implements OnInit {
             reading_passage: readingPassage,
             description,
             question_count: questionCount,
+            duration_minutes: durationMinutes,
             category_config: catConfig,
             assignment_scope: this.assignmentScope,
             cohort_ids: cohortIdsPayload,
@@ -756,6 +796,7 @@ export class AssessmentForm implements OnInit {
             reading_passage: readingPassage,
             description,
             question_count: questionCount,
+            duration_minutes: durationMinutes,
             category_config: catConfig,
             assignment_scope: this.assignmentScope,
             cohort_ids: cohortIdsPayload,

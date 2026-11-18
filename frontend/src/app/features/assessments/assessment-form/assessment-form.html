@@ -283,19 +283,48 @@
           placeholder="Enter brief description or candidate instructions..."></textarea>
       </div>
 
-      <!-- Question Count -->
+      <!-- Question Count & Exam Duration -->
       <div class="form-row-2">
         <div class="form-group">
           <label for="question_count">Total Examination Questions <span>*</span></label>
-          <input id="question_count" type="number" min="1" max="100" formControlName="question_count">
-          <small class="field-hint">Standard: 25 for Logical Reasoning, 20 for Grammar/Technical.</small>
+          <input id="question_count" type="number" min="1" max="200" formControlName="question_count">
+          <div class="quick-preset-row" aria-label="Question count presets">
+            @for (preset of questionCountPresets; track preset) {
+              <button
+                type="button"
+                class="preset-chip"
+                [class.active]="form.controls.question_count.value === preset"
+                (click)="applyQuestionCountPreset(preset)">
+                {{ preset }} Qs
+              </button>
+            }
+          </div>
+          @if (form.controls.question_count.touched && form.controls.question_count.invalid) {
+            <small class="field-error">Enter a valid question count between 1 and 200.</small>
+          } @else {
+            <small class="field-hint">Fully customizable (1–200). Works seamlessly for 25, 30, 40+ questions across all categories.</small>
+          }
         </div>
 
         <div class="form-group">
-          <label>Default Duration</label>
-          <input type="text" disabled [value]="defaultDurationText">
-          <small class="field-hint">Calculated automatically based on domain standard (30 mins for Logical/Programming,
-            15 mins others).</small>
+          <label for="duration_minutes">Examination Duration (Minutes) <span>*</span></label>
+          <input id="duration_minutes" type="number" min="1" max="300" formControlName="duration_minutes">
+          <div class="quick-preset-row" aria-label="Duration presets">
+            @for (mins of durationPresets; track mins) {
+              <button
+                type="button"
+                class="preset-chip"
+                [class.active]="form.controls.duration_minutes.value === mins"
+                (click)="applyDurationPreset(mins)">
+                {{ mins }}m
+              </button>
+            }
+          </div>
+          @if (form.controls.duration_minutes.touched && form.controls.duration_minutes.invalid) {
+            <small class="field-error">Enter a valid duration between 1 and 300 minutes.</small>
+          } @else {
+            <small class="field-hint">Customize timer freely (1–300 mins). Enforced live during candidate assessment.</small>
+          }
         </div>
       </div>
 
