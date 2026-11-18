@@ -268,16 +268,17 @@ def get_users_map(user_ids: list[int]) -> dict[int, dict[str, str]]:
         return {}
 
 
-def validate_category_config(config: dict):
-    category_keys = {k for k in config.keys() if k != "question_set"}
-    if category_keys != set(CATEGORIES.keys()):
-        raise HTTPException(
-            status_code=422,
-            detail="Assessment must contain exactly the five supported categories",
-        )
+CONFIG_METADATA_KEYS = {"question_set", "duration_minutes"}
 
-    for category, expected_label in CATEGORIES.items():
-        item = config[category]
+
+def validate_category_config(config: dict):
+    category_keys = {k for k in config.keys() if k not in CONFIG_METADATA_KEYS}
+    if not category_keys:
+        return
+
+    for category, item in config.items():
+        if category in CONFIG_METADATA_KEYS:
+            continue
 
         if not isinstance(item, dict):
             raise HTTPException(
@@ -285,16 +286,11 @@ def validate_category_config(config: dict):
                 detail=f"Invalid configuration for {category}",
             )
 
-        if item.get("question_count") != 4:
+        q_cnt = item.get("question_count")
+        if q_cnt is not None and (not isinstance(q_cnt, int) or q_cnt < 1):
             raise HTTPException(
                 status_code=422,
-                detail=f"{category} must contain exactly 4 questions",
-            )
-
-        if item.get("label") != expected_label:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Invalid category label for {category}",
+                detail=f"{category} must contain at least 1 question",
             )
 
 
@@ -312,6 +308,16 @@ ASSESSMENT_TYPE_LABELS = {
 
 
 def get_duration_minutes_for_template(template: AssessmentTemplate | None) -> int:
+    if template is not None:
+        cfg = getattr(template, "category_config", None)
+        if isinstance(cfg, dict):
+            raw_dur = cfg.get("duration_minutes")
+            try:
+                parsed = int(raw_dur) if raw_dur is not None else 0
+                if 1 <= parsed <= 300:
+                    return parsed
+            except (TypeError, ValueError):
+                pass
     if template and getattr(template, "assessment_type", None) in {"logical_reasoning", "cognitive", "programming", "algorithm"}:
         return 30
     if template and getattr(template, "assessment_type", None) == "comprehension":
@@ -722,6 +728,12 @@ def _assemble_template_questions(
     multi_set_pool = get_multi_set_questions(effective_type, target_set)
     if multi_set_pool:
         default_pool = list(multi_set_pool)
+        # If template asks for more questions than a single set holds (e.g., 40 questions),
+        # cleanly extend with non-duplicate items from the remaining sets of the same category.
+        if len(default_pool) < target_count:
+            for alt_set in ("A", "B", "C"):
+                if alt_set != target_set:
+                    default_pool.extend(get_multi_set_questions(effective_type, alt_set))
     elif effective_type in {"logical_reasoning", "cognitive"}:
         default_pool = get_default_logical_reasoning_questions()
     elif effective_type in {"english_grammar", "composition"}:
@@ -1408,18 +1420,17 @@ def get_assigned_rows_for_learner(
 
 
 def validate_template_settings(question_count: int, config: dict, assessment_type: str = "psychometric"):
-    if assessment_type == "logical_reasoning":
-        if question_count != 25:
-            raise HTTPException(status_code=422, detail="Logical Reasoning assessment must contain exactly 25 questions")
-    elif assessment_type == "psychometric":
-        if question_count != 20:
-            raise HTTPException(status_code=422, detail="Each psychometric assessment must contain exactly 20 questions")
-        validate_category_config(config)
-    elif question_count <= 0:
-        raise HTTPException(status_code=422, detail="Assessment must contain at least 1 question")
+    if not isinstance(question_count, int) or question_count < 1 or question_count > 200:
+        raise HTTPException(
+            status_code=422,
+            detail="Assessment must contain between 1 and 200 questions",
+        )
 
     if not isinstance(config, dict):
         raise HTTPException(status_code=422, detail="Invalid category configuration")
+
+    if assessment_type == "psychometric":
+        validate_category_config(config)
 
 
 # --------------------------------------------------
@@ -2162,9 +2173,13 @@ def create_template(
     require_assessment_manager(current_user)
     require_teacher_department_access(db, current_user, payload.department_id, allow_common_read=False)
 
+    cat_cfg = dict(payload.category_config or {})
+    if payload.duration_minutes is not None:
+        cat_cfg["duration_minutes"] = int(payload.duration_minutes)
+
     validate_template_settings(
         payload.question_count,
-        payload.category_config,
+        cat_cfg,
         payload.assessment_type,
     )
 
@@ -2189,7 +2204,7 @@ def create_template(
         reading_passage=payload.reading_passage,
         description=payload.description,
         question_count=payload.question_count,
-        category_config=payload.category_config,
+        category_config=cat_cfg,
         is_active=True,
         due_at=to_utc(payload.due_at),
         created_by_user_id=current_user.id,
@@ -2263,6 +2278,7 @@ def update_template(
     assignment_scope = changes.pop("assignment_scope", None)
     cohort_ids = changes.pop("cohort_ids", None)
     learner_ids = changes.pop("learner_ids", None)
+    duration_override = changes.pop("duration_minutes", None)
     due_at_provided = "due_at" in changes or bool(changes.get("clear_due_at"))
     due_at_val = None if changes.pop("clear_due_at", False) else changes.pop("due_at", None)
 
@@ -2271,10 +2287,14 @@ def update_template(
         template.question_count,
     )
 
-    category_config = changes.get(
-        "category_config",
-        template.category_config,
-    )
+    existing_cfg = template.category_config if isinstance(template.category_config, dict) else {}
+    category_config = dict(changes.get("category_config", existing_cfg) or {})
+    if duration_override is not None:
+        category_config["duration_minutes"] = int(duration_override)
+        changes["category_config"] = category_config
+    elif "category_config" in changes and "duration_minutes" not in category_config and "duration_minutes" in existing_cfg:
+        category_config["duration_minutes"] = existing_cfg["duration_minutes"]
+        changes["category_config"] = category_config
 
     validate_template_settings(question_count, category_config, changes.get("assessment_type", template.assessment_type))
 

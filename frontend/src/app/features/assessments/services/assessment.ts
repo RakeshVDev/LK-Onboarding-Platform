@@ -52,7 +52,8 @@ export interface CreateAssessmentTemplate {
   reading_passage?: string | null;
   description: string | null;
   question_count: number;
-  category_config: Record<string, AssessmentCategory>;
+  duration_minutes?: number;
+  category_config: Record<string, any>;
   assignment_scope?: 'all' | 'cohort' | 'learner';
   cohort_ids?: number[];
   learner_ids?: number[];
@@ -68,7 +69,8 @@ export interface UpdateAssessmentTemplate {
   reading_passage?: string | null;
   description?: string | null;
   question_count?: number;
-  category_config?: Record<string, AssessmentCategory>;
+  duration_minutes?: number;
+  category_config?: Record<string, any>;
   is_active?: boolean;
   assignment_scope?: 'all' | 'cohort' | 'learner';
   cohort_ids?: number[];
