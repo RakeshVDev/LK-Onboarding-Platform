@@ -762,7 +762,7 @@
 
   .click-hint {
     font-size: 12px;
-    color: #64748b;
+    color: #667085;
   }
 }
 
@@ -771,11 +771,13 @@
   border: none;
   padding: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 650;
   color: #4f46e5;
   cursor: pointer;
   text-decoration: underline;
-  text-decoration-color: rgba(79, 70, 229, 0.35);
+  text-decoration-color: rgba(79, 70, 229, 0.3);
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
 
   &:hover {
     color: #4338ca;
@@ -785,7 +787,9 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -798,47 +802,161 @@
   max-height: 85vh;
   overflow-y: auto;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.25);
+  border: 1px solid #e4e7ec;
+  border-radius: 18px;
+  padding: 26px 28px;
+  box-shadow: 0 24px 56px -12px rgba(16, 24, 40, 0.28);
 }
 
 .history-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding-bottom: 14px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid #e2e8f0;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid #eaecf0;
 
-  h2 { margin: 4px 0; font-size: 20px; }
-  .history-subtitle { margin: 0; font-size: 13px; color: #64748b; }
+  h2 {
+    margin: 4px 0;
+    font-size: 20px;
+    font-weight: 750;
+    color: #101828;
+  }
+
+  .history-subtitle {
+    margin: 0;
+    font-size: 13px;
+    color: #667085;
+  }
 }
 
 .btn-modal-close {
-  background: transparent;
-  border: none;
-  font-size: 18px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #f8fafc;
+  border: 1px solid #e4e7ec;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
   cursor: pointer;
-  color: #64748b;
+  color: #667085;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: #f1f5f9;
+    color: #101828;
+    border-color: #cbd5e1;
+  }
 }
 
 .history-table {
   width: 100%;
   border-collapse: collapse;
 
-  th, td {
+  th {
     text-align: left;
-    padding: 10px 12px;
-    border-bottom: 1px solid #e2e8f0;
-    font-size: 13px;
+    padding: 11px 14px;
+    background: #f9fafb;
+    border-bottom: 1px solid #e4e7ec;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #667085;
+  }
+
+  td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid #eaecf0;
+    font-size: 13.5px;
+    color: #344054;
+  }
+
+  tbody tr:hover {
+    background: #f9fafb;
   }
 }
 
 .history-empty {
-  padding: 24px;
+  padding: 28px;
   text-align: center;
-  color: #64748b;
+  color: #667085;
+  font-size: 14px;
+}
+
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .learner-identity-line .click-hint {
+    color: #94a3b8;
+  }
+
+  .learner-name-btn {
+    color: #a5b4fc;
+    text-decoration-color: rgba(165, 180, 252, 0.35);
+
+    &:hover {
+      color: #c7d2fe;
+    }
+  }
+
+  .modal-backdrop {
+    background: rgba(3, 7, 18, 0.78);
+  }
+
+  .history-modal-card {
+    background: #182230;
+    border-color: #344054;
+    color: #f9fafb;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+  }
+
+  .history-modal-header {
+    border-bottom-color: #293548;
+
+    h2 {
+      color: #f9fafb;
+    }
+
+    .history-subtitle {
+      color: #94a3b8;
+    }
+  }
+
+  .btn-modal-close {
+    background: #1f2937;
+    border-color: #344054;
+    color: #94a3b8;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+
+  .history-table {
+    th {
+      background: #111827;
+      border-bottom-color: #293548;
+      color: #94a3b8;
+    }
+
+    td {
+      border-bottom-color: #263244;
+      color: #e2e8f0;
+    }
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+  }
+
+  .history-empty {
+    color: #94a3b8;
+  }
 }
 

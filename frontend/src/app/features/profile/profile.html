@@ -30,15 +30,26 @@
 
         <div class="hero-meta-cluster">
           <div class="meta-item">
-            <span class="meta-icon">🆔</span>
+            <svg class="meta-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+              <line x1="7" y1="9" x2="17" y2="9"></line>
+              <line x1="7" y1="13" x2="13" y2="13"></line>
+            </svg>
             <span>User ID: <strong>#ASE-{{ user()?.id }}</strong></span>
           </div>
           <div class="meta-item">
-            <span class="meta-icon">📅</span>
+            <svg class="meta-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
             <span>Member Since: <strong>{{ formattedJoinDate }}</strong></span>
           </div>
           <div class="meta-item">
-            <span class="meta-icon">🛡️</span>
+            <svg class="meta-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
             <span>Auth: <strong>Enterprise SSO / Token</strong></span>
           </div>
         </div>
@@ -55,17 +66,25 @@
   <!-- Modern Navigation Tabs -->
   <nav class="profile-tabs" aria-label="Profile Sections">
     <button type="button" class="tab-btn" [class.active]="activeTab() === 'general'" (click)="setTab('general')">
-      <span class="tab-icon">👤</span>
+      <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
       <span>Personal Information</span>
     </button>
 
     <button type="button" class="tab-btn" [class.active]="activeTab() === 'security'" (click)="setTab('security')">
-      <span class="tab-icon">🔒</span>
+      <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
       <span>Security &amp; Password</span>
     </button>
 
     <button type="button" class="tab-btn" [class.active]="activeTab() === 'permissions'" (click)="setTab('permissions')">
-      <span class="tab-icon">🛡️</span>
+      <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+      </svg>
       <span>Role &amp; Permissions</span>
     </button>
   </nav>

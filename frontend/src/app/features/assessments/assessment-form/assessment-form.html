@@ -71,7 +71,7 @@
             <div class="type-icon icon-yellow">⚡</div>
             <div class="type-meta">
               <strong>Logical Reasoning</strong>
-              <span>25 MCQs · 30 Mins limit · 9 Reasoning Topics</span>
+              <span>25 MCQs · 30 Mins · 3 Sets (A/B/C)</span>
             </div>
           </label>
 
@@ -81,7 +81,7 @@
             <div class="type-icon icon-purple">✍</div>
             <div class="type-meta">
               <strong>English Grammar</strong>
-              <span>20 MCQs · 15 Mins limit · Syntax &amp; Vocabulary</span>
+              <span>20 MCQs · 15 Mins · 3 Sets (A/B/C)</span>
             </div>
           </label>
 
@@ -91,7 +91,7 @@
             <div class="type-icon icon-blue">💻</div>
             <div class="type-meta">
               <strong>Technical Skills</strong>
-              <span>20 MCQs · 15 Mins limit · DSA, Python, Web &amp; SQL</span>
+              <span>20 MCQs · 15 Mins · 3 Sets (A/B/C)</span>
             </div>
           </label>
 
@@ -101,7 +101,7 @@
             <div class="type-icon icon-teal">✦</div>
             <div class="type-meta">
               <strong>Psychometric &amp; EQ</strong>
-              <span>20 Scenarios · 15 Mins limit · Behavioral Profile</span>
+              <span>20 Scenarios · 15 Mins · 3 Sets (A/B/C)</span>
             </div>
           </label>
 
@@ -111,7 +111,7 @@
             <div class="type-icon icon-indigo">💻</div>
             <div class="type-meta">
               <strong>Programming &amp; Logic</strong>
-              <span>20 Items · 30 Mins limit · Logic, Code Sandbox &amp; Debugging</span>
+              <span>20 Items · 30 Mins · 3 Sets (A/B/C)</span>
             </div>
           </label>
 
@@ -121,7 +121,7 @@
             <div class="type-icon icon-emerald">🧠</div>
             <div class="type-meta">
               <strong>Cognitive Aptitude</strong>
-              <span>25 Items · 30 Mins limit · Deduction, Speed &amp; Accuracy</span>
+              <span>25 Items · 30 Mins · 3 Sets (A/B/C)</span>
             </div>
           </label>
 
@@ -131,7 +131,7 @@
             <div class="type-icon icon-rose">📝</div>
             <div class="type-meta">
               <strong>Written Composition</strong>
-              <span>20 Items · 15 Mins limit · Local NLP Coherence &amp; Style</span>
+              <span>20 Items · 15 Mins · 3 Sets (A/B/C)</span>
             </div>
           </label>
 
@@ -141,7 +141,7 @@
             <div class="type-icon icon-blue">⚙</div>
             <div class="type-meta">
               <strong>Algorithms &amp; Complexity</strong>
-              <span>20 Items · 30 Mins limit · Big-O Heuristics &amp; Test Suite</span>
+              <span>20 Items · 30 Mins · 3 Sets (A/B/C)</span>
             </div>
           </label>
 
@@ -151,11 +151,55 @@
             <div class="type-icon icon-teal">📖</div>
             <div class="type-meta">
               <strong>Reading Comprehension</strong>
-              <span>Passage Deduction · Evidence &amp; Analytical Inference</span>
+              <span>10 Items · Passage · 3 Sets (A/B/C)</span>
             </div>
           </label>
 
         </div>
+      </div>
+
+      <!-- Question Set Selection (3 Sets per Category: Set A, Set B, Set C, or Auto-Rotate) -->
+      <div class="form-group">
+        <label class="group-label">Question Set Selection (3 Distinct Sets per Category) <span>*</span></label>
+        <div class="set-choice-grid" role="radiogroup" aria-label="Question Set Selection">
+          <label class="set-choice-card" [class.selected]="selectedQuestionSet === 'AUTO'">
+            <input type="radio" name="selectedQuestionSet" value="AUTO" [(ngModel)]="selectedQuestionSet" [ngModelOptions]="{ standalone: true }">
+            <div class="set-choice-body">
+              <div class="set-choice-top">
+                <strong>Auto-Rotate (All 3 Sets)</strong>
+                <span class="set-rec-badge">Recommended</span>
+              </div>
+              <span>Rotates Set A, Set B &amp; Set C automatically across candidates</span>
+            </div>
+          </label>
+
+          <label class="set-choice-card" [class.selected]="selectedQuestionSet === 'A'">
+            <input type="radio" name="selectedQuestionSet" value="A" [(ngModel)]="selectedQuestionSet" [ngModelOptions]="{ standalone: true }">
+            <div class="set-choice-body">
+              <strong>Set A</strong>
+              <span>Deliver Set A question paper to all assigned learners</span>
+            </div>
+          </label>
+
+          <label class="set-choice-card" [class.selected]="selectedQuestionSet === 'B'">
+            <input type="radio" name="selectedQuestionSet" value="B" [(ngModel)]="selectedQuestionSet" [ngModelOptions]="{ standalone: true }">
+            <div class="set-choice-body">
+              <strong>Set B</strong>
+              <span>Deliver Set B question paper to all assigned learners</span>
+            </div>
+          </label>
+
+          <label class="set-choice-card" [class.selected]="selectedQuestionSet === 'C'">
+            <input type="radio" name="selectedQuestionSet" value="C" [(ngModel)]="selectedQuestionSet" [ngModelOptions]="{ standalone: true }">
+            <div class="set-choice-body">
+              <strong>Set C</strong>
+              <span>Deliver Set C question paper to all assigned learners</span>
+            </div>
+          </label>
+        </div>
+        <small class="field-hint">
+          Every assessment category includes 3 non-overlapping sets (Set A, Set B, Set C). Pick a specific set or keep Auto-Rotate enabled to prevent collusion.
+        </small>
       </div>
 
       <!-- SuperAdmin Assessment Tag & Custom Tags -->
@@ -828,11 +872,29 @@
     } @else {
     <div class="sequence-toolbar">
       <div class="st-left">
-        <h4>Assessment Question Sequence ({{ assignedQuestions.length }})</h4>
+        <h4>Assessment Question Sequence ({{ filteredAssignedQuestions.length }} / {{ assignedQuestions.length }})</h4>
         <p>Drag cards using the <strong>⋮⋮</strong> handle or use ↑ / ↓ controls to reorder how students see questions.
         </p>
       </div>
       <div class="st-right">
+        <div class="set-filter-pills" role="tablist" aria-label="Filter Question Bank by Set">
+          <button type="button" class="set-filter-pill" [class.active]="activeSetFilter === 'ALL'"
+            (click)="activeSetFilter = 'ALL'">
+            All Sets ({{ assignedQuestions.length }})
+          </button>
+          <button type="button" class="set-filter-pill" [class.active]="activeSetFilter === 'A'"
+            (click)="activeSetFilter = 'A'">
+            Set A ({{ countQuestionsBySet('A') }})
+          </button>
+          <button type="button" class="set-filter-pill" [class.active]="activeSetFilter === 'B'"
+            (click)="activeSetFilter = 'B'">
+            Set B ({{ countQuestionsBySet('B') }})
+          </button>
+          <button type="button" class="set-filter-pill" [class.active]="activeSetFilter === 'C'"
+            (click)="activeSetFilter = 'C'">
+            Set C ({{ countQuestionsBySet('C') }})
+          </button>
+        </div>
         @if (sequenceStatus === 'saving') {
         <span class="seq-pill is-saving">Saving sequence...</span>
         } @else if (sequenceStatus === 'saved') {
@@ -842,7 +904,7 @@
     </div>
 
     <div class="questions-list">
-      @for (question of assignedQuestions; track question.id; let idx = $index) {
+      @for (question of filteredAssignedQuestions; track question.id; let idx = $index) {
       <article class="question-item-card" draggable="true" [class.is-dragging]="draggedQuestionId === question.id"
         [class.is-drop-target]="dragOverQuestionId === question.id && draggedQuestionId !== question.id"
         (dragstart)="onDragStart($event, question.id)" (dragover)="onDragOver($event, question.id)"

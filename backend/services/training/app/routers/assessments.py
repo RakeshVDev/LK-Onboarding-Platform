@@ -98,6 +98,7 @@ from services.assessment_intelligence.scoring_engine import evaluate_weighted_sc
 from app.application.training.multi_set_selector import (
     BUILTIN_COMPREHENSION_PASSAGES,
     assign_question_set_for_candidate,
+    get_all_sets_questions,
     get_multi_set_questions,
     normalize_question_set,
 )
@@ -207,6 +208,20 @@ VALID_CATEGORIES_BY_TYPE = {
         "inference_evidence",
         "vocabulary_in_context",
     },
+    "composition": {
+        "composition",
+        "executive_writing",
+        "clarity_coherence",
+        "grammar_precision",
+        "scenario_response",
+    },
+    "algorithm": {
+        "algorithm",
+        "algorithm_design",
+        "time_space_complexity",
+        "recursion_dp",
+        "graphs_trees",
+    },
 }
 
 
@@ -254,7 +269,8 @@ def get_users_map(user_ids: list[int]) -> dict[int, dict[str, str]]:
 
 
 def validate_category_config(config: dict):
-    if set(config.keys()) != set(CATEGORIES.keys()):
+    category_keys = {k for k in config.keys() if k != "question_set"}
+    if category_keys != set(CATEGORIES.keys()):
         raise HTTPException(
             status_code=422,
             detail="Assessment must contain exactly the five supported categories",
@@ -704,19 +720,16 @@ def _assemble_template_questions(
     )
 
     multi_set_pool = get_multi_set_questions(effective_type, target_set)
-    if effective_type == "comprehension":
-        default_pool = multi_set_pool
+    if multi_set_pool:
+        default_pool = list(multi_set_pool)
     elif effective_type in {"logical_reasoning", "cognitive"}:
-        base_lr = get_default_logical_reasoning_questions()
-        default_pool = [*multi_set_pool, *base_lr] if multi_set_pool else base_lr
+        default_pool = get_default_logical_reasoning_questions()
     elif effective_type in {"english_grammar", "composition"}:
         default_pool = get_default_english_grammar_questions()
     elif effective_type in {"technical", "programming", "algorithm"}:
-        base_tech = get_default_technical_questions()
-        default_pool = [*multi_set_pool, *base_tech] if multi_set_pool else base_tech
+        default_pool = get_default_technical_questions()
     else:
-        base_psy = generate_mock_questions()
-        default_pool = [*multi_set_pool, *base_psy] if multi_set_pool else base_psy
+        default_pool = generate_mock_questions()
 
     template_passage = getattr(template, "reading_passage", None)
     if effective_type == "comprehension" and not template_passage:
@@ -4743,14 +4756,16 @@ def populate_default_questions(
     )
 
     effective_type = resolve_effective_assessment_type(template)
-    if effective_type in {"logical_reasoning", "cognitive"}:
-        default_pool = get_default_logical_reasoning_questions()
-    elif effective_type in {"english_grammar", "composition"}:
-        default_pool = get_default_english_grammar_questions()
-    elif effective_type in {"technical", "programming", "algorithm"}:
-        default_pool = get_default_technical_questions()
-    else:
-        default_pool = generate_mock_questions()
+    default_pool = get_all_sets_questions(effective_type)
+    if not default_pool:
+        if effective_type in {"logical_reasoning", "cognitive"}:
+            default_pool = get_default_logical_reasoning_questions()
+        elif effective_type in {"english_grammar", "composition"}:
+            default_pool = get_default_english_grammar_questions()
+        elif effective_type in {"technical", "programming", "algorithm"}:
+            default_pool = get_default_technical_questions()
+        else:
+            default_pool = generate_mock_questions()
 
     existing_texts = set(
         db.scalars(
@@ -4778,9 +4793,11 @@ def populate_default_questions(
             q = AssessmentQuestionBank(
                 template_id=template_id,
                 category=q_data.get("category", effective_type),
+                question_set=normalize_question_set(q_data.get("question_set", "A")),
                 difficulty=q_data.get("difficulty", "Medium"),
                 question_type=q_data.get("question_type", "multiple_choice"),
                 question_text=q_text,
+                passage_text=q_data.get("passage_text"),
                 instructions=q_data.get("instructions"),
                 explanation=q_data.get("explanation"),
                 options=q_data["options"],

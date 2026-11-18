@@ -295,17 +295,57 @@
   padding-top: 16px;
 }
 
+.stat-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.pill-svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.btn-svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.assign-pill,
+.due-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.assign-pill.dept-pill {
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+}
+
+.assign-pill.sets-pill {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
 .btn-outline {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 1px solid #dedfea;
   background: transparent;
   color: var(--text-primary, #30394d);
-  border-radius: 8px;
-  padding: 10px;
+  border-radius: 9px;
+  padding: 9px 12px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: 0.2s ease;
+  transition: all 0.18s ease;
 }
 
 .btn-outline:hover {
@@ -641,6 +681,18 @@
         background: #1e293b;
         color: #cbd5e1;
         border-color: #334155;
+
+        &.dept-pill {
+          background: rgba(129, 140, 248, 0.16);
+          color: #c7d2fe;
+          border-color: rgba(129, 140, 248, 0.35);
+        }
+
+        &.sets-pill {
+          background: rgba(16, 185, 129, 0.14);
+          color: #6ee7b7;
+          border-color: rgba(16, 185, 129, 0.32);
+        }
 
         &[data-scope="cohort"] {
           background: #164e63;

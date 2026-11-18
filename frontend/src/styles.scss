@@ -1,6 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-
 :root {
+  /* Typography Families */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
   /* ==========================================================
      PHASE 2 UNIFIED ENTERPRISE DESIGN TOKENS (LIGHT MODE)
      ========================================================== */
@@ -170,13 +173,14 @@ body.dark-theme {
 
 html {
   min-height: 100%;
-  background: #f8fafc;
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--app-bg);
+  font-family: var(--font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: clip;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -184,10 +188,59 @@ body {
   min-height: 100vh;
   margin: 0;
   overflow-x: clip;
-  color: var(--slate-800);
-  background: #f8fafc;
+  color: var(--text-primary);
+  background: var(--app-bg);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
+}
+
+h1, h2, h3, h4, .dashboard-page-title, .hero-title {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* Tabular figures for crisp executive metrics & tables */
+.kpi-value,
+.stat-val,
+.stat-value,
+.pct-badge,
+.points-val,
+.score-pts,
+.cohort-code-pill,
+.track-badge,
+.tab-badge-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Refined Enterprise Scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.55);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb,
+html.dark ::-webkit-scrollbar-thumb,
+body.dark-theme ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover,
+html.dark ::-webkit-scrollbar-thumb:hover,
+body.dark-theme ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.42);
 }
 
 button,

@@ -31,21 +31,29 @@
       <!-- Mode Toggle Switcher (SuperAdmin Only) -->
       @if (isSuperAdminRole()) {
         <div class="role-mode-switcher">
-          <span class="switcher-label">View Mode:</span>
+          <span class="switcher-label">Workspace</span>
           <div class="mode-pill-toggle">
             <button
               type="button"
               class="mode-btn"
               [class.active]="viewMode() === 'teacher'"
               (click)="toggleViewMode('teacher')">
-              👨‍🏫 Instructor Mode
+              <svg class="mode-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+                <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+              </svg>
+              Instructor
             </button>
             <button
               type="button"
               class="mode-btn"
               [class.active]="viewMode() === 'learner'"
               (click)="toggleViewMode('learner')">
-              👨‍🎓 Learner Preview
+              <svg class="mode-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              Learner Preview
             </button>
           </div>
         </div>
@@ -53,7 +61,13 @@
 
       <div class="header-actions">
         <a routerLink="/dashboard" class="btn-dashboard">
-          Dashboard <span>→</span>
+          <svg class="action-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+          </svg>
+          Dashboard
         </a>
         @if (isLiveClassActive()) {
           <button
@@ -62,11 +76,15 @@
             (click)="joinLiveClass()"
             title="Click to join live class">
             <span class="live-pulse-indicator"></span>
-            <span class="live-btn-text">🔴 Live Now &mdash; Join Live Class</span>
+            <span class="live-btn-text">Live Now &mdash; Join Class</span>
           </button>
         } @else {
           <span class="no-live-pill" title="Join Live appears only when an instructor starts a live class">
-            ⏳ Class Not Live Yet
+            <svg class="action-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            No Live Class Active
           </span>
         }
       </div>
@@ -80,13 +98,17 @@
     <div class="learner-department-banner">
       <div class="dept-badge-col">
         <span class="dept-badge-pill">
-          <span class="dept-pill-icon">🏢</span>
+          <svg class="banner-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M3 21h18"></path>
+            <path d="M5 21V7l8-4v18"></path>
+            <path d="M19 21V11l-6-4"></path>
+          </svg>
           <span class="dept-pill-text">Assigned Department: <strong>{{ approvedDepartmentName() }}</strong></span>
           <span class="dept-verified-tag">✓ Verified &amp; Locked</span>
         </span>
         @if (hasPendingChangeRequest()) {
           <span class="pending-change-indicator">
-            ⏳ Transfer Request Pending: <strong>{{ pendingTargetDepartmentName() }}</strong> (Under Review)
+            Transfer Request Pending: <strong>{{ pendingTargetDepartmentName() }}</strong> (Under Review)
           </span>
         }
       </div>
@@ -96,7 +118,12 @@
           class="btn-request-dept-change"
           (click)="openChangeDepartmentModal()"
           [disabled]="hasPendingChangeRequest()">
-          🔄 Request Department Change
+          <svg class="action-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          Request Department Change
         </button>
       </div>
     </div>
@@ -104,7 +131,11 @@
     <div class="learner-department-banner">
       <div class="dept-badge-col">
         <span class="dept-badge-pill">
-          <span class="dept-pill-icon">🌐</span>
+          <svg class="banner-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
           <span class="dept-pill-text">Unlocked Scope: <strong>All / Common Only</strong></span>
           <span class="pending-change-indicator">
             {{ departmentAllocationStatus() === 'pending' ? 'Track Request Pending (' + requestedDepartmentName() + ')' : 'Select Your Department Track Below' }}
@@ -125,7 +156,10 @@
         class="tab-btn"
         [class.active]="activeTab() === 'overview'"
         (click)="setTab('overview')">
-        <span class="tab-icon">📌</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+          <path d="M9 3v18"></path>
+        </svg>
         <span class="tab-title">Cohort Details</span>
       </button>
 
@@ -134,8 +168,11 @@
         class="tab-btn"
         [class.active]="activeTab() === 'teacher_batches'"
         (click)="setTab('teacher_batches')">
-        <span class="tab-icon">🎓</span>
-        <span class="tab-title">Batches Management</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+          <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+        </svg>
+        <span class="tab-title">Batches</span>
         <span class="tab-badge-count">{{ filteredBatches().length }}</span>
       </button>
 
@@ -144,9 +181,11 @@
         class="tab-btn"
         [class.active]="activeTab() === 'teacher_curriculum'"
         (click)="setTab('teacher_curriculum')">
-        <span class="tab-icon">📖</span>
-        <span class="tab-title">Curriculum &amp; Materials Builder</span>
-        <span class="tab-badge-accent">Course Creator</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+        </svg>
+        <span class="tab-title">Curriculum &amp; Materials</span>
       </button>
 
       <button
@@ -154,9 +193,11 @@
         class="tab-btn"
         [class.active]="activeTab() === 'teacher_attendance'"
         (click)="setTab('teacher_attendance')">
-        <span class="tab-icon">📊</span>
-        <span class="tab-title">Attendance Spreadsheet</span>
-        <span class="tab-badge-check">Matrix Mark</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M9 11l3 3L22 4"></path>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+        </svg>
+        <span class="tab-title">Attendance</span>
       </button>
 
       <button
@@ -164,8 +205,13 @@
         class="tab-btn"
         [class.active]="activeTab() === 'teacher_schedule'"
         (click)="setTab('teacher_schedule')">
-        <span class="tab-icon">📅</span>
-        <span class="tab-title">Training Schedule &amp; Timetable</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        <span class="tab-title">Schedule</span>
         <span class="tab-badge-count">{{ filteredTeacherSessions().length }}</span>
       </button>
 
@@ -174,9 +220,13 @@
         class="tab-btn"
         [class.active]="activeTab() === 'teacher_grading'"
         (click)="setTab('teacher_grading')">
-        <span class="tab-icon">📝</span>
-        <span class="tab-title">Assignments &amp; Grading</span>
-        <span class="tab-badge-warn">Review Submissions</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+        </svg>
+        <span class="tab-title">Assignments</span>
       </button>
 
       <button
@@ -184,8 +234,12 @@
         class="tab-btn"
         [class.active]="activeTab() === 'teacher_quizzes'"
         (click)="setTab('teacher_quizzes')">
-        <span class="tab-icon">🎯</span>
-        <span class="tab-title">Quiz Results &amp; Analytics</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+        <span class="tab-title">Quizzes</span>
         <span class="tab-badge-count">{{ allQuizSubmissions().length }}</span>
       </button>
 
@@ -194,8 +248,11 @@
         class="tab-btn"
         [class.active]="activeTab() === 'announcements'"
         (click)="setTab('announcements')">
-        <span class="tab-icon">📢</span>
-        <span class="tab-title">Announcements Board</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+        <span class="tab-title">Announcements</span>
       </button>
     </nav>
 
@@ -207,25 +264,42 @@
     }
 
     <!-- --------------------------------------------------------------------- -->
-    <!-- TEACHER TAB 1: BATCHES MANAGEMENT (MATCHING SCREENSHOT 1)             -->
+    <!-- TEACHER TAB 1: BATCHES MANAGEMENT                                      -->
     <!-- --------------------------------------------------------------------- -->
     @if (activeTab() === 'teacher_batches') {
       <section class="teacher-tab-content batches-tab">
-        <!-- Hero Blue Banner matching Screenshot 1 -->
+        <!-- Executive Batches Hero Banner -->
         <div class="batches-hero-banner">
           <div class="hero-left">
-            <h2>Welcome to your Batches!</h2>
-            <p>Manage your batches, schedule lectures, and track learner onboarding progress.</p>
+            <span class="hero-eyebrow-pill">COHORT OPERATIONS HUB</span>
+            <h2>Batches &amp; Cohort Provisioning</h2>
+            <p>Manage active cohorts, assign department instructors, schedule lectures, and track learner induction progress in real time.</p>
             <button type="button" class="btn-hero-pill" (click)="showToast('All batch activities are synchronized with the learner portal.', 'info')">
-              See how Batches works
+              <svg class="action-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              How Batch Sync Works
             </button>
           </div>
-          <div class="hero-illustration">
-            <span class="illus-icon">👨‍🏫👩‍🎓📚</span>
+          <div class="hero-metrics-cluster">
+            <div class="hero-metric-box">
+              <span class="metric-lbl">Active Batches</span>
+              <strong class="metric-val">{{ filteredBatches().length }}</strong>
+            </div>
+            <div class="hero-metric-box">
+              <span class="metric-lbl">Assigned Tracks</span>
+              <strong class="metric-val">{{ teacherAssignedDepartments().length }}</strong>
+            </div>
+            <div class="hero-metric-box">
+              <span class="metric-lbl">Pending Requests</span>
+              <strong class="metric-val">{{ pendingTrackRequests().length }}</strong>
+            </div>
           </div>
         </div>
 
-        <!-- Toolbar matching Screenshot 1 -->
+        <!-- Toolbar -->
         <div class="batches-subnav-toolbar">
           <div class="batches-tabs-row">
             <button
@@ -253,11 +327,14 @@
 
           <div class="batches-actions-row">
             <div class="search-box">
-              <span class="search-icon">🔍</span>
+              <svg class="search-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
               <input
                 type="search"
                 class="batch-search-input"
-                placeholder="Search for batches or students"
+                placeholder="Search batches or learners..."
                 [ngModel]="batchSearch()"
                 (ngModelChange)="batchSearch.set($event)" />
             </div>
@@ -265,7 +342,7 @@
             <!-- "Add New Batch" restricted strictly to SuperAdmin -->
             @if (isSuperAdminRole()) {
               <button type="button" class="btn-add-batch" (click)="openAddBatchModal()">
-                Add New Batch
+                + Add New Batch
               </button>
             }
           </div>
@@ -297,7 +374,13 @@
           <div class="teacher-pending-requests-card">
             <div class="pending-card-header">
               <div class="pending-header-title">
-                <span class="pending-card-icon">⚡</span>
+                <span class="pending-card-icon">
+                  <svg class="action-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </span>
                 <div>
                   <h3>Pending Department Approvals</h3>
                   <p>Learners waiting for technical department assignment or transfer approval.</p>
@@ -310,7 +393,7 @@
               @for (req of pendingTrackRequests(); track req.id) {
                 <div class="pending-request-row">
                   <div class="req-user-info">
-                    <span class="req-avatar">👤</span>
+                    <span class="req-avatar">{{ (req.user_name || 'L').charAt(0).toUpperCase() }}</span>
                     <div>
                       <strong>{{ req.user_name || 'Learner #' + req.user_id }}</strong>
                       <span class="req-user-email">{{ req.user_email }}</span>
@@ -397,7 +480,13 @@
               <div class="batch-card-footer">
                 @if (isSuperAdminRole()) {
                   <button type="button" class="btn-batch-delete" (click)="deleteBatch(batch.id, $event)" title="Delete / End Batch (SuperAdmin Only — Purges Cohort Records, Keeps Course Vault)">
-                    🗑 Delete Batch
+                    <svg class="action-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                      <path d="M10 11v6"></path>
+                      <path d="M14 11v6"></path>
+                    </svg>
+                    Delete
                   </button>
                 }
                 <button type="button" class="btn-batch-manage" (click)="selectBatchToManage(batch.id)">
@@ -1869,14 +1958,17 @@
       </section>
     }
 
-    <!-- 10-Feature Tabbed Navigation Bar (All / Common until approved, then Common + Approved Dept) -->
+    <!-- Tabbed Navigation Bar (All / Common until approved, then Common + Approved Dept) -->
     <nav class="cohort-tab-bar" aria-label="Cohort Features">
       <button
         type="button"
         class="tab-btn"
         [class.active]="activeTab() === 'overview'"
         (click)="setTab('overview')">
-        <span class="tab-icon">📌</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+          <path d="M9 3v18"></path>
+        </svg>
         <span class="tab-title">Cohort Details</span>
       </button>
 
@@ -1885,9 +1977,13 @@
         class="tab-btn"
         [class.active]="activeTab() === 'schedule'"
         (click)="setTab('schedule')">
-        <span class="tab-icon">📅</span>
-        <span class="tab-title">Training Schedule</span>
-        <span class="tab-badge-accent">Live Today</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        <span class="tab-title">Schedule</span>
       </button>
 
       <button
@@ -1895,8 +1991,11 @@
         class="tab-btn"
         [class.active]="activeTab() === 'materials'"
         (click)="setTab('materials')">
-        <span class="tab-icon">📚</span>
-        <span class="tab-title">Learning Materials</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+        </svg>
+        <span class="tab-title">Materials</span>
         <span class="tab-badge-count">{{ filteredMaterials().length }}</span>
       </button>
 
@@ -1905,10 +2004,15 @@
         class="tab-btn"
         [class.active]="activeTab() === 'assignments'"
         (click)="setTab('assignments')">
-        <span class="tab-icon">📝</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+        </svg>
         <span class="tab-title">Assignments</span>
         @if (pendingAssignmentsCount() > 0) {
-          <span class="tab-badge-warn">{{ pendingAssignmentsCount() }} Due</span>
+          <span class="tab-badge-warn">{{ pendingAssignmentsCount() }}</span>
         }
       </button>
 
@@ -1917,8 +2021,11 @@
         class="tab-btn"
         [class.active]="activeTab() === 'attendance'"
         (click)="setTab('attendance')">
-        <span class="tab-icon">📊</span>
-        <span class="tab-title">Attendance Tracking</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M9 11l3 3L22 4"></path>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+        </svg>
+        <span class="tab-title">Attendance</span>
         <span class="tab-badge-check">{{ attendance().percentage }}%</span>
       </button>
 
@@ -1927,10 +2034,14 @@
         class="tab-btn"
         [class.active]="activeTab() === 'assessments'"
         (click)="setTab('assessments')">
-        <span class="tab-icon">🎯</span>
-        <span class="tab-title">Quizzes &amp; Tests</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+        <span class="tab-title">Quizzes</span>
         @if (availableQuizzesCount() > 0) {
-          <span class="tab-badge-warn">{{ availableQuizzesCount() }} Open</span>
+          <span class="tab-badge-warn">{{ availableQuizzesCount() }}</span>
         }
       </button>
 
@@ -1939,7 +2050,10 @@
         class="tab-btn"
         [class.active]="activeTab() === 'announcements'"
         (click)="setTab('announcements')">
-        <span class="tab-icon">📢</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
         <span class="tab-title">Announcements</span>
         @if (unreadAnnouncementsCount() > 0) {
           <span class="tab-badge-alert">{{ unreadAnnouncementsCount() }}</span>
@@ -1951,8 +2065,11 @@
         class="tab-btn"
         [class.active]="activeTab() === 'progress'"
         (click)="setTab('progress')">
-        <span class="tab-icon">📈</span>
-        <span class="tab-title">Progress Tracking</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+          <polyline points="17 6 23 6 23 12"></polyline>
+        </svg>
+        <span class="tab-title">Progress</span>
         <span class="tab-badge-count">{{ progress().overallPercentage }}%</span>
       </button>
 
@@ -1961,8 +2078,10 @@
         class="tab-btn"
         [class.active]="activeTab() === 'discussions'"
         (click)="setTab('discussions')">
-        <span class="tab-icon">💬</span>
-        <span class="tab-title">Discussion Forum</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span class="tab-title">Discussions</span>
         <span class="tab-badge-count">{{ discussions().length }}</span>
       </button>
     </nav>
@@ -2698,7 +2817,10 @@
               <span class="red-recording-dot"></span>
               ACTIVE SESSION IN PROGRESS
             } @else {
-              <span class="wait-icon">⏳</span>
+              <svg class="action-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
               UPCOMING SCHEDULED SESSION
             }
           </div>
@@ -2714,17 +2836,19 @@
                 type="button"
                 class="btn-primary-action"
                 (click)="joinLiveClass(activeLiveMeetingUrl(), activeLiveSessionTitle())">
-                🔴 Join Live Google Meet Room ↗
+                <span class="red-recording-dot"></span>
+                Join Live Google Meet Room ↗
               </button>
             } @else {
-              <span class="awaiting-live-pill">⏳ Upcoming · Join Live appears once {{ activeLiveTrainerName() }} starts</span>
+              <span class="awaiting-live-pill">Upcoming &middot; Join Live appears once {{ activeLiveTrainerName() }} starts</span>
             }
             @if (canStartActiveSpotlight() && !isLiveClassActive() && activeSpotlightSession()) {
               <button
                 type="button"
                 class="btn-start-meeting-spotlight"
                 (click)="startTrainingSession(activeSpotlightSession()!)">
-                🔴 Start Meeting (Go Live)
+                <span class="red-recording-dot"></span>
+                Start Meeting (Go Live)
               </button>
             }
             @if (canStartActiveSpotlight() && isLiveClassActive() && currentLiveSession()) {
@@ -2732,7 +2856,7 @@
                 type="button"
                 class="btn-end-meeting-spotlight"
                 (click)="endTrainingSession(currentLiveSession()!)">
-                ⏹ End Meeting
+                End Meeting
               </button>
             }
             @if (!isTeacherRole()) {
@@ -2748,7 +2872,11 @@
         </div>
         <div class="live-spotlight-visual">
           <div class="visual-badge">
-            <span class="v-icon">💻</span>
+            <svg class="visual-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
             <span>Week {{ details().currentWeek || 4 }} Sprint</span>
           </div>
         </div>
@@ -2758,7 +2886,14 @@
       <article class="overview-card cohort-trainings-card">
         <div class="card-title-bar justify-between">
           <div class="title-left">
-            <span class="card-icon-round">📅</span>
+            <span class="card-icon-round">
+              <svg class="card-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </span>
             <div>
               <h3>Scheduled Cohort Trainings &amp; Timetable</h3>
               <p>All training sessions, live classes, and workshops scheduled for this cohort</p>
@@ -2779,7 +2914,14 @@
 
         @if (overviewSessions().length === 0) {
           <div class="empty-cohort-trainings">
-            <span class="empty-icon">📅</span>
+            <span class="empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </span>
             <h4>No Training Sessions Scheduled Yet</h4>
             <p>Trainings added by instructors in the Training Schedule &amp; Timetable will appear here.</p>
             @if (viewMode() === 'teacher' && canTeacherCreateContent()) {
@@ -2797,19 +2939,17 @@
                   <div class="training-status-tag" [ngClass]="sess.status">
                     @if (sess.status === 'today') {
                       <span class="pulse-dot-live"></span>
-                      <strong>🔴 LIVE NOW</strong>
+                      <strong>LIVE NOW</strong>
                     } @else if (sess.status === 'upcoming') {
-                      <span class="wait-icon">🕒</span>
                       <strong>Upcoming</strong>
                     } @else {
-                      <span class="done-icon">✓</span>
-                      <strong>Completed</strong>
+                      <strong>✓ Completed</strong>
                     }
                   </div>
                   <div class="training-when-block">
-                    <span class="when-date">📅 {{ sess.date }}</span>
-                    <span class="when-time">🕒 {{ sess.time }}</span>
-                    <span class="when-duration">⏳ {{ sess.duration }}</span>
+                    <span class="when-date">{{ sess.date }}</span>
+                    <span class="when-time">{{ sess.time }}</span>
+                    <span class="when-duration">{{ sess.duration }}</span>
                   </div>
                 </div>
 

@@ -1,5 +1,6 @@
-import { Component, OnInit, HostListener, inject, ElementRef } from '@angular/core';
+import { Component, OnInit, HostListener, inject, ElementRef, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import {
   Router,
   RouterLink,
@@ -12,10 +13,20 @@ import { OnboardingService } from '../../core/services/onboarding.service';
 import { ThemeService } from '../../core/services/theme.service';
 import { BrandLogo } from '../../shared/components/brand-logo/brand-logo';
 
+interface CommandItem {
+  id: string;
+  label: string;
+  description: string;
+  group: string;
+  route?: string;
+  action?: () => void;
+  keywords: string;
+}
+
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, BrandLogo],
+  imports: [CommonModule, FormsModule, RouterOutlet, RouterLink, RouterLinkActive, BrandLogo],
   templateUrl: './main-layout.html',
   styleUrl: './main-layout.scss'
 })
@@ -23,6 +34,10 @@ export class MainLayout implements OnInit {
   sidebarOpen = false;
   profileMenuOpen = false;
   user: CurrentUser | null = null;
+
+  commandPaletteOpen = signal(false);
+  commandQuery = signal('');
+  commandActiveIndex = signal(0);
 
   public readonly authService = inject(AuthService);
   public readonly assessmentStatusService = inject(AssessmentStatusService);
@@ -205,9 +220,223 @@ export class MainLayout implements OnInit {
     }
   }
 
+  get filteredCommands(): CommandItem[] {
+    const items: CommandItem[] = [];
+
+    if (!this.isAssessmentOnlyMode) {
+      items.push({
+        id: 'dashboard',
+        label: 'Executive Dashboard',
+        description: 'Overview metrics, analytics & telemetry',
+        group: 'Navigation',
+        route: '/dashboard',
+        keywords: 'home overview stats analytics kpi'
+      });
+
+      items.push(
+        {
+          id: 'courses',
+          label: 'Course Vaults',
+          description: 'Department curricula, syllabus & permanent resources',
+          group: 'Academic & Learning',
+          route: '/courses',
+          keywords: 'vault curriculum syllabus materials study'
+        },
+        {
+          id: 'cohorts',
+          label: 'Cohorts & Batches',
+          description: 'Manage active batches, timetables & assignments',
+          group: 'Academic & Learning',
+          route: '/cohorts',
+          keywords: 'batches schedule timetable attendance quizzes'
+        },
+        {
+          id: 'live-classes',
+          label: 'Live Classes',
+          description: 'Department live streams & scheduled video workshops',
+          group: 'Academic & Learning',
+          route: '/live-classes',
+          keywords: 'video meeting stream session workshop'
+        }
+      );
+
+      if (this.authService.hasRole('superadmin', 'admin', 'teacher')) {
+        items.push({
+          id: 'departments',
+          label: 'Departments & Tracks',
+          description: 'Engineering tracks & joinee allocation requests',
+          group: 'Academic & Learning',
+          route: '/departments',
+          keywords: 'tracks specialization requests approve'
+        });
+      }
+    }
+
+    if (this.isLearner) {
+      items.push(
+        {
+          id: 'my-assessments',
+          label: 'My Assessments',
+          description: 'Assigned evaluations & exam center',
+          group: 'Evaluation Suite',
+          route: '/my-assessments',
+          keywords: 'exam test take quiz assigned'
+        },
+        {
+          id: 'my-results',
+          label: 'My Results',
+          description: 'Scores, performance breakdown & history',
+          group: 'Evaluation Suite',
+          route: '/my-results',
+          keywords: 'score grade history marks'
+        },
+        {
+          id: 'my-reports',
+          label: 'Official Reports',
+          description: 'Developmental report cards & radar charts',
+          group: 'Evaluation Suite',
+          route: '/my-reports',
+          keywords: 'report card certificate radar'
+        }
+      );
+      if (this.canSelectDepartment) {
+        items.push({
+          id: 'dept-select',
+          label: 'Department Selection',
+          description: 'Choose your engineering specialization track',
+          group: 'Onboarding',
+          route: '/department-selection',
+          keywords: 'onboarding select track department'
+        });
+      }
+    }
+
+    if (this.authService.hasRole('admin', 'teacher', 'superadmin')) {
+      items.push(
+        {
+          id: 'assessments',
+          label: 'Assessment Management',
+          description: 'Author tests, question banks & preview exams',
+          group: 'Evaluation Suite',
+          route: '/assessments',
+          keywords: 'create template questions exam bank'
+        },
+        {
+          id: 'assessment-results',
+          label: 'Learner Results',
+          description: 'Review candidate submissions, proctoring & history',
+          group: 'Evaluation Suite',
+          route: '/assessment-results',
+          keywords: 'submissions scores grades proctoring'
+        }
+      );
+    }
+
+    if (this.authService.hasRole('superadmin', 'admin')) {
+      items.push({
+        id: 'users',
+        label: 'User Management',
+        description: 'Provision accounts, roles & teacher tracks',
+        group: 'Administration',
+        route: '/users',
+        keywords: 'accounts roles admins teachers learners'
+      });
+    }
+
+    if (!this.isAssessmentOnlyMode) {
+      items.push({
+        id: 'profile',
+        label: 'My Profile & Security',
+        description: 'Account details, password & permissions',
+        group: 'Account',
+        route: '/profile',
+        keywords: 'account settings password security'
+      });
+    }
+
+    items.push({
+      id: 'toggle-theme',
+      label: this.themeService.isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+      description: 'Toggle application appearance theme instantly',
+      group: 'Preferences',
+      action: () => this.themeService.toggleTheme(),
+      keywords: 'theme dark light appearance mode color'
+    });
+
+    const q = this.commandQuery().trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (item) =>
+        item.label.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.group.toLowerCase().includes(q) ||
+        item.keywords.includes(q)
+    );
+  }
+
+  openCommandPalette(): void {
+    this.profileMenuOpen = false;
+    this.commandQuery.set('');
+    this.commandActiveIndex.set(0);
+    this.commandPaletteOpen.set(true);
+    setTimeout(() => {
+      const input = this.elementRef.nativeElement.querySelector('.cmd-search-input') as HTMLInputElement | null;
+      input?.focus();
+    }, 20);
+  }
+
+  closeCommandPalette(): void {
+    this.commandPaletteOpen.set(false);
+    this.commandQuery.set('');
+  }
+
+  onCommandQueryChange(val: string): void {
+    this.commandQuery.set(val);
+    this.commandActiveIndex.set(0);
+  }
+
+  executeCommand(cmd: CommandItem): void {
+    this.closeCommandPalette();
+    this.sidebarOpen = false;
+    if (cmd.action) {
+      cmd.action();
+    } else if (cmd.route) {
+      void this.router.navigate([cmd.route]);
+    }
+  }
+
+  onCommandKeydown(event: KeyboardEvent): void {
+    const list = this.filteredCommands;
+    if (!list.length) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.commandActiveIndex.set((this.commandActiveIndex() + 1) % list.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.commandActiveIndex.set((this.commandActiveIndex() - 1 + list.length) % list.length);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      const target = list[this.commandActiveIndex()] || list[0];
+      if (target) this.executeCommand(target);
+    }
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onGlobalKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      if (this.commandPaletteOpen()) {
+        this.closeCommandPalette();
+      } else {
+        this.openCommandPalette();
+      }
+    }
+  }
+
   @HostListener('document:keydown.escape')
   onEscape(): void {
     this.profileMenuOpen = false;
     this.sidebarOpen = false;
+    this.closeCommandPalette();
   }
 }

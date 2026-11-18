@@ -17,7 +17,15 @@
   <div class="stats-grid">
 
     <div class="stat-card">
-      <div class="stat-icon purple">▤</div>
+      <div class="stat-icon purple">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+          <path d="M9 3v18"></path>
+          <path d="M13 8h5"></path>
+          <path d="M13 12h5"></path>
+          <path d="M13 16h3"></path>
+        </svg>
+      </div>
       <div>
         <span>Total Templates</span>
         <h2>{{ templates.length }}</h2>
@@ -25,7 +33,12 @@
     </div>
 
     <div class="stat-card">
-      <div class="stat-icon green">✓</div>
+      <div class="stat-icon green">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+      </div>
       <div>
         <span>Active Templates</span>
         <h2>{{ activeCount }}</h2>
@@ -33,7 +46,13 @@
     </div>
 
     <div class="stat-card">
-      <div class="stat-icon blue">☷</div>
+      <div class="stat-icon blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
       <div>
         <span>Total Questions</span>
         <h2>{{ totalQuestions }}</h2>
@@ -110,15 +129,37 @@
           </p>
 
           <div class="assignment-strip">
-            <span class="assign-pill" style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;">
-              🏢 {{ template.department_name || 'All / Common' }}
+            <span class="assign-pill dept-pill">
+              <svg class="pill-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M3 21h18"></path>
+                <path d="M5 21V7l8-4v18"></path>
+                <path d="M19 21V11l-6-4"></path>
+              </svg>
+              {{ template.department_name || 'All / Common' }}
             </span>
             <span class="assign-pill" [attr.data-scope]="template.assignment_scope || 'all'">
-              🎯 {{ template.assignment_summary || 'All Learners' }}
+              <svg class="pill-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"></circle>
+                <circle cx="12" cy="12" r="5"></circle>
+                <circle cx="12" cy="12" r="1"></circle>
+              </svg>
+              {{ template.assignment_summary || 'All Learners' }}
+            </span>
+            <span class="assign-pill sets-pill" title="3 distinct question sets (Set A, Set B, Set C) available for this category">
+              <svg class="pill-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+              </svg>
+              {{ getSetBadgeLabel(template) }}
             </span>
             @if (template.due_at) {
               <span class="due-pill">
-                ⏰ Due {{ template.due_at | date:'mediumDate' }}
+                <svg class="pill-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                Due {{ template.due_at | date:'mediumDate' }}
               </span>
             }
           </div>
@@ -130,7 +171,7 @@
             </div>
 
             <div>
-              <strong>{{ (template.category_config | keyvalue).length }}</strong>
+              <strong>{{ getCategoryEntries(template).length }}</strong>
               <span>Categories</span>
             </div>
 
@@ -142,12 +183,12 @@
 
           <div class="category-list">
             @for (
-              category of template.category_config | keyvalue;
+              category of getCategoryEntries(template);
               track category.key
             ) {
               <div class="category-item">
-                <span>{{ category.value.label }}</span>
-                <span>{{ category.value.question_count }} Qs</span>
+                <span>{{ category.label }}</span>
+                <span>{{ category.question_count }} Qs</span>
               </div>
             }
           </div>
@@ -158,14 +199,24 @@
                 type="button"
                 class="btn-outline btn-edit"
                 (click)="editAssessment(template.id)">
-                ⚙ Edit
+                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                Edit
               </button>
 
               <button
                 type="button"
                 class="btn-outline btn-questions"
                 (click)="manageQuestions(template.id)">
-                📑 Questions
+                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+                Questions
               </button>
             }
 
@@ -173,7 +224,11 @@
               type="button"
               class="btn-outline btn-preview"
               (click)="previewAssessment(template.id)">
-              👁 Preview
+              <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              Preview
             </button>
 
             @if (canEditTemplate(template)) {

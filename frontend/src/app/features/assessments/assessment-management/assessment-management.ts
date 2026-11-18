@@ -133,6 +133,28 @@ export class AssessmentManagement implements OnInit {
     return (template.assessment_type === 'logical_reasoning' || template.assessment_type === 'programming') ? 30 : 15;
   }
 
+  getCategoryEntries(template: AssessmentTemplate): Array<{ key: string; label: string; question_count: number }> {
+    const cfg = template.category_config as Record<string, any> | undefined;
+    if (!cfg || typeof cfg !== 'object') return [];
+    return Object.entries(cfg)
+      .filter(([key, val]) => key !== 'question_set' && val && typeof val === 'object')
+      .map(([key, val]) => ({
+        key,
+        label: val.label || key,
+        question_count: Number(val.question_count || 0),
+      }));
+  }
+
+  getSetBadgeLabel(template: AssessmentTemplate): string {
+    const raw = String((template.category_config as Record<string, any> | undefined)?.['question_set'] || '')
+      .trim()
+      .toUpperCase();
+    if (raw === 'A' || raw === 'B' || raw === 'C') {
+      return `Pinned: Set ${raw} (3 Sets Available)`;
+    }
+    return '3 Sets (Auto A · B · C)';
+  }
+
   toggleStatus(template: AssessmentTemplate): void {
 
     this.errorMessage.set('');

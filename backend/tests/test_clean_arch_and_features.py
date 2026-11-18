@@ -508,17 +508,26 @@ class CleanArchitectureAndFeatureTests(unittest.TestCase):
 
     # 3. Multi-Set A/B/C Distinct Sets + Tagging + Comprehension Passage & Intelligence
     def test_multi_set_tagging_and_comprehension_intelligence(self) -> None:
-        # 3a. Distinct question pools across Sets A, B, C per category
-        for domain in ("psychometric", "cognitive", "logical_reasoning", "programming", "comprehension"):
+        # 3a. Distinct question pools across Sets A, B, C for ALL 9 assessment categories
+        for domain in (
+            "logical_reasoning",
+            "english_grammar",
+            "technical",
+            "psychometric",
+            "programming",
+            "cognitive",
+            "composition",
+            "algorithm",
+            "comprehension",
+        ):
+            pool_a = {q["question_text"] for q in get_multi_set_questions(domain, "A")}
             pool_b = {q["question_text"] for q in get_multi_set_questions(domain, "B")}
             pool_c = {q["question_text"] for q in get_multi_set_questions(domain, "C")}
-            if domain in {"cognitive", "programming", "comprehension"}:
-                pool_a = {q["question_text"] for q in get_multi_set_questions(domain, "A")}
-                self.assertGreater(len(pool_a), 0, domain)
-                self.assertEqual(len(pool_a & pool_b), 0, f"Overlap A/B in {domain}")
-                self.assertEqual(len(pool_a & pool_c), 0, f"Overlap A/C in {domain}")
-            self.assertGreater(len(pool_b), 0, domain)
-            self.assertGreater(len(pool_c), 0, domain)
+            self.assertGreaterEqual(len(pool_a), 10, domain)
+            self.assertGreaterEqual(len(pool_b), 10, domain)
+            self.assertGreaterEqual(len(pool_c), 10, domain)
+            self.assertEqual(len(pool_a & pool_b), 0, f"Overlap A/B in {domain}")
+            self.assertEqual(len(pool_a & pool_c), 0, f"Overlap A/C in {domain}")
             self.assertEqual(len(pool_b & pool_c), 0, f"Overlap B/C in {domain}")
 
         # Candidate set rotation yields all 3 sets across learners

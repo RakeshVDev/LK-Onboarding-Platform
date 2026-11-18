@@ -306,8 +306,23 @@
         </nav>
       </div>
 
-      <!-- TOPBAR RIGHT: THEME TOGGLE & PROFILE DROPDOWN -->
+      <!-- TOPBAR RIGHT: QUICK COMMAND, THEME TOGGLE & PROFILE DROPDOWN -->
       <div class="topbar-right">
+        <!-- Quick Jump Command Palette Trigger (Ctrl+K) -->
+        <button
+          type="button"
+          class="topbar-cmd-btn"
+          (click)="openCommandPalette()"
+          title="Quick Navigate (Ctrl+K)"
+          aria-label="Open quick navigation command palette">
+          <svg class="cmd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <span class="cmd-placeholder">Quick jump...</span>
+          <kbd class="cmd-kbd">Ctrl K</kbd>
+        </button>
+
         <!-- Live System Connection Status Pill -->
         <div class="topbar-status-chip" title="Enterprise Core Connected">
           <span class="live-dot"></span>
@@ -517,4 +532,54 @@
       </div>
     </footer>
   </section>
+
+  <!-- GLOBAL QUICK COMMAND PALETTE (Ctrl+K) -->
+  @if (commandPaletteOpen()) {
+  <div class="cmd-backdrop" (click)="closeCommandPalette()" role="dialog" aria-modal="true" aria-label="Quick Command Palette">
+    <div class="cmd-dialog" (click)="$event.stopPropagation()">
+      <div class="cmd-input-row">
+        <svg class="cmd-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input
+          type="text"
+          class="cmd-search-input"
+          [ngModel]="commandQuery()"
+          (ngModelChange)="onCommandQueryChange($event)"
+          (keydown)="onCommandKeydown($event)"
+          placeholder="Type a page, module, or action (e.g. Cohorts, Results, Dark Mode)..."
+          autocomplete="off" />
+        <button type="button" class="cmd-esc-badge" (click)="closeCommandPalette()">ESC</button>
+      </div>
+
+      <div class="cmd-results-list">
+        @if (filteredCommands.length === 0) {
+          <div class="cmd-empty">No matching destinations or actions found.</div>
+        } @else {
+          @for (cmd of filteredCommands; track cmd.id; let idx = $index) {
+            <button
+              type="button"
+              class="cmd-result-item"
+              [class.is-active]="commandActiveIndex() === idx"
+              (mouseenter)="commandActiveIndex.set(idx)"
+              (click)="executeCommand(cmd)">
+              <div class="cmd-item-copy">
+                <strong>{{ cmd.label }}</strong>
+                <span>{{ cmd.description }}</span>
+              </div>
+              <span class="cmd-item-group">{{ cmd.group }}</span>
+            </button>
+          }
+        }
+      </div>
+
+      <div class="cmd-footer-hints">
+        <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+        <span><kbd>↵</kbd> Open</span>
+        <span><kbd>ESC</kbd> Close</span>
+      </div>
+    </div>
+  </div>
+  }
 </div>
