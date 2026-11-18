@@ -462,22 +462,106 @@
 
   .modal-card,
   .modal-container,
-  .modal-box {
-    background: #111827;
-    border: 1px solid #1f2937;
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+  .modal-box,
+  .scheduler-modal {
+    background: #182230;
+    border: 1px solid #344054;
+    color: #f9fafb;
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.65);
 
-    .modal-header {
-      border-bottom-color: #1f2937;
+    .modal-header,
+    .modal-head {
+      border-bottom-color: #293548;
       h2, h3 {
         color: #f8fafc;
       }
+      p {
+        color: #94a3b8;
+      }
+      .btn-close {
+        color: #94a3b8;
+        &:hover { color: #f8fafc; }
+      }
+    }
+
+    .form-field label {
+      color: #cbd5e1;
     }
 
     .modal-footer {
-      background: #0f172a;
-      border-top-color: #1f2937;
+      background: #111827;
+      border-top-color: #293548;
     }
   }
+
+  .btn-sm-chip {
+    background: #1e293b;
+    border-color: #334155;
+    color: #e2e8f0;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+
+  .dept-chip {
+    background: rgba(129, 140, 248, 0.16);
+    border-color: rgba(129, 140, 248, 0.32);
+    color: #c7d2fe;
+  }
+
+  .session-meta div {
+    background: #111827;
+    border-color: #263244;
+
+    .meta-lbl {
+      color: #94a3b8;
+    }
+    strong {
+      color: #f8fafc;
+    }
+  }
+
+  .restricted-panel,
+  .empty-panel {
+    background: #182230;
+    border-color: #293548;
+
+    h2, h3 { color: #f8fafc; }
+    p { color: #94a3b8; }
+  }
+}
+
+.inline-svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.dept-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.restricted-icon svg,
+.empty-icon svg {
+  width: 40px;
+  height: 40px;
+  color: #635bff;
+}
+
+.session-card[data-status="live"] {
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.18), 0 10px 26px -6px rgba(239, 68, 68, 0.16) !important;
+}
+
+.session-meta .meta-lbl {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #667085;
 }
 

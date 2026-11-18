@@ -625,11 +625,13 @@ export class AssessmentService {
   previewTemplate(
     templateId: number,
     mode: 'student' | 'admin' = 'student',
-    customOnly = false
+    customOnly = false,
+    questionSet: 'A' | 'B' | 'C' = 'A'
   ): Observable<AssessmentTemplatePreview> {
     const params = new HttpParams()
       .set('mode', mode)
-      .set('custom_only', String(customOnly));
+      .set('custom_only', String(customOnly))
+      .set('question_set', questionSet);
     return this.http.get<AssessmentTemplatePreview>(
       `${this.apiUrl}/templates/${templateId}/preview`,
       { params }

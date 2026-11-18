@@ -13,61 +13,34 @@
   } @else if (user()) {
 
   <!-- ========================================================= -->
-  <!-- EXECUTIVE HEADER & WORKSPACE ACTIONS                      -->
-  <!-- ========================================================= -->
-  <header class="trainery-top-header">
-    <div class="dashboard-heading-meta">
-      <div class="meta-tag-row">
-        <span class="meta-badge-role">{{ getRoleLabel(user()?.role) }} Center</span>
-        <span class="meta-badge-live">● Operational</span>
-      </div>
-      <h1 class="dashboard-page-title">Executive Operations Center</h1>
-    </div>
-
-    <div class="header-action-pills">
-      <button type="button" class="btn-trai-insights" (click)="refreshLearnerAssessments()" title="Sync live telemetry">
-        <span class="sparkle-icon">✨</span>
-        <span>{{ syncingAssessments() ? 'Syncing...' : 'Assessment Insights' }}</span>
-      </button>
-
-      @if (user()?.role === 'learner') {
-      <a routerLink="/my-assessments" class="btn-trainery-primary">
-        <span>+ Take Assessment</span>
-      </a>
-      } @else if (user()?.role === 'teacher') {
-      <a routerLink="/assessments" class="btn-trainery-primary">
-        <span>+ Create Assessment</span>
-      </a>
-      } @else {
-      <a routerLink="/assessments" class="btn-trainery-primary">
-        <span>+ New Assessment</span>
-      </a>
-      }
-    </div>
-  </header>
-
-  <!-- ========================================================= -->
   <!-- EXECUTIVE WELCOME SPOTLIGHT HERO                          -->
   <!-- ========================================================= -->
-  <div class="executive-welcome-hero">
+  <section class="executive-welcome-hero" aria-label="Executive Overview">
     <div class="hero-left-content">
       <div class="hero-badges-row">
         <span class="hero-role-badge">
-          <span class="role-icon">⚡</span>
+          <svg class="hero-badge-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
           {{ getRoleLabel(user()?.role) | uppercase }}
         </span>
         <span class="hero-date-badge">
-          <span class="cal-icon">📅</span>
+          <svg class="hero-badge-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
           {{ todayFormatted() }}
         </span>
         <span class="hero-status-badge">
           <span class="status-pulse-dot"></span>
-          Operational
+          Systems Operational
         </span>
       </div>
 
       <h1 class="hero-title">
-        {{ greeting() }}, {{ user()?.full_name || 'Team Member' }}! 👋
+        {{ greeting() }}, {{ user()?.full_name || 'Team Member' }}
       </h1>
 
       <p class="hero-subtitle">
@@ -122,34 +95,31 @@
       </a>
       }
     </div>
-  </div>
+  </section>
 
-  <!-- Dashboard Title & Dynamic Controls Bar -->
-  <div class="trainery-title-bar">
-    <div class="title-col">
-      <h2 class="trainery-main-title">
-        @if (user()?.role === 'learner') {
-        Learning &amp; Evaluation Center
-        } @else if (user()?.role === 'teacher') {
-        Faculty &amp; Assessment Suite
-        } @else {
-        Operations &amp; Governance Center
-        }
-      </h2>
-    </div>
+  <!-- Unified Workspace Tabs & Telemetry Controls Bar -->
+  <div class="trainery-tabs-toolbar">
+    <nav class="trainery-tabs" aria-label="Dashboard Views">
+      <button type="button" class="tab-item" [class.active]="activeTab() === 'overview'"
+        (click)="setActiveTab('overview')">
+        Overview
+      </button>
+      <button type="button" class="tab-item" [class.active]="activeTab() === 'courses'" (click)="setActiveTab('courses')">
+        Course Summary
+      </button>
+      <button type="button" class="tab-item" [class.active]="activeTab() === 'assessments'"
+        (click)="setActiveTab('assessments')">
+        Skill Assessments
+      </button>
+      <button type="button" class="tab-item" [class.active]="activeTab() === 'analytics'"
+        (click)="setActiveTab('analytics')">
+        Analytics
+      </button>
+    </nav>
 
     <div class="controls-col">
-      <button type="button" class="btn-ctrl-filter" (click)="refreshLearnerAssessments()" title="Refresh telemetry">
-        <svg class="ctrl-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="23 4 23 10 17 10"></polyline>
-          <polyline points="1 20 1 14 7 14"></polyline>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-        <span>{{ syncingAssessments() ? 'Syncing...' : 'Refresh' }}</span>
-      </button>
-
       <div class="ctrl-dropdown-wrapper">
-        <select class="ctrl-select" [(ngModel)]="selectedFilterDepartment">
+        <select class="ctrl-select" [(ngModel)]="selectedFilterDepartment" aria-label="Filter by department">
           <option value="all">All departments</option>
           @for (dept of availableDepartments(); track dept.id) {
           <option [value]="dept.id">{{ dept.name }}</option>
@@ -160,31 +130,16 @@
         </svg>
       </div>
 
-      <div class="period-chip">
-        <span class="cal-icon">📅</span>
-        <span>{{ todayFormatted() }}</span>
-      </div>
+      <button type="button" class="btn-ctrl-filter" (click)="refreshLearnerAssessments()" title="Sync live telemetry">
+        <svg class="ctrl-svg" [class.is-spinning]="syncingAssessments()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>{{ syncingAssessments() ? 'Syncing...' : 'Sync Data' }}</span>
+      </button>
     </div>
   </div>
-
-  <!-- Trainery Tab Navigation Bar -->
-  <nav class="trainery-tabs" aria-label="Dashboard Views">
-    <button type="button" class="tab-item" [class.active]="activeTab() === 'overview'"
-      (click)="setActiveTab('overview')">
-      Overview
-    </button>
-    <button type="button" class="tab-item" [class.active]="activeTab() === 'courses'" (click)="setActiveTab('courses')">
-      Course Summary
-    </button>
-    <button type="button" class="tab-item" [class.active]="activeTab() === 'assessments'"
-      (click)="setActiveTab('assessments')">
-      Skill Assessments
-    </button>
-    <button type="button" class="tab-item" [class.active]="activeTab() === 'analytics'"
-      (click)="setActiveTab('analytics')">
-      Analytics
-    </button>
-  </nav>
 
   <!-- ========================================================= -->
   <!-- TAB 1: OVERVIEW                                           -->

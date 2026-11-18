@@ -29,17 +29,37 @@
 
 /* Hero Profile Header */
 .profile-hero {
+  position: relative;
+  overflow: hidden;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 24px;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e4e7ec;
   border-radius: 20px;
   padding: 32px;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
   margin-bottom: 24px;
   flex-wrap: wrap;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #635bff 0%, #06b6d4 100%);
+  }
+}
+
+.meta-svg,
+.tab-svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: #635bff;
 }
 
 .hero-left {

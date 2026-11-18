@@ -84,6 +84,17 @@
                 <div class="peh-badges">
                   <span class="badge-sim">EXAM SIMULATION</span>
                   <span class="badge-type">{{ previewData.assessment_type.replace('_', ' ') | titlecase }}</span>
+                  <div class="scope-switch" role="tablist" aria-label="Question Set selector">
+                    @for (setCode of availableSets; track setCode) {
+                      <button
+                        type="button"
+                        class="scope-chip"
+                        [class.active]="previewSet === setCode"
+                        (click)="setPreviewSet(setCode)">
+                        Set {{ setCode }}
+                      </button>
+                    }
+                  </div>
                   @if (hasBothCustomAndBuiltin) {
                     <div class="scope-switch">
                       <button

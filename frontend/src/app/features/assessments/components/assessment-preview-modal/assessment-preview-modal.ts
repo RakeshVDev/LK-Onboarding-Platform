@@ -49,6 +49,8 @@ export class AssessmentPreviewModal implements OnChanges {
   @Output() closed = new EventEmitter<void>();
 
   previewMode: 'student' | 'admin' = 'student';
+  previewSet: 'A' | 'B' | 'C' = 'A';
+  readonly availableSets: readonly ('A' | 'B' | 'C')[] = ['A', 'B', 'C'];
   customOnly = false;
   showInstructions = true;
 
@@ -111,7 +113,7 @@ export class AssessmentPreviewModal implements OnChanges {
 
     try {
       const data = await firstValueFrom(
-        this.api.previewTemplate(this.templateId, this.previewMode, this.customOnly)
+        this.api.previewTemplate(this.templateId, this.previewMode, this.customOnly, this.previewSet)
       );
       this.previewData = data;
       if (!this.customOnly) {
@@ -132,6 +134,17 @@ export class AssessmentPreviewModal implements OnChanges {
       this.loading = false;
       this.cdr.detectChanges();
     }
+  }
+
+  setPreviewSet(setCode: 'A' | 'B' | 'C'): void {
+    if (this.previewSet === setCode) return;
+    this.previewSet = setCode;
+    this.currentIndex = 0;
+    this.localAnswers = {};
+    this.visitedQuestions = new Set();
+    this.markedForReview = new Set();
+    this.showSummaryView = false;
+    void this.loadTemplatePreview();
   }
 
   get isSingleQuestionMode(): boolean {

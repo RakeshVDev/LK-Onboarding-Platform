@@ -252,6 +252,12 @@ export class AssessmentForm implements OnInit {
   qNegativeMarks = 0.0;
   qAddToAssessment = true;
 
+  // Question Set Configuration for the Template ('AUTO' rotates Set A/B/C; or pin 'A'/'B'/'C')
+  selectedQuestionSet: 'AUTO' | 'A' | 'B' | 'C' = 'AUTO';
+
+  // Question Bank Filter by Set (All / Set A / Set B / Set C)
+  activeSetFilter: 'ALL' | 'A' | 'B' | 'C' = 'ALL';
+
   // Bulk Question Import state (CSV, XLSX, XLS, PDF, PPTX, DOCX)
   showBulkUploadPanel = false;
   bulkFile: File | null = null;
@@ -384,6 +390,21 @@ export class AssessmentForm implements OnInit {
     }
 
     return base;
+  }
+
+  get filteredAssignedQuestions(): BankQuestion[] {
+    if (this.activeSetFilter === 'ALL') {
+      return this.assignedQuestions;
+    }
+    return this.assignedQuestions.filter(
+      (q) => (q.question_set || 'A').toUpperCase() === this.activeSetFilter
+    );
+  }
+
+  countQuestionsBySet(setCode: 'A' | 'B' | 'C'): number {
+    return this.assignedQuestions.filter(
+      (q) => (q.question_set || 'A').toUpperCase() === setCode
+    ).length;
   }
 
   get filteredCohorts(): AssignableCohortItem[] {
@@ -591,6 +612,14 @@ export class AssessmentForm implements OnInit {
           question_count: template.question_count || (template.assessment_type === 'logical_reasoning' ? 25 : 20),
         });
 
+        const rawConfiguredSet = String(
+          (template.category_config as Record<string, any> | undefined)?.['question_set'] || ''
+        ).trim().toUpperCase();
+        this.selectedQuestionSet =
+          rawConfiguredSet === 'A' || rawConfiguredSet === 'B' || rawConfiguredSet === 'C'
+            ? rawConfiguredSet
+            : 'AUTO';
+
         this.assignmentScope =
           (template.assignment_scope as 'all' | 'cohort' | 'learner') || 'all';
         this.selectedCohortIds = [...(template.assigned_cohort_ids || [])];
@@ -677,7 +706,7 @@ export class AssessmentForm implements OnInit {
     const learnerIdsPayload = this.assignmentScope === 'learner' ? this.selectedLearnerIds : [];
 
     const cats = CATEGORY_MAP[type] || [];
-    const catConfig: Record<string, AssessmentCategory> = {};
+    const catConfig: Record<string, any> = {};
     const perCat = Math.max(1, Math.floor(questionCount / (cats.length || 1)));
 
     for (const c of cats) {
@@ -685,6 +714,10 @@ export class AssessmentForm implements OnInit {
         label: c.label,
         question_count: perCat
       };
+    }
+
+    if (this.selectedQuestionSet !== 'AUTO') {
+      catConfig['question_set'] = this.selectedQuestionSet;
     }
 
     this.saving = true;
