@@ -15,6 +15,21 @@ export interface Department {
   is_active: boolean;
 }
 
+export interface DepartmentMemberItem {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+}
+
+export interface DepartmentMembersResponse {
+  department_id: number;
+  department_name: string;
+  teachers: DepartmentMemberItem[];
+  students: DepartmentMemberItem[];
+}
+
 export interface Course {
   id: number;
   department_id: number;
@@ -203,6 +218,15 @@ export class LearningService {
     return firstValueFrom(
       this.http.get<Department[]>(
         `${this.apiUrl}/departments`,
+        { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  getDepartmentMembers(departmentId: number): Promise<DepartmentMembersResponse> {
+    return firstValueFrom(
+      this.http.get<DepartmentMembersResponse>(
+        `${this.apiUrl}/departments/${departmentId}/members`,
         { headers: this.getHeaders() }
       )
     );

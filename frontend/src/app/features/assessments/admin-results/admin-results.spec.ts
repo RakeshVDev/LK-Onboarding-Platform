@@ -140,4 +140,41 @@ describe('AdminResults (SuperAdmin Joinee-First Flow)', () => {
     expect(el.textContent).toContain('Grammar Check');
     expect(el.textContent).not.toContain('Diya Kulkarni');
   });
+
+  it('uses the same learner-first name list and Result drill-down for admin and teacher roles', async () => {
+    for (const role of ['admin', 'teacher']) {
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [AdminResults],
+        providers: [
+          provideZonelessChangeDetection(),
+          provideRouter([]),
+          {
+            provide: AssessmentService,
+            useValue: {
+              getTemplates: vi.fn(() => of([])),
+              getAdminResults: getAdminResultsSpy,
+            },
+          },
+          {
+            provide: AuthService,
+            useValue: {
+              hasRole: (...roles: string[]) => roles.includes(role),
+            },
+          },
+        ],
+      }).compileComponents();
+
+      const roleFixture = TestBed.createComponent(AdminResults);
+      const roleComp = roleFixture.componentInstance;
+      roleFixture.detectChanges();
+      await roleFixture.whenStable();
+      roleFixture.detectChanges();
+
+      const roleEl: HTMLElement = roleFixture.nativeElement;
+      expect(roleComp.isStaffDirectoryView()).toBe(true);
+      expect(roleEl.querySelectorAll('.joinee-name-row').length).toBe(2);
+      expect(roleEl.querySelector('.results-table')).toBeNull();
+    }
+  });
 });

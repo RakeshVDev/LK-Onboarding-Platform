@@ -43,6 +43,9 @@ export class AdminResults implements OnInit {
   private readonly cdr = inject(ChangeDetectorRef);
 
   readonly isSuperAdmin = computed(() => this.authService.hasRole('superadmin'));
+  readonly isStaffDirectoryView = computed(() =>
+    this.authService.hasRole('superadmin', 'admin', 'teacher')
+  );
   readonly results = signal<AdminAssessmentResultItem[]>([]);
   readonly selectedJoinee = signal<JoineeDirectoryEntry | null>(null);
   readonly selectedJoineeResults = signal<AdminAssessmentResultItem[]>([]);

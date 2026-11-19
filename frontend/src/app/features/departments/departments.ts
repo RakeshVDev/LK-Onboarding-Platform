@@ -16,6 +16,7 @@ import {
   DeletionRequest,
   LearningService,
   Department,
+  DepartmentMembersResponse,
   StudentDepartmentRequest
 } from '../../core/services/learning.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -46,6 +47,12 @@ export class Departments implements OnInit {
   currentUserId = 0;
   deletionRequests: DeletionRequest[] = [];
   processingDeletionId: number | null = null;
+
+  // Department Members (Teacher / Student) modal state
+  selectedDepartmentObj: Department | null = null;
+  selectedDepartmentMembers: DepartmentMembersResponse | null = null;
+  loadingMembers = false;
+  membersError = '';
 
   // Tab State: 'departments' | 'requests'
   activeTab: 'departments' | 'requests' = 'departments';
@@ -78,7 +85,9 @@ export class Departments implements OnInit {
     this.isSuperAdmin = this.authService.hasRole('superadmin');
     this.currentUserId = this.authService.getCurrentUserSnapshot()?.id ?? 0;
     void this.loadDepartments();
-    void this.loadRequests();
+    if (this.authService.hasRole('superadmin', 'admin')) {
+      void this.loadRequests();
+    }
     if (this.isSuperAdmin) {
       void this.loadDeletionRequests();
     }
@@ -403,5 +412,40 @@ export class Departments implements OnInit {
     if (lower.includes('data') || lower.includes('db')) return 'badge-db';
     if (lower.includes('all') || lower.includes('common')) return 'badge-common';
     return 'badge-default';
+  }
+
+  async openDepartmentMembers(dept: Department): Promise<void> {
+    this.selectedDepartmentObj = dept;
+    this.selectedDepartmentMembers = null;
+    this.membersError = '';
+    this.loadingMembers = true;
+    this.cdr.detectChanges();
+
+    try {
+      this.selectedDepartmentMembers = await this.learningService.getDepartmentMembers(dept.id);
+    } catch (err: any) {
+      this.membersError = err?.error?.detail || 'Unable to load teachers and students for this department.';
+    } finally {
+      this.loadingMembers = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  closeDepartmentMembers(): void {
+    this.selectedDepartmentObj = null;
+    this.selectedDepartmentMembers = null;
+    this.membersError = '';
+    this.loadingMembers = false;
+    this.cdr.detectChanges();
+  }
+
+  getMemberInitials(name?: string | null): string {
+    const clean = (name || '').trim();
+    if (!clean) return 'U';
+    const parts = clean.split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return clean.slice(0, 2).toUpperCase();
   }
 }

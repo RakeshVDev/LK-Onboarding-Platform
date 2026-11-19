@@ -11,6 +11,8 @@ from services.training.app.schemas.training import (
     CourseDeletionActionResponse,
     DeletionRequestResponse,
     DepartmentCreate,
+    DepartmentMemberItem,
+    DepartmentMembersResponse,
     DepartmentResponse,
     DepartmentUpdate,
     StudentDepartmentRequestCreate,
@@ -530,6 +532,116 @@ def reject_deletion_request(
     db.refresh(req)
     superadmins = get_active_superadmin_users(identity_session_factory=IdentitySessionLocal)
     return DeletionRequestResponse(**serialize_deletion_request(req, superadmins))
+
+
+@router.get("/{department_id}/members", response_model=DepartmentMembersResponse)
+def get_department_members(
+    department_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    caller_role = role_str(current_user)
+    if caller_role not in {Role.SUPERADMIN.value, Role.ADMIN.value, Role.TEACHER.value}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only SuperAdmin, Admin, and assigned Teachers can view department members.",
+        )
+
+    department = db.get(Department, department_id)
+    if not department:
+        raise HTTPException(status_code=404, detail="Department not found")
+
+    if caller_role == Role.TEACHER.value:
+        require_teacher_department_access(db, current_user, department.id)
+
+    approved_req_user_ids = {
+        int(uid)
+        for uid in db.scalars(
+            select(StudentDepartmentRequest.user_id).where(
+                StudentDepartmentRequest.department_id == department.id,
+                StudentDepartmentRequest.status == "approved",
+            )
+        ).all()
+        if uid is not None
+    }
+
+    teachers: list[DepartmentMemberItem] = []
+    students_map: dict[int, DepartmentMemberItem] = {}
+
+    try:
+        from services.identity.app.models.user import UserDepartment
+
+        with IdentitySessionLocal() as id_db:
+            if caller_role in {Role.SUPERADMIN.value, Role.ADMIN.value}:
+                teacher_rows = id_db.scalars(
+                    select(IdentityUser)
+                    .join(UserDepartment, UserDepartment.user_id == IdentityUser.id)
+                    .where(
+                        UserDepartment.department_id == department.id,
+                        IdentityUser.role == Role.TEACHER.value,
+                        IdentityUser.is_active == True,  # noqa: E712
+                    )
+                    .order_by(IdentityUser.full_name.asc())
+                ).all()
+                teachers = [
+                    DepartmentMemberItem(
+                        id=int(u.id),
+                        full_name=u.full_name,
+                        email=u.email,
+                        role=str(u.role),
+                        is_active=bool(u.is_active),
+                    )
+                    for u in teacher_rows
+                ]
+
+            dept_str = str(department.id)
+            direct_students = id_db.scalars(
+                select(IdentityUser)
+                .where(
+                    IdentityUser.role == Role.LEARNER.value,
+                    IdentityUser.is_active == True,  # noqa: E712
+                    IdentityUser.selected_department_id == dept_str,
+                    IdentityUser.department_approved == True,  # noqa: E712
+                )
+                .order_by(IdentityUser.full_name.asc())
+            ).all()
+            for u in direct_students:
+                students_map[int(u.id)] = DepartmentMemberItem(
+                    id=int(u.id),
+                    full_name=u.full_name,
+                    email=u.email,
+                    role=str(u.role),
+                    is_active=bool(u.is_active),
+                )
+
+            missing_req_ids = approved_req_user_ids - set(students_map.keys())
+            if missing_req_ids:
+                extra_students = id_db.scalars(
+                    select(IdentityUser)
+                    .where(
+                        IdentityUser.id.in_(missing_req_ids),
+                        IdentityUser.role == Role.LEARNER.value,
+                        IdentityUser.is_active == True,  # noqa: E712
+                    )
+                ).all()
+                for u in extra_students:
+                    students_map[int(u.id)] = DepartmentMemberItem(
+                        id=int(u.id),
+                        full_name=u.full_name,
+                        email=u.email,
+                        role=str(u.role),
+                        is_active=bool(u.is_active),
+                    )
+    except Exception:
+        pass
+
+    students = sorted(students_map.values(), key=lambda s: s.full_name.lower())
+    return DepartmentMembersResponse(
+        department_id=department.id,
+        department_name=department.name,
+        teachers=teachers,
+        students=students,
+    )
 
 
 @router.get("/{department_id}", response_model=DepartmentResponse)
