@@ -20,6 +20,61 @@ export interface RadarAxisPoint {
   cohort_average?: number | null;
 }
 
+export interface StudyPlanStep {
+  days: string;
+  title: string;
+  detail: string;
+  focus_topic: string;
+}
+
+export interface DifficultyBarItem {
+  level: string;
+  percentage: number;
+  correct: number;
+  total: number;
+}
+
+export interface PredictionPoint {
+  label: string;
+  score: number;
+}
+
+export interface DeepAnalyticsBundle {
+  percentile_rank: number;
+  top_percent_label: string;
+  performance_rating: string;
+  error_analysis: {
+    correct_pct: number;
+    wrong_pct: number;
+    unattempted_pct: number;
+    common_mistakes: string;
+  };
+  difficulty_performance: DifficultyBarItem[];
+  ml_metrics: {
+    accuracy_rate: number;
+    speed_score: number;
+    consistency_score: number;
+    difficulty_summary: string;
+  };
+  performance_prediction: {
+    current_score: number;
+    expected_low: number;
+    expected_high: number;
+    uplift_points: number;
+    trajectory_points: PredictionPoint[];
+  };
+  study_plan: StudyPlanStep[];
+  key_takeaways: string[];
+  assistant_prompts: string[];
+}
+
+export interface AskReportQuestionResponse {
+  answer: string;
+  intent: string;
+  referenced_topics: string[];
+  follow_up_prompts: string[];
+}
+
 export interface IntelligenceMetadataBlock {
   scoring_version: string;
   weighted_percentage: number;
@@ -28,6 +83,7 @@ export interface IntelligenceMetadataBlock {
   dimensions: DimensionScoreItem[];
   radar_profile: RadarAxisPoint[];
   domain_analysis: Record<string, any>;
+  deep_analytics?: DeepAnalyticsBundle;
   key_strengths_detailed: string[];
   development_focus_areas: string[];
   role_readiness_fit: string[];
@@ -114,6 +170,16 @@ export class AssessmentIntelligenceService {
   getOverviewAnalytics(): Observable<OverviewAnalyticsResponse> {
     return this.http.get<OverviewAnalyticsResponse>(
       `${this.apiUrl}/analytics/overview`
+    );
+  }
+
+  askReportAssistant(
+    sessionId: number,
+    question: string
+  ): Observable<AskReportQuestionResponse> {
+    return this.http.post<AskReportQuestionResponse>(
+      `${this.apiUrl}/sessions/${sessionId}/ask`,
+      { question }
     );
   }
 }

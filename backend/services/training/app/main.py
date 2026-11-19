@@ -23,10 +23,26 @@ from app.infrastructure.training.models import LiveClassSession
 from app.interfaces.training.live_classes_router import router as live_classes_router
 from app.interfaces.training.question_ingestion_router import router as question_ingestion_router
 
+from services.training.app.models.cohort_workspace import (
+    CohortAnnouncement,
+    CohortAnnouncementRead,
+    CohortAssignment,
+    CohortAssignmentSubmission,
+    CohortAttendanceEntry,
+    CohortChapter,
+    CohortDiscussion,
+    CohortDiscussionLike,
+    CohortDiscussionReply,
+    CohortLesson,
+    CohortMaterialBookmark,
+    CohortQuiz,
+    CohortQuizSubmission,
+)
 from services.training.app.routers import (
     departments,
     courses,
     cohorts,
+    cohort_workspace,
     enrolments,
     syllabus,
     assessments,
@@ -70,6 +86,19 @@ async def lifespan(app: FastAPI):
         CohortTeacher,
         CohortMaterialDelivery,
         DepartmentCourseDeletionRequest,
+        CohortChapter,
+        CohortLesson,
+        CohortAssignment,
+        CohortAssignmentSubmission,
+        CohortQuiz,
+        CohortQuizSubmission,
+        CohortAnnouncement,
+        CohortAnnouncementRead,
+        CohortDiscussion,
+        CohortDiscussionReply,
+        CohortDiscussionLike,
+        CohortAttendanceEntry,
+        CohortMaterialBookmark,
     ):
         try:
             intel_model.__table__.create(bind=engine, checkfirst=True)
@@ -260,26 +289,13 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         print(f"  [Auto-Migration] Schema check warning: {exc}")
 
-    # Seed default departments if missing
+    # Sync any existing departments with their 1:1 Course Vaults without auto-seeding demo data
     try:
-        default_departments = [
-            ("PHP", "PHP web development, Laravel, and server-side engineering track"),
-            (".NET", "C#, ASP.NET Core, and enterprise Microsoft stack engineering track"),
-            ("Python", "Python backend, FastAPI/Django, data engineering & AI track"),
-            ("Java", "Java Enterprise, Spring Boot, and distributed systems track"),
-            ("Database Engineer", "SQL Server, database architecture, query optimization & ETL track"),
-            ("All / Common", "Common onboarding curriculum and foundational engineering modules for all departments"),
-        ]
         with SessionLocal() as db:
-            for name, desc in default_departments:
-                exists = db.query(Department).filter(Department.name == name).first()
-                if not exists:
-                    db.add(Department(name=name, description=desc, is_active=True))
-            db.commit()
-            ensure_department_courses_synced(db, seed_common_if_empty=True)
+            ensure_department_courses_synced(db, seed_common_if_empty=False)
             assessments.purge_expired_assessments(db)
     except Exception as exc:
-        print(f"  [Seed] Warning seeding default departments: {exc}")
+        print(f"  [Startup] Warning syncing courses/assessments: {exc}")
 
     # Normalize any legacy L&K template name to ASE Assessment Tool branding
     try:
@@ -316,6 +332,7 @@ app.add_middleware(
 # Register API routers
 app.include_router(departments.router, prefix="/api/v1")
 app.include_router(courses.router, prefix="/api/v1")
+app.include_router(cohort_workspace.router, prefix="/api/v1")
 app.include_router(cohorts.router, prefix="/api/v1")
 app.include_router(enrolments.router, prefix="/api/v1")
 app.include_router(syllabus.router, prefix="/api/v1")

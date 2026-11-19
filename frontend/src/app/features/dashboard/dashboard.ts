@@ -642,7 +642,7 @@ export class Dashboard implements OnInit {
       case 'technical': return '💻';
       case 'english_grammar': return '✍';
       case 'programming': return '⌘';
-      case 'psychometric': return '✦';
+      case 'psychometric': return '🧭';
       default: return '▤';
     }
   }

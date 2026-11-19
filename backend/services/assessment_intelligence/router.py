@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from services.assessment_intelligence.engine import intelligence_engine
 from services.assessment_intelligence.schemas import (
+    AskReportQuestionRequest,
+    AskReportQuestionResponse,
     AssessmentIntelligenceResponse,
     EvaluateSessionRequest,
     OverviewAnalyticsResponse,
@@ -114,6 +116,46 @@ def get_session_intelligence(
 
     try:
         return intelligence_engine.get_session_intelligence(db, session_id=session_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+@router.post(
+    "/sessions/{session_id}/ask",
+    response_model=AskReportQuestionResponse,
+)
+def ask_session_report_assistant(
+    session_id: int,
+    payload: AskReportQuestionRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    role = _role_of(current_user)
+    session = db.get(AssessmentSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assessment session not found")
+
+    if role == Role.LEARNER.value:
+        if session.learner_user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to query another learner's report",
+            )
+    elif role not in MANAGER_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    if role == Role.TEACHER.value:
+        tpl = db.get(AssessmentTemplate, session.template_id) if session.template_id else None
+        eff_dept = tpl.department_id if tpl else getattr(session, "department_id_snapshot", None)
+        require_teacher_department_access(db, current_user, eff_dept, allow_common_read=True)
+
+    try:
+        return intelligence_engine.answer_session_question(
+            db,
+            session_id=session_id,
+            question=payload.question,
+        )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except ValueError as exc:

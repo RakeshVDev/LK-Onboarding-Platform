@@ -4,7 +4,7 @@ for the Assessment Intelligence package.
 
 from typing import Any
 
-DEFAULT_SCORING_VERSION_TAG = "v2.0-local-ml"
+DEFAULT_SCORING_VERSION_TAG = "v3.0-supervised-ml-nlp"
 
 ALLOWED_ASSESSMENT_TYPES = frozenset({
     "psychometric",

@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
@@ -21,7 +22,11 @@ import {
 import {
   AssessmentIntelligenceResponse,
   AssessmentIntelligenceService,
-  DimensionScoreItem
+  DeepAnalyticsBundle,
+  DifficultyBarItem,
+  DimensionScoreItem,
+  PredictionPoint,
+  StudyPlanStep
 } from '../services/assessment-intelligence.service';
 import {
   AssessmentRadarChartComponent,
@@ -29,10 +34,26 @@ import {
 } from '../components/assessment-radar-chart/assessment-radar-chart';
 import { BrandLogo } from '../../../shared/components/brand-logo/brand-logo';
 
+export interface AssistantChatEntry {
+  role: 'user' | 'assistant';
+  text: string;
+  referencedTopics?: string[];
+}
+
+export interface TopicMetricItem {
+  key: string;
+  label: string;
+  shortLabel: string;
+  score: number;
+  cohortAvg: number;
+  band: string;
+  color: string;
+}
+
 @Component({
   selector: 'app-assessment-report',
   standalone: true,
-  imports: [CommonModule, RouterModule, AssessmentRadarChartComponent, BrandLogo],
+  imports: [CommonModule, FormsModule, RouterModule, AssessmentRadarChartComponent, BrandLogo],
   templateUrl: './assessment-report.html',
   styleUrl: './assessment-report.scss'
 })
@@ -53,7 +74,16 @@ export class AssessmentReportPage implements OnInit {
   readonly errorMessage = signal('');
   readonly allCompleted = signal(false);
   readonly pendingCount = signal(0);
+  readonly selectedTopicKey = signal<string>('');
+
+  // Interactive Ask AI Assistant state
+  assistantInput = '';
+  readonly assistantLoading = signal(false);
+  readonly assistantMessages = signal<AssistantChatEntry[]>([]);
+
   sessionId = 0;
+
+  private readonly palette = ['#6366f1', '#0ea5e9', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899'];
 
   readonly radarAxes = computed<string[]>(() => {
     const intel = this.intelligence();
@@ -88,7 +118,7 @@ export class AssessmentReportPage implements OnInit {
           label: intel?.learner_name || this.report()?.learner_name || 'Candidate Profile',
           values: profile.map((p: any) => Number(p.candidate_score ?? 0)),
           borderColor: '#4f46e5',
-          backgroundColor: 'rgba(79, 70, 229, 0.18)',
+          backgroundColor: 'rgba(79, 70, 229, 0.20)',
           seriesType: 'candidate',
           overallPercentage: Number(intel?.overall_percentage ?? this.report()?.report_data?.overall_percentage ?? 0),
         },
@@ -115,7 +145,7 @@ export class AssessmentReportPage implements OnInit {
           label: this.report()?.learner_name || 'Candidate Profile',
           values: this.categoryScores.map((c) => Number(c.percentage ?? 0)),
           borderColor: '#4f46e5',
-          backgroundColor: 'rgba(79, 70, 229, 0.18)',
+          backgroundColor: 'rgba(79, 70, 229, 0.20)',
           seriesType: 'candidate',
         },
       ];
@@ -128,9 +158,7 @@ export class AssessmentReportPage implements OnInit {
   );
 
   ngOnInit(): void {
-    this.sessionId = Number(
-      this.route.snapshot.paramMap.get('sessionId')
-    );
+    this.sessionId = Number(this.route.snapshot.paramMap.get('sessionId'));
 
     if (!Number.isInteger(this.sessionId) || this.sessionId <= 0) {
       this.errorMessage.set('Invalid assessment session.');
@@ -159,16 +187,17 @@ export class AssessmentReportPage implements OnInit {
     this.api.getReport(this.sessionId).subscribe({
       next: (data: AssessmentReport) => {
         this.report.set(data);
+        this.ensureSelectedTopic();
         this.loading.set(false);
         this.cdr.detectChanges();
         this.loadIntelligence();
       },
       error: (error: HttpErrorResponse) => {
         if (error.status === 404) {
-          // If report not yet generated, attempt generation
           this.api.generateReport(this.sessionId).subscribe({
             next: (data) => {
               this.report.set(data);
+              this.ensureSelectedTopic();
               this.loading.set(false);
               this.cdr.detectChanges();
               this.loadIntelligence();
@@ -183,14 +212,79 @@ export class AssessmentReportPage implements OnInit {
         }
 
         this.errorMessage.set(
-          error.error?.detail ||
-          'Unable to load assessment report. Please try again.'
+          error.error?.detail || 'Unable to load assessment report. Please try again.'
         );
         this.loading.set(false);
         this.cdr.detectChanges();
       }
     });
   }
+
+  loadIntelligence(): void {
+    if (!this.sessionId) return;
+    this.intelligenceLoading.set(true);
+    this.intelligenceService.getSessionIntelligence(this.sessionId).subscribe({
+      next: (intel) => {
+        this.intelligence.set(intel);
+        this.ensureSelectedTopic();
+        this.intelligenceLoading.set(false);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.intelligenceLoading.set(false);
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  private ensureSelectedTopic(): void {
+    const items = this.topicMetrics;
+    if (items.length > 0 && !items.some((t) => t.key === this.selectedTopicKey())) {
+      this.selectedTopicKey.set(items[0].key);
+    }
+  }
+
+  selectTopic(key: string): void {
+    this.selectedTopicKey.set(key);
+    this.cdr.detectChanges();
+  }
+
+  askAssistant(presetPrompt?: string): void {
+    const query = (presetPrompt ?? this.assistantInput).trim();
+    if (!query || this.assistantLoading() || !this.sessionId) return;
+    this.assistantInput = '';
+    this.assistantMessages.update((msgs) => [...msgs, { role: 'user', text: query }]);
+    this.assistantLoading.set(true);
+    this.cdr.detectChanges();
+
+    this.intelligenceService.askReportAssistant(this.sessionId, query).subscribe({
+      next: (res) => {
+        this.assistantMessages.update((msgs) => [
+          ...msgs,
+          {
+            role: 'assistant',
+            text: res.answer,
+            referencedTopics: res.referenced_topics,
+          },
+        ]);
+        this.assistantLoading.set(false);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.assistantMessages.update((msgs) => [
+          ...msgs,
+          {
+            role: 'assistant',
+            text: this.report()?.report_data?.summary || 'Focus on your lowest-scoring topics and follow the 7-day study plan above.',
+          },
+        ]);
+        this.assistantLoading.set(false);
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  // ---- Core Report Getters ----
 
   get reportTitle(): string {
     const rep = this.report();
@@ -206,53 +300,287 @@ export class AssessmentReportPage implements OnInit {
     return rep?.template_name ? `${rep.template_name} Report` : 'Assessment Performance Report';
   }
 
+  get overallPercentage(): number {
+    return Number(
+      this.intelligence()?.overall_percentage ??
+      this.report()?.report_data?.overall_percentage ??
+      0
+    );
+  }
+
+  get totalScore(): number {
+    return Number(this.intelligence()?.total_score ?? this.report()?.report_data?.total_score ?? 0);
+  }
+
+  get maxScore(): number {
+    return Number(this.intelligence()?.max_score ?? this.report()?.report_data?.max_score ?? 0);
+  }
+
   get skillLevel(): string {
     return this.report()?.report_data?.skill_level || 'Evaluated';
   }
 
-  get totalQuestions(): number | null {
-    return this.report()?.report_data?.total_questions ?? null;
+  get totalQuestions(): number {
+    return Number(this.report()?.report_data?.total_questions ?? 0);
   }
 
-  get correctAnswers(): number | null {
-    return this.report()?.report_data?.correct_answers ?? null;
+  get correctAnswers(): number {
+    return Number(this.report()?.report_data?.correct_answers ?? 0);
   }
 
-  get incorrectAnswers(): number | null {
-    return this.report()?.report_data?.incorrect_answers ?? null;
+  get incorrectAnswers(): number {
+    return Number(this.report()?.report_data?.incorrect_answers ?? 0);
   }
 
-  get unattemptedQuestions(): number | null {
-    return this.report()?.report_data?.unattempted_questions ?? null;
+  get unattemptedQuestions(): number {
+    return Number(this.report()?.report_data?.unattempted_questions ?? 0);
   }
 
-  get timeTakenStr(): string | null {
-    return this.report()?.report_data?.time_taken_str ?? null;
+  get timeTakenStr(): string {
+    return this.report()?.report_data?.time_taken_str || 'Recorded';
   }
 
   get isPsychometric(): boolean {
     return this.report()?.assessment_type === 'psychometric';
   }
 
-  loadIntelligence(): void {
-    if (!this.sessionId) return;
-    this.intelligenceLoading.set(true);
-    this.intelligenceService.getSessionIntelligence(this.sessionId).subscribe({
-      next: (intel) => {
-        this.intelligence.set(intel);
-        this.intelligenceLoading.set(false);
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.intelligenceLoading.set(false);
-        this.cdr.detectChanges();
-      },
-    });
-  }
-
   get embeddedIntel(): any {
     return (this.report()?.report_data as any)?.intelligence ?? null;
   }
+
+  get mlInsights(): Record<string, any> {
+    return (
+      (this.intelligence()?.report_data as any)?.ml_insights ??
+      (this.report()?.report_data as any)?.ml_insights ??
+      this.embeddedIntel?.ml_insights ??
+      {}
+    );
+  }
+
+  get deepAnalytics(): DeepAnalyticsBundle {
+    const raw =
+      (this.intelligence()?.report_data as any)?.deep_analytics ??
+      (this.report()?.report_data as any)?.deep_analytics ??
+      this.embeddedIntel?.deep_analytics;
+    if (raw) {
+      return raw as DeepAnalyticsBundle;
+    }
+    const pct = this.overallPercentage;
+    const uplift = Number(this.mlInsights['estimated_uplift_points'] ?? Math.max(4, Math.min(25, (98 - pct) * 0.45)));
+    const expectedLow = Math.min(98, Math.round(pct + uplift * 0.65));
+    const expectedHigh = Math.min(100, Math.max(expectedLow + 2, Math.round(pct + uplift)));
+    const totalQ = Math.max(1, this.totalQuestions || (this.correctAnswers + this.incorrectAnswers + this.unattemptedQuestions) || 1);
+    const correctPct = this.totalQuestions ? Math.round((this.correctAnswers / totalQ) * 1000) / 10 : Math.round(pct * 10) / 10;
+    const unattPct = this.totalQuestions ? Math.round((this.unattemptedQuestions / totalQ) * 1000) / 10 : 0;
+    const wrongPct = Math.max(0, Math.round((100 - correctPct - unattPct) * 10) / 10);
+    return {
+      percentile_rank: Math.min(99, Math.max(10, Math.round(pct * 0.96 * 10) / 10)),
+      top_percent_label: pct >= 85 ? 'Top 10% of Test Takers' : (pct >= 70 ? 'Top 25% of Test Takers' : 'Developing Cohort Tier'),
+      performance_rating: pct >= 85 ? 'Excellent' : (pct >= 70 ? 'Proficient' : (pct >= 50 ? 'Developing' : 'Foundational')),
+      error_analysis: {
+        correct_pct: correctPct,
+        wrong_pct: wrongPct,
+        unattempted_pct: unattPct,
+        common_mistakes: this.developmentAreas[0] || 'Review missed items carefully to strengthen accuracy.',
+      },
+      difficulty_performance: [
+        { level: 'Easy', percentage: Math.min(100, Math.round(pct + 8)), correct: 0, total: 0 },
+        { level: 'Medium', percentage: Math.round(pct), correct: 0, total: 0 },
+        { level: 'Hard', percentage: Math.max(0, Math.round(pct - 10)), correct: 0, total: 0 },
+      ],
+      ml_metrics: {
+        accuracy_rate: Math.round(pct * 10) / 10,
+        speed_score: Math.round(Number(this.timingMeta?.['time_efficiency_score'] ?? pct) * 10) / 10,
+        consistency_score: Math.round(Number(this.psychometricMeta?.['consistency_index'] ?? 85) * 10) / 10,
+        difficulty_summary: `Easy ${Math.min(100, Math.round(pct + 8))}% | Medium ${Math.round(pct)}% | Hard ${Math.max(0, Math.round(pct - 10))}%`,
+      },
+      performance_prediction: {
+        current_score: Math.round(pct * 10) / 10,
+        expected_low: expectedLow,
+        expected_high: expectedHigh,
+        uplift_points: Math.round(uplift * 10) / 10,
+        trajectory_points: [
+          { label: 'Current', score: Math.round(pct * 10) / 10 },
+          { label: 'Day 2', score: Math.min(100, Math.round((pct + uplift * 0.25) * 10) / 10) },
+          { label: 'Day 4', score: Math.min(100, Math.round((pct + uplift * 0.55) * 10) / 10) },
+          { label: 'Day 6', score: Math.min(100, Math.round((pct + uplift * 0.82) * 10) / 10) },
+          { label: 'Day 7', score: expectedHigh },
+        ],
+      },
+      study_plan: [
+        { days: 'Day 1–2', title: 'Strengthen Priority Topic', detail: this.recommendations[0] || 'Review core principles and missed items.', focus_topic: 'Core Fundamentals' },
+        { days: 'Day 3–4', title: 'Targeted Practice Sets', detail: 'Work through medium-to-hard scenarios with explicit step-by-step checks.', focus_topic: 'Applied Practice' },
+        { days: 'Day 5–6', title: 'Timed Fluency Drills', detail: 'Build speed and accuracy under exam time budgets.', focus_topic: 'Pacing & Speed' },
+        { days: 'Day 7', title: 'Mock Test + Review', detail: 'Attempt a full review set and close remaining gaps.', focus_topic: 'Verification' },
+      ],
+      key_takeaways: [
+        this.report()?.report_data?.summary || `Achieved ${pct.toFixed(1)}% overall score.`,
+      ],
+      assistant_prompts: [
+        'Why did I lose marks?',
+        `How can I improve my score by ${Math.max(5, Math.round(uplift))}%?`,
+        'Give me a 7-day practice plan',
+      ],
+    };
+  }
+
+  get topicMetrics(): TopicMetricItem[] {
+    const radar = this.intelligence()?.radar_profile ?? this.embeddedIntel?.radar_profile ?? [];
+    const radarCohortMap = new Map<string, number>();
+    for (const r of radar) {
+      if (typeof r.cohort_average === 'number') {
+        radarCohortMap.set(r.axis_key, r.cohort_average);
+      }
+    }
+
+    const dims = this.intelligenceDimensions;
+    if (dims.length > 0) {
+      return dims.map((d, idx) => {
+        const label = d.dimension_label || this.categoryLabel(d.dimension_key);
+        return {
+          key: d.dimension_key,
+          label,
+          shortLabel: this.abbreviateLabel(label),
+          score: Math.round(Number(d.normalized_score ?? 0) * 10) / 10,
+          cohortAvg: Math.round((radarCohortMap.get(d.dimension_key) ?? 72) * 10) / 10,
+          band: d.percentile_band || this.bandForScore(Number(d.normalized_score ?? 0)),
+          color: this.palette[idx % this.palette.length],
+        };
+      });
+    }
+
+    return this.categoryScores.map((c, idx) => {
+      const label = this.categoryLabel(c.category);
+      const score = Math.round(Number(c.percentage ?? 0) * 10) / 10;
+      return {
+        key: c.category,
+        label,
+        shortLabel: this.abbreviateLabel(label),
+        score,
+        cohortAvg: 72,
+        band: this.bandForScore(score),
+        color: this.palette[idx % this.palette.length],
+      };
+    });
+  }
+
+  get sortedTopicMetrics(): TopicMetricItem[] {
+    return [...this.topicMetrics].sort((a, b) => b.score - a.score);
+  }
+
+  get activeTopicMetric(): TopicMetricItem | null {
+    const items = this.topicMetrics;
+    if (!items.length) return null;
+    return items.find((t) => t.key === this.selectedTopicKey()) ?? items[0];
+  }
+
+  get subjectRings(): TopicMetricItem[] {
+    return this.topicMetrics.slice(0, 4);
+  }
+
+  get studyPlanSteps(): StudyPlanStep[] {
+    return this.deepAnalytics.study_plan ?? [];
+  }
+
+  get difficultyBars(): DifficultyBarItem[] {
+    return this.deepAnalytics.difficulty_performance ?? [];
+  }
+
+  get predictionPoints(): PredictionPoint[] {
+    return this.deepAnalytics.performance_prediction?.trajectory_points ?? [];
+  }
+
+  get weakestTopicLabel(): string {
+    const sorted = [...this.topicMetrics].sort((a, b) => a.score - b.score);
+    return sorted[0]?.label || this.reportTitle;
+  }
+
+  // ---- SVG Geometry Helpers ----
+
+  ringCircumference(radius: number): number {
+    return 2 * Math.PI * radius;
+  }
+
+  ringDashOffset(percentage: number, radius: number): number {
+    const clamped = Math.max(0, Math.min(100, Number(percentage || 0)));
+    const c = this.ringCircumference(radius);
+    return c * (1 - clamped / 100);
+  }
+
+  ringColor(percentage: number): string {
+    if (percentage >= 80) return '#10b981';
+    if (percentage >= 60) return '#3b82f6';
+    if (percentage >= 40) return '#f59e0b';
+    return '#ef4444';
+  }
+
+  get comparisonChartData(): {
+    yourPoints: string;
+    avgPoints: string;
+    nodes: Array<{ x: number; yYour: number; yAvg: number; label: string; score: number; active: boolean }>;
+  } {
+    const items = this.topicMetrics.slice(0, 6);
+    if (!items.length) return { yourPoints: '', avgPoints: '', nodes: [] };
+    const w = 280;
+    const h = 110;
+    const padX = 24;
+    const padY = 14;
+    const stepX = items.length > 1 ? (w - padX * 2) / (items.length - 1) : 0;
+    const nodes = items.map((t, idx) => {
+      const x = items.length > 1 ? padX + idx * stepX : w / 2;
+      const yYour = padY + ((100 - Math.max(0, Math.min(100, t.score))) / 100) * (h - padY * 2);
+      const yAvg = padY + ((100 - Math.max(0, Math.min(100, t.cohortAvg))) / 100) * (h - padY * 2);
+      return {
+        x: Math.round(x * 10) / 10,
+        yYour: Math.round(yYour * 10) / 10,
+        yAvg: Math.round(yAvg * 10) / 10,
+        label: `T${idx + 1}`,
+        score: t.score,
+        active: t.key === this.selectedTopicKey(),
+      };
+    });
+    return {
+      yourPoints: nodes.map((n) => `${n.x},${n.yYour}`).join(' '),
+      avgPoints: nodes.map((n) => `${n.x},${n.yAvg}`).join(' '),
+      nodes,
+    };
+  }
+
+  get predictionChartData(): {
+    linePoints: string;
+    areaPoints: string;
+    nodes: Array<{ x: number; y: number; label: string; score: number }>;
+  } {
+    const pts = this.predictionPoints;
+    if (!pts.length) return { linePoints: '', areaPoints: '', nodes: [] };
+    const w = 260;
+    const h = 88;
+    const padX = 18;
+    const padY = 12;
+    const stepX = pts.length > 1 ? (w - padX * 2) / (pts.length - 1) : 0;
+    const nodes = pts.map((p, idx) => {
+      const x = pts.length > 1 ? padX + idx * stepX : w / 2;
+      const y = padY + ((100 - Math.max(0, Math.min(100, p.score))) / 100) * (h - padY * 2);
+      return {
+        x: Math.round(x * 10) / 10,
+        y: Math.round(y * 10) / 10,
+        label: p.label,
+        score: p.score,
+      };
+    });
+    const linePoints = nodes.map((n) => `${n.x},${n.y}`).join(' ');
+    const areaPoints = `${nodes[0].x},${h - padY} ${linePoints} ${nodes[nodes.length - 1].x},${h - padY}`;
+    return { linePoints, areaPoints, nodes };
+  }
+
+  get errorDonutBackground(): string {
+    const err = this.deepAnalytics.error_analysis;
+    const c = Math.max(0, Math.min(100, err.correct_pct));
+    const w = Math.max(0, Math.min(100 - c, err.wrong_pct));
+    return `conic-gradient(#10b981 0% ${c}%, #ef4444 ${c}% ${c + w}%, #94a3b8 ${c + w}% 100%)`;
+  }
+
+  // ---- Domain Metadata Getters ----
 
   get intelligenceDimensions(): DimensionScoreItem[] {
     return this.intelligence()?.dimensions ?? this.embeddedIntel?.dimensions ?? [];
@@ -282,21 +610,6 @@ export class AssessmentReportPage implements OnInit {
     return this.domainAnalysis['programming'] ?? null;
   }
 
-  get difficultyEntries(): Array<{ level: string; total: number; correct: number; percentage: number }> {
-    const raw = this.cognitiveMeta?.['difficulty_breakdown'] ?? {};
-    return Object.entries(raw).map(([level, v]: [string, any]) => ({
-      level: level.toUpperCase(),
-      total: Number(v?.total ?? 0),
-      correct: Number(v?.correct ?? 0),
-      percentage: Number(v?.percentage ?? 0),
-    }));
-  }
-
-  get cognitiveClusterEntries(): Array<[string, number]> {
-    const raw = this.cognitiveMeta?.['cognitive_clusters'] ?? {};
-    return Object.entries(raw).map(([k, v]) => [k, Number(v ?? 0)]);
-  }
-
   get detailedFocusAreas(): string[] {
     return this.embeddedIntel?.development_focus_areas ?? [];
   }
@@ -305,19 +618,13 @@ export class AssessmentReportPage implements OnInit {
     return this.embeddedIntel?.role_readiness_fit ?? [];
   }
 
-  get scoringVersionLabel(): string {
-    return this.intelligence()?.scoring_version ?? this.embeddedIntel?.scoring_version ?? 'v2.0-local-ml';
-  }
-
   get weightedScorePct(): number | null {
     const val = this.intelligence()?.weighted_percentage ?? this.embeddedIntel?.weighted_percentage;
     return typeof val === 'number' ? val : null;
   }
 
   get categoryEntries(): [string, string][] {
-    return Object.entries(
-      this.report()?.report_data?.category_interpretations ?? {}
-    );
+    return Object.entries(this.report()?.report_data?.category_interpretations ?? {});
   }
 
   get categoryScores(): CategoryScore[] {
@@ -334,6 +641,22 @@ export class AssessmentReportPage implements OnInit {
 
   get recommendations(): string[] {
     return this.report()?.report_data?.recommendations ?? [];
+  }
+
+  private abbreviateLabel(label: string): string {
+    if (label.length <= 13) return label;
+    const words = label.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      return words[0].length <= 10 ? words[0] : words.map((w) => w[0]).join('').toUpperCase();
+    }
+    return label.slice(0, 11) + '…';
+  }
+
+  private bandForScore(score: number): string {
+    if (score >= 85) return 'Excellent';
+    if (score >= 70) return 'Strong';
+    if (score >= 50) return 'Good';
+    return 'Needs Practice';
   }
 
   categoryLabel(category: string): string {

@@ -113,7 +113,7 @@ export class AssessmentManagement implements OnInit {
 
   getTypeIcon(type?: string): string {
     switch (type) {
-      case 'logical_reasoning': return '⚡';
+      case 'logical_reasoning': return '🧩';
       case 'english_grammar': return '✍';
       case 'comprehension': return '📖';
       case 'technical': return '💻';
@@ -121,8 +121,8 @@ export class AssessmentManagement implements OnInit {
       case 'cognitive': return '🧠';
       case 'composition': return '📝';
       case 'algorithm': return '⚙';
-      case 'psychometric': return '✦';
-      default: return '▤';
+      case 'psychometric': return '🧭';
+      default: return '📋';
     }
   }
 

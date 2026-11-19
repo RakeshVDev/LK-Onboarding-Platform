@@ -15,6 +15,20 @@ from services.identity.app.core.roles import Role
 from services.identity.app.db.session import SessionLocal as IdentitySessionLocal
 from services.identity.app.models.user import User, UserDepartment
 from services.training.app.models.assessment import AssessmentTemplate
+from services.training.app.models.cohort_workspace import (
+    CohortAnnouncement,
+    CohortAnnouncementRead,
+    CohortAssignment,
+    CohortAssignmentSubmission,
+    CohortAttendanceEntry,
+    CohortChapter,
+    CohortDiscussion,
+    CohortDiscussionLike,
+    CohortDiscussionReply,
+    CohortLesson,
+    CohortQuiz,
+    CohortQuizSubmission,
+)
 from services.training.app.models.entities import (
     AttendanceRecord,
     Cohort,
@@ -299,13 +313,69 @@ def remove_department_from_identity_users(
         pass
 
 
+def _purge_workspace_for_scope(
+    db: Session,
+    *,
+    cohort_ids: list[int] | None = None,
+    department_id: int | None = None,
+) -> None:
+    """Cleanly remove cohort workspace rows scoped to deleted cohorts or a deleted department."""
+    filters = []
+    if cohort_ids:
+        filters.append(("cohort_id", cohort_ids))
+    if department_id is not None:
+        filters.append(("department_id", int(department_id)))
+    if not filters:
+        return
+
+    def _scope_clause(model):
+        from sqlalchemy import or_
+        clauses = []
+        if cohort_ids:
+            clauses.append(model.cohort_id.in_(cohort_ids))
+        if department_id is not None and hasattr(model, "department_id"):
+            clauses.append(model.department_id == int(department_id))
+        return or_(*clauses)
+
+    chapter_ids = list(db.scalars(select(CohortChapter.id).where(_scope_clause(CohortChapter))).all())
+    if chapter_ids:
+        db.execute(delete(CohortLesson).where(CohortLesson.chapter_id.in_(chapter_ids)))
+    lesson_clause = _scope_clause(CohortLesson)
+    db.execute(delete(CohortLesson).where(lesson_clause))
+    db.execute(delete(CohortChapter).where(_scope_clause(CohortChapter)))
+
+    assignment_ids = list(db.scalars(select(CohortAssignment.id).where(_scope_clause(CohortAssignment))).all())
+    if assignment_ids:
+        db.execute(delete(CohortAssignmentSubmission).where(CohortAssignmentSubmission.assignment_id.in_(assignment_ids)))
+        db.execute(delete(CohortAssignment).where(CohortAssignment.id.in_(assignment_ids)))
+
+    quiz_ids = list(db.scalars(select(CohortQuiz.id).where(_scope_clause(CohortQuiz))).all())
+    if quiz_ids:
+        db.execute(delete(CohortQuizSubmission).where(CohortQuizSubmission.quiz_id.in_(quiz_ids)))
+        db.execute(delete(CohortQuiz).where(CohortQuiz.id.in_(quiz_ids)))
+
+    ann_ids = list(db.scalars(select(CohortAnnouncement.id).where(_scope_clause(CohortAnnouncement))).all())
+    if ann_ids:
+        db.execute(delete(CohortAnnouncementRead).where(CohortAnnouncementRead.announcement_id.in_(ann_ids)))
+        db.execute(delete(CohortAnnouncement).where(CohortAnnouncement.id.in_(ann_ids)))
+
+    disc_ids = list(db.scalars(select(CohortDiscussion.id).where(_scope_clause(CohortDiscussion))).all())
+    if disc_ids:
+        db.execute(delete(CohortDiscussionLike).where(CohortDiscussionLike.discussion_id.in_(disc_ids)))
+        db.execute(delete(CohortDiscussionReply).where(CohortDiscussionReply.discussion_id.in_(disc_ids)))
+        db.execute(delete(CohortDiscussion).where(CohortDiscussion.id.in_(disc_ids)))
+
+    if cohort_ids:
+        db.execute(delete(CohortAttendanceEntry).where(CohortAttendanceEntry.cohort_id.in_(cohort_ids)))
+
+
 def purge_cohort_records(
     db: Session,
     cohort_id: int,
     *,
     delete_cohort_row: bool = True,
 ) -> Cohort:
-    """Purge all batch-level cohort deliveries, memberships, teacher links, and schedules."""
+    """Purge all batch-level cohort deliveries, memberships, teacher links, schedules, and workspace items."""
     cohort = db.get(Cohort, cohort_id)
     if cohort is None:
         raise HTTPException(
@@ -318,6 +388,7 @@ def purge_cohort_records(
     )
     db.execute(delete(CohortTeacher).where(CohortTeacher.cohort_id == cohort_id))
     db.execute(delete(CohortMember).where(CohortMember.cohort_id == cohort_id))
+    _purge_workspace_for_scope(db, cohort_ids=[cohort_id])
 
     session_ids = list(
         db.scalars(select(TimetableSession.id).where(TimetableSession.cohort_id == cohort_id)).all()
@@ -379,6 +450,8 @@ def execute_department_and_course_cascade_delete(
             db.execute(delete(AttendanceRecord).where(AttendanceRecord.session_id.in_(session_ids)))
             db.execute(delete(TimetableSession).where(TimetableSession.id.in_(session_ids)))
         db.execute(delete(Cohort).where(Cohort.id.in_(cohort_ids)))
+
+    _purge_workspace_for_scope(db, cohort_ids=cohort_ids or None, department_id=department_id)
 
     if course_ids:
         db.execute(

@@ -1,5 +1,30 @@
 from typing import Any
 
+try:
+    from services.assessment_intelligence.config import DEFAULT_SCORING_VERSION_TAG
+    from services.assessment_intelligence.ml_report_model import predict_report_intelligence
+    from services.assessment_intelligence.nlg_report_synthesizer import (
+        AntiRepetitionState,
+        build_variation_rng,
+        synthesize_category_interpretation,
+        synthesize_category_recommendation,
+        synthesize_deep_analytics_bundle,
+        synthesize_development_area,
+        synthesize_executive_summary,
+        synthesize_strength_bullet,
+    )
+except Exception:  # pragma: no cover - standalone import fallback
+    DEFAULT_SCORING_VERSION_TAG = "v3.0-supervised-ml-nlp"
+    predict_report_intelligence = None
+    AntiRepetitionState = None
+    build_variation_rng = None
+    synthesize_category_interpretation = None
+    synthesize_category_recommendation = None
+    synthesize_deep_analytics_bundle = None
+    synthesize_development_area = None
+    synthesize_executive_summary = None
+    synthesize_strength_bullet = None
+
 
 CATEGORY_LABELS = {
     # English Grammar Categories
@@ -200,6 +225,9 @@ def generate_assessment_report(
     unattempted_count: int | None = None,
     time_taken_seconds: int | None = None,
     tab_switch_count: int | None = 0,
+    session_id: int | None = None,
+    learner_user_id: int | None = None,
+    prior_report_texts: list[str] | None = None,
 ) -> dict:
     """Generate an assessment-specific performance and diagnostic report.
 
@@ -417,6 +445,230 @@ def generate_assessment_report(
         secs = time_taken_seconds % 60
         time_taken_str = f"{mins} min{'s' if mins != 1 else ''} {secs} sec{'s' if secs != 1 else ''}"
 
+    ml_dimensions = [
+        {
+            "dimension_key": str(cs.get("category", "general")),
+            "dimension_label": CATEGORY_LABELS.get(
+                str(cs.get("category", "")),
+                str(cs.get("category", "General")).replace("_", " ").title(),
+            ),
+            "normalized_score": float(cs.get("percentage", overall_percentage)),
+        }
+        for cs in normalized_scores
+    ]
+    q_total = total_questions if total_questions is not None else int(total_max_score or 0)
+    ans_count = (q_total - int(unattempted_count or 0)) if (q_total and unattempted_count is not None) else q_total
+    ans_ratio = (float(ans_count) / float(q_total)) if q_total else 1.0
+
+    ml_insights = (
+        predict_report_intelligence(
+            assessment_type=clean_type,
+            overall_pct=float(overall_percentage),
+            weighted_pct=float(overall_percentage),
+            dimensions=ml_dimensions,
+            domain_analysis=None,
+            time_taken_seconds=time_taken_seconds,
+            expected_duration_minutes=20,
+            tab_switch_count=int(tab_switch_count or 0),
+            answered_ratio=ans_ratio,
+            prior_report_texts=prior_report_texts,
+            session_id=session_id,
+            learner_user_id=learner_user_id,
+        )
+        if predict_report_intelligence is not None
+        else None
+    )
+
+    nlg_meta: dict[str, Any] = {}
+    if synthesize_executive_summary is not None and AntiRepetitionState is not None and build_variation_rng is not None:
+        rng, variation_seed = build_variation_rng(
+            assessment_type=clean_type,
+            overall_pct=float(overall_percentage),
+            session_id=session_id,
+            learner_user_id=learner_user_id,
+            variation_salt=f"base:{len(normalized_scores)}:{q_total}",
+        )
+        nlg_state = AntiRepetitionState(prior_report_texts=prior_report_texts)
+        sorted_ml_dims = sorted(ml_dimensions, key=lambda d: d["normalized_score"], reverse=True)
+        top_key = sorted_ml_dims[0]["dimension_key"] if sorted_ml_dims else None
+        weak_key = sorted_ml_dims[-1]["dimension_key"] if sorted_ml_dims else None
+        time_ratio = (
+            min(2.0, float(time_taken_seconds) / (20.0 * 60.0))
+            if time_taken_seconds is not None and time_taken_seconds >= 0
+            else 0.72
+        )
+        uplift_pts = float((ml_insights or {}).get("estimated_uplift_points", 10.0))
+
+        category_interpretations = {}
+        strengths = []
+        development_areas = []
+        recommendations = []
+
+        for cs in normalized_scores:
+            cat = cs["category"]
+            pct = float(cs["percentage"])
+            lbl = CATEGORY_LABELS.get(cat, cat.replace("_", " ").title())
+            band = "Exceptional" if pct >= 85 else ("Proficient" if pct >= 70 else ("Developing" if pct >= 50 else "Foundational"))
+            category_interpretations[cat] = synthesize_category_interpretation(
+                clean_type=clean_type,
+                dim_key=cat,
+                dim_label=lbl,
+                pct=pct,
+                state=nlg_state,
+                rng=rng,
+                is_top=(cat == top_key),
+                is_weakest=(cat == weak_key),
+            )
+            if pct >= 70.0:
+                strengths.append(
+                    synthesize_strength_bullet(
+                        clean_type=clean_type,
+                        dim_label=lbl,
+                        score_pct=pct,
+                        percentile_band=band,
+                        cohort_avg=None,
+                        state=nlg_state,
+                        rng=rng,
+                    )
+                )
+            elif pct < 50.0:
+                development_areas.append(
+                    synthesize_development_area(
+                        clean_type=clean_type,
+                        dim_label=lbl,
+                        score_pct=pct,
+                        percentile_band=band,
+                        cohort_avg=None,
+                        state=nlg_state,
+                        rng=rng,
+                    )
+                )
+                recommendations.append(
+                    synthesize_category_recommendation(
+                        clean_type=clean_type,
+                        category_key=cat,
+                        dim_label=lbl,
+                        score_pct=pct,
+                        hard_easy_gap=0.0,
+                        time_ratio=time_ratio,
+                        uplift_pts=uplift_pts,
+                        state=nlg_state,
+                        rng=rng,
+                        priority_rank=len(recommendations) + 1,
+                    )
+                )
+
+        if not strengths:
+            strengths.append(
+                nlg_state.pick_best(
+                    [
+                        f"Completed every evaluated section across all {len(normalized_scores)} categories consistently.",
+                        f"Demonstrated steady participation across all {len(normalized_scores)} tracked assessment sections.",
+                    ],
+                    rng=rng,
+                )
+            )
+        if not development_areas:
+            development_areas.append(
+                nlg_state.pick_best(
+                    [
+                        "No critical sub-skill gaps detected; continue sharpening depth through higher-difficulty scenarios.",
+                        "Well-balanced score distribution across categories — focus on speed optimization and complex cases.",
+                    ],
+                    rng=rng,
+                )
+            )
+        if not recommendations:
+            weakest_dim = sorted_ml_dims[-1] if sorted_ml_dims else None
+            if weakest_dim and weakest_dim["normalized_score"] < 75.0:
+                recommendations.append(
+                    synthesize_category_recommendation(
+                        clean_type=clean_type,
+                        category_key=weakest_dim["dimension_key"],
+                        dim_label=weakest_dim["dimension_label"],
+                        score_pct=float(weakest_dim["normalized_score"]),
+                        hard_easy_gap=0.0,
+                        time_ratio=time_ratio,
+                        uplift_pts=uplift_pts,
+                        state=nlg_state,
+                        rng=rng,
+                        priority_rank=1,
+                    )
+                )
+            else:
+                recommendations.append(
+                    nlg_state.pick_best(
+                        [
+                            "Advance to higher-complexity problem sets paired with regular peer and mentor feedback.",
+                            "Challenge strong proficiency through timed stretch scenarios and structured design reviews.",
+                        ],
+                        rng=rng,
+                    )
+                )
+
+        if ml_insights:
+            for ml_rec in ml_insights.get("ml_recommendations") or []:
+                covered = {lbl.split(":")[0].lower() for lbl in development_areas}
+                if not any(part in ml_rec.lower() for part in covered) and ml_rec not in recommendations:
+                    recommendations.append(ml_rec)
+                    nlg_state.register(ml_rec)
+
+        summary = synthesize_executive_summary(
+            clean_type=clean_type,
+            template_name=template_name,
+            overall_pct=float(overall_percentage),
+            weighted_pct=float(overall_percentage),
+            skill_level=skill_level,
+            dimensions=ml_dimensions,
+            domain_analysis={},
+            ml_insights=ml_insights or {},
+            cohort_averages=None,
+            total_q=q_total,
+            state=nlg_state,
+            rng=rng,
+        )
+        nlg_meta = {"variation_seed": variation_seed, **nlg_state.uniqueness_stats()}
+    elif ml_insights:
+        for ml_rec in ml_insights.get("ml_recommendations") or []:
+            if ml_rec not in recommendations:
+                recommendations.append(ml_rec)
+        if clean_type == "psychometric":
+            summary = (
+                f"{summary} Supervised developmental pattern: {ml_insights['diagnostic_pattern_label']} "
+                f"(Readiness Index {ml_insights['ml_mastery_index']:.1f}/100, {ml_insights['predicted_tier_label']})."
+            )
+        else:
+            summary = (
+                f"{summary} Supervised ML profile: {ml_insights['diagnostic_pattern_label']} "
+                f"(Mastery Index {ml_insights['ml_mastery_index']:.1f}/100, tier: {ml_insights['predicted_tier_label']})."
+            )
+
+    focus_areas_out: list[str] = list((ml_insights or {}).get("development_focus_areas") or [])
+    for area in development_areas:
+        if area not in focus_areas_out and len(focus_areas_out) < 5:
+            focus_areas_out.append(area)
+
+    deep_analytics = (
+        synthesize_deep_analytics_bundle(
+            clean_type=clean_type,
+            overall_pct=float(overall_percentage),
+            weighted_pct=float(overall_percentage),
+            dimensions=ml_dimensions,
+            domain_analysis={},
+            ml_insights=ml_insights,
+            total_questions=int(q_total or 0),
+            correct_answers=int(correct_count or 0),
+            incorrect_answers=int(incorrect_count or 0),
+            unattempted_questions=int(unattempted_count or 0),
+            time_taken_seconds=time_taken_seconds,
+            expected_duration_minutes=20,
+            session_id=session_id,
+            learner_user_id=learner_user_id,
+        )
+        if synthesize_deep_analytics_bundle is not None
+        else {}
+    )
+
     report_data = {
         "report_title": report_title,
         "assessment_type": clean_type,
@@ -428,6 +680,7 @@ def generate_assessment_report(
         "recommendations": recommendations,
         "category_interpretations": category_interpretations,
         "overall_percentage": overall_percentage,
+        "weighted_percentage": overall_percentage,
         "total_score": round(total_score, 2),
         "max_score": round(total_max_score, 2),
         "category_scores": normalized_scores,
@@ -439,6 +692,18 @@ def generate_assessment_report(
         "time_taken_str": time_taken_str,
         "tab_switch_count": int(tab_switch_count or 0),
         "proctoring_status": "Clean" if not tab_switch_count else ("Warning Issued" if tab_switch_count < 3 else "Terminated (Limit Reached)"),
+        "ml_insights": ml_insights,
+        "deep_analytics": deep_analytics,
+        "nlg_metadata": nlg_meta,
+        "intelligence": {
+            "scoring_version": DEFAULT_SCORING_VERSION_TAG,
+            "weighted_percentage": overall_percentage,
+            "ml_insights": ml_insights,
+            "deep_analytics": deep_analytics,
+            "development_focus_areas": focus_areas_out,
+            "role_readiness_fit": (ml_insights or {}).get("role_readiness_fit") or [],
+            "nlg_metadata": nlg_meta,
+        },
     }
 
     report_lines = [
@@ -461,11 +726,27 @@ def generate_assessment_report(
     if time_taken_str is not None:
         report_lines.append(f"Time Taken:                {time_taken_str}")
 
+    if ml_insights:
+        report_lines.extend([
+            f"Readiness Tier:           {ml_insights['predicted_tier_label']} ({ml_insights['readiness_confidence'] * 100:.0f}% confidence)",
+            f"Mastery Index:            {ml_insights['ml_mastery_index']:.1f} / 100 (Est. Uplift +{ml_insights['estimated_uplift_points']:.1f} pts)",
+        ])
+
     report_lines.extend([
         "",
         "EXECUTIVE SUMMARY:",
         summary,
         "",
+        *(
+            [
+                "DIAGNOSTIC INSIGHT:",
+                f"  • Pattern: {ml_insights['diagnostic_pattern_label']}",
+                *[f"  • Fit:     {fit}" for fit in (ml_insights.get("role_readiness_fit") or [])],
+                "",
+            ]
+            if ml_insights
+            else []
+        ),
         "CATEGORY BREAKDOWN & INTERPRETATIONS:",
     ])
 
@@ -494,5 +775,5 @@ def generate_assessment_report(
     return {
         "report_data": report_data,
         "report_text": "\n".join(report_lines),
-        "ai_model": f"{clean_type}-engine-v2",
+        "ai_model": f"{clean_type}-supervised-ml-v3",
     }

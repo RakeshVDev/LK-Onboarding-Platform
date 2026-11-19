@@ -114,20 +114,6 @@
           <div class="card-accent" [attr.data-type]="item.assessment_type"></div>
 
           <div class="card-header">
-            <div class="card-icon" [attr.data-type]="item.assessment_type">
-              @if (item.assessment_type === 'logical_reasoning') {
-                <span>⚡</span>
-              } @else if (item.assessment_type === 'technical') {
-                <span>💻</span>
-              } @else if (item.assessment_type === 'english_grammar') {
-                <span>✍</span>
-              } @else if (item.assessment_type === 'programming') {
-                <span>⌘</span>
-              } @else {
-                <span>✦</span>
-              }
-            </div>
-
             <div class="badge-cluster">
               <span class="type-badge" [attr.data-type]="item.assessment_type">
                 {{ item.category_label }}
