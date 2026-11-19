@@ -1,9 +1,14 @@
-<div class="csm-brand" [attr.data-variant]="variant" [attr.data-size]="size">
+<div class="csm-brand" [class.is-dark]="isDarkMode()" [attr.data-variant]="variant" [attr.data-size]="size">
   <span class="csm-logo-pill" title="CSM">
     <img
       src="/assets/images/csm-logo.png"
       alt="CSM Logo"
-      class="csm-logo-img"
+      class="csm-logo-img csm-logo-light"
+      decoding="async" />
+    <img
+      src="/assets/images/csm-logo-dark.png"
+      alt="CSM Logo"
+      class="csm-logo-img csm-logo-dark"
       decoding="async" />
   </span>
 
