@@ -602,6 +602,48 @@ export class CohortService {
 
   readonly canonicalLearners = CohortService.CANONICAL_LEARNERS;
 
+  static isDemoLearner(item: { email?: string; name?: string; full_name?: string }): boolean {
+    const email = item.email?.toLowerCase().trim();
+    if (email) {
+      if (email.endsWith('@example.com')) {
+        const canonicalEmails = [
+          'aarav.sharma@example.com',
+          'priya.nair@example.com',
+          'diya.verma@example.com',
+          'ishaan.patel@example.com',
+          'ananya.kapoor@example.com',
+          'vihaan.rao@example.com',
+          'saanvi.mehta@example.com',
+          'rohan.iyer@example.com',
+          'myra.joshi@example.com',
+          'rohan.varma@example.com',
+          'rahul.pandey@example.com'
+        ];
+        if (canonicalEmails.includes(email)) return true;
+      }
+    }
+    const name = (item.name || item.full_name)?.toLowerCase().trim();
+    if (name) {
+      const canonicalNames = [
+        'aarav sharma',
+        'priya nair',
+        'diya verma',
+        'ishaan patel',
+        'ananya kapoor',
+        'vihaan rao',
+        'saanvi mehta',
+        'rohan iyer',
+        'myra joshi',
+        'rohan varma',
+        'rahul pandey'
+      ];
+      if (canonicalNames.includes(name)) {
+        if (!email || email.endsWith('@example.com')) return true;
+      }
+    }
+    return false;
+  }
+
   // ---------------------------------------------------------------------------
   // INITIAL DATA GENERATOR (MATCHING USER SCREENSHOTS & SYNCHRONIZED ROSTER)
   // ---------------------------------------------------------------------------
@@ -3188,67 +3230,173 @@ export class CohortService {
         } catch { }
       }
 
-      // Merge canonical learners into managedUsers if not present
-      const existingEmails = new Set(managedUsers.map((u: any) => u.email?.toLowerCase().trim()));
-      for (const cl of CohortService.CANONICAL_LEARNERS) {
-        if (!existingEmails.has(cl.email.toLowerCase().trim())) {
-          managedUsers.push({
-            id: cl.id,
-            full_name: cl.name,
-            email: cl.email,
-            role: 'learner',
-            is_active: true,
-            created_at: '2026-10-25T10:00:00Z',
-            temporary_password: 'Welcome@2026'
-          });
-          existingEmails.add(cl.email.toLowerCase().trim());
-        }
-      }
-
       // Check logged in user in sessionStorage
       if (typeof sessionStorage !== 'undefined') {
         try {
           const cur = sessionStorage.getItem('lk_current_user');
           if (cur) {
             const parsed = JSON.parse(cur);
-            if (parsed.role === 'learner' && parsed.email && !existingEmails.has(parsed.email.toLowerCase().trim())) {
-              managedUsers.push({
-                id: parsed.id || Date.now(),
-                full_name: parsed.full_name || 'Current Learner',
-                email: parsed.email,
-                role: 'learner',
-                is_active: true,
-                created_at: new Date().toISOString(),
-                temporary_password: 'Welcome@2026'
-              });
-              existingEmails.add(parsed.email.toLowerCase().trim());
+            if (parsed.role === 'learner' && parsed.email) {
+              const exists = managedUsers.some((u: any) => u.email?.toLowerCase().trim() === parsed.email.toLowerCase().trim());
+              if (!exists) {
+                managedUsers.push({
+                  id: parsed.id || Date.now(),
+                  full_name: parsed.full_name || 'Current Learner',
+                  email: parsed.email,
+                  role: 'learner',
+                  is_active: true,
+                  created_at: new Date().toISOString(),
+                  temporary_password: 'Welcome@2026'
+                });
+              }
             }
           }
         } catch { }
       }
 
-      const platformLearners = managedUsers.filter((u: any) => u.role === 'learner' && u.is_active !== false);
+      // Filter to find real user-inserted learners (excluding demo learners)
+      const userInsertedLearners = managedUsers.filter((u: any) =>
+        u.role === 'learner' &&
+        u.is_active !== false &&
+        !CohortService.isDemoLearner(u)
+      );
+
+      let platformLearners: any[] = [];
+      if (userInsertedLearners.length > 0) {
+        // KEEP ONLY USER-INSERTED DATA AND REMOVE DEMO LEARNERS
+        platformLearners = userInsertedLearners;
+
+        // Clean demo learners from ase_managed_users cache in localStorage so they never creep back
+        if (typeof localStorage !== 'undefined') {
+          try {
+            const nonDemoAll = managedUsers.filter((u: any) => !CohortService.isDemoLearner(u));
+            if (nonDemoAll.length !== managedUsers.length) {
+              localStorage.setItem('ase_managed_users', JSON.stringify(nonDemoAll));
+            }
+          } catch { }
+        }
+      } else {
+        // Fallback to canonical learners only if no real user data exists yet
+        platformLearners = CohortService.CANONICAL_LEARNERS.map((cl, idx) => ({
+          id: cl.id || (100 + idx),
+          full_name: cl.name,
+          email: cl.email,
+          role: 'learner',
+          is_active: true,
+          created_at: '2026-10-25T10:00:00Z',
+          admissionNo: cl.admissionNo
+        }));
+      }
 
       const matrix = data.attendanceMatrix;
       const days = matrix.days || [];
-      const existingRows = matrix.students || [];
+      let existingRows = matrix.students || [];
 
-      // Map each platform learner to AttendanceStudentRow
-      const updatedStudents: AttendanceStudentRow[] = platformLearners.map((learner: any, index: number) => {
+      // If user-inserted learners exist, purge all demo students from existingRows
+      if (userInsertedLearners.length > 0) {
+        existingRows = existingRows.filter(s =>
+          !CohortService.isDemoLearner({ name: s.name }) &&
+          userInsertedLearners.some(u =>
+            (u.full_name && u.full_name.trim().toLowerCase() === s.name.trim().toLowerCase()) ||
+            (u.id && s.studentId === `std-${u.id}`)
+          )
+        );
+      }
+
+      // Sort platform learners deterministically (by ID ascending, or created_at)
+      const sortedLearners = [...platformLearners].sort((a: any, b: any) => {
+        const idA = Number(a.id) || 0;
+        const idB = Number(b.id) || 0;
+        if (idA !== idB && idA > 0 && idB > 0) return idA - idB;
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateA - dateB;
+      });
+
+      const usedAdmissionNos = new Set<string>();
+      const usedStudentIds = new Set<string>();
+
+      // Track the highest admission number sequence so future learners are always strictly incremental
+      let maxSeqNumber = 0;
+      for (const s of existingRows) {
+        if (s.admissionNo) {
+          const match = s.admissionNo.match(/SKL\/\d{4}\/(\d+)/);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (!isNaN(num) && num > maxSeqNumber) {
+              maxSeqNumber = num;
+            }
+          }
+        }
+      }
+
+      for (const l of sortedLearners) {
+        const numId = Number(l.id);
+        if (!isNaN(numId) && numId > 0 && numId < 10000 && numId > maxSeqNumber) {
+          maxSeqNumber = numId;
+        }
+      }
+
+      // Incremental generator ensuring uniqueness and sequential IDs for all current and future learners
+      const allocateAdmissionNo = (preferredNum?: number): string => {
+        if (preferredNum && preferredNum > 0) {
+          const candidate = `SKL/2026/${String(preferredNum).padStart(4, '0')}`;
+          if (!usedAdmissionNos.has(candidate)) {
+            usedAdmissionNos.add(candidate);
+            if (preferredNum > maxSeqNumber) maxSeqNumber = preferredNum;
+            return candidate;
+          }
+        }
+        maxSeqNumber++;
+        let candidate = `SKL/2026/${String(maxSeqNumber).padStart(4, '0')}`;
+        while (usedAdmissionNos.has(candidate)) {
+          maxSeqNumber++;
+          candidate = `SKL/2026/${String(maxSeqNumber).padStart(4, '0')}`;
+        }
+        usedAdmissionNos.add(candidate);
+        return candidate;
+      };
+
+      // Generator for strictly unique studentId
+      const allocateStudentId = (preferredId?: string | number): string => {
+        let candidate = preferredId ? String(preferredId) : '';
+        if (candidate && !usedStudentIds.has(candidate)) {
+          usedStudentIds.add(candidate);
+          return candidate;
+        }
+        let counter = 1;
+        let alt = `std-${counter}`;
+        while (usedStudentIds.has(alt)) {
+          counter++;
+          alt = `std-${counter}`;
+        }
+        usedStudentIds.add(alt);
+        return alt;
+      };
+
+      // Map each platform learner to AttendanceStudentRow with guaranteed unique, incremental ID
+      const updatedStudents: AttendanceStudentRow[] = sortedLearners.map((learner: any, index: number) => {
         const email = learner.email?.toLowerCase().trim();
         const name = learner.full_name?.trim();
-        const canon = CohortService.CANONICAL_LEARNERS.find(c => c.email.toLowerCase() === email || c.name.toLowerCase() === name.toLowerCase());
 
-        // Look for existing row in current matrix
+        // Match existing row strictly by user id or exact name
         const existing = existingRows.find(s =>
-          s.studentId === `std-${learner.id}` ||
-          s.studentId === `std-${canon?.id}` ||
-          s.studentId === String(learner.id) ||
-          s.name.toLowerCase().trim() === name.toLowerCase() ||
-          (canon && s.name.toLowerCase().trim() === canon.name.toLowerCase().trim())
+          (learner.id && s.studentId === `std-${learner.id}`) ||
+          (name && s.name.toLowerCase().trim() === name.toLowerCase())
         );
 
-        const admissionNo = existing?.admissionNo || canon?.admissionNo || `SKL/2026/${String(learner.id || 100 + index).slice(-4).padStart(4, '0')}`;
+        // Assign strictly unique and incremental admission number
+        let admissionNo = '';
+        if (existing?.admissionNo && !usedAdmissionNos.has(existing.admissionNo)) {
+          admissionNo = existing.admissionNo;
+          usedAdmissionNos.add(admissionNo);
+        } else {
+          const prefNum = Number(learner.id) || (index + 1);
+          admissionNo = allocateAdmissionNo(prefNum);
+        }
+
+        // Assign strictly unique studentId
+        const studentId = allocateStudentId(existing?.studentId || (learner.id ? `std-${learner.id}` : undefined));
 
         // Build daily status
         const dailyStatus: Record<string, 'P' | 'A' | 'L' | 'H'> = {};
@@ -3261,8 +3409,6 @@ export class CohortService {
 
           if (existing && existing.dailyStatus && existing.dailyStatus[dateKey]) {
             status = existing.dailyStatus[dateKey];
-          } else if (canon && canon.defaultStatus && canon.defaultStatus[dateKey]) {
-            status = canon.defaultStatus[dateKey];
           } else if (d.isWeekend) {
             status = 'H';
           } else {
@@ -3275,7 +3421,7 @@ export class CohortService {
         }
 
         return {
-          studentId: existing?.studentId || `std-${learner.id || canon?.id || index + 1}`,
+          studentId,
           admissionNo,
           name: learner.full_name,
           absCount,
@@ -3300,10 +3446,12 @@ export class CohortService {
         'Distributed Systems & Queues'
       ];
 
-      const updatedMembers: CohortMemberProfile[] = platformLearners.map((learner: any, idx: number) => {
+      const updatedMembers: CohortMemberProfile[] = sortedLearners.map((learner: any, idx: number) => {
         const email = learner.email?.toLowerCase().trim();
-        const canon = CohortService.CANONICAL_LEARNERS.find(c => c.email.toLowerCase() === email || c.name.toLowerCase() === learner.full_name?.toLowerCase().trim());
-        const existingMember = (data.members || []).find(m => m.email?.toLowerCase().trim() === email || m.name.toLowerCase().trim() === learner.full_name?.toLowerCase().trim());
+        const existingMember = (data.members || []).find(m =>
+          (email && m.email?.toLowerCase().trim() === email) ||
+          m.name.toLowerCase().trim() === learner.full_name?.toLowerCase().trim()
+        );
 
         const initials = learner.full_name
           ? learner.full_name.split(' ').map((n: string) => n.charAt(0)).join('').toUpperCase().slice(0, 2)
@@ -3312,11 +3460,11 @@ export class CohortService {
         return {
           id: existingMember?.id || `m-learner-${learner.id || idx + 1}`,
           name: learner.full_name,
-          email: learner.email,
+          email: learner.email || `${learner.full_name.toLowerCase().replace(/\s+/g, '.')}@platform.internal`,
           role: 'learner',
-          specialization: existingMember?.specialization || canon?.specialization || specs[idx % specs.length],
-          squad: existingMember?.squad || canon?.squad || squads[idx % squads.length],
-          avatar: existingMember?.avatar || canon?.avatar || initials,
+          specialization: existingMember?.specialization || specs[idx % specs.length],
+          squad: existingMember?.squad || squads[idx % squads.length],
+          avatar: existingMember?.avatar || initials,
           status: existingMember?.status || 'online',
           progressPercentage: existingMember?.progressPercentage || (68 + (idx % 4) * 4)
         };

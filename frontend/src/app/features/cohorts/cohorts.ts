@@ -847,10 +847,12 @@ export class Cohorts implements OnInit {
     }
     const map = new Map<string, ManagedUser>();
     for (const l of this.userManagementService.getLearners()) {
+      if (CohortService.isDemoLearner(l)) continue;
       const key = (l.email || l.full_name || String(l.id)).toLowerCase().trim();
       map.set(key, l);
     }
     for (const l of this.superAdminLearners()) {
+      if (CohortService.isDemoLearner(l)) continue;
       const key = (l.email || l.full_name || String(l.id)).toLowerCase().trim();
       map.set(key, l);
     }
@@ -1452,9 +1454,11 @@ export class Cohorts implements OnInit {
     try {
       const learners = await this.userManagementService.listLearners();
       this.superAdminLearners.set(learners);
+      this.cohortService.syncLearnersWithPlatform();
     } catch {
       const local = this.userManagementService.getLearners();
       this.superAdminLearners.set(local);
+      this.cohortService.syncLearnersWithPlatform();
     }
   }
 
