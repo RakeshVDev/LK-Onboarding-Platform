@@ -895,47 +895,103 @@
     border-top-color: #1f2937;
   }
 
+  .sim-summary-card {
+    background: #111827 !important;
+    border-color: #1f2937 !important;
+
+    .sim-summary-head {
+      .sim-pill {
+        background: rgba(99, 102, 241, 0.2) !important;
+        color: #a5b4fc !important;
+      }
+      h3 {
+        color: #f8fafc !important;
+      }
+      p {
+        color: #94a3b8 !important;
+      }
+    }
+
+    .sim-stats-grid .sim-stat,
+    .sim-stat {
+      background: #182230 !important;
+      border: 1px solid #334155 !important;
+
+      span {
+        color: #94a3b8 !important;
+      }
+
+      strong {
+        color: #f8fafc !important;
+      }
+
+      &.is-green {
+        background: #064e3b !important;
+        border-color: #047857 !important;
+        span { color: #a7f3d0 !important; }
+        strong { color: #6ee7b7 !important; }
+      }
+
+      &.is-amber {
+        background: #451a03 !important;
+        border-color: #78350f !important;
+        span { color: #fde68a !important; }
+        strong { color: #fde047 !important; }
+      }
+
+      &.is-purple {
+        background: #2e1065 !important;
+        border-color: #581c87 !important;
+        span { color: #ddd6fe !important; }
+        strong { color: #d8b4fe !important; }
+      }
+    }
+  }
+
   .sim-stat {
-    background: #182230;
-    border-color: #1f2937;
+    background: #182230 !important;
+    border-color: #334155 !important;
 
     span {
-      color: #94a3b8;
+      color: #94a3b8 !important;
     }
 
     strong {
-      color: #f8fafc;
+      color: #f8fafc !important;
     }
 
     &.is-green {
-      background: #064e3b;
-      border-color: #047857;
-      strong { color: #6ee7b7; }
+      background: #064e3b !important;
+      border-color: #047857 !important;
+      span { color: #a7f3d0 !important; }
+      strong { color: #6ee7b7 !important; }
     }
 
     &.is-amber {
-      background: #451a03;
-      border-color: #78350f;
-      strong { color: #fde047; }
+      background: #451a03 !important;
+      border-color: #78350f !important;
+      span { color: #fde68a !important; }
+      strong { color: #fde047 !important; }
     }
 
     &.is-purple {
-      background: #2e1065;
-      border-color: #581c87;
-      strong { color: #d8b4fe; }
+      background: #2e1065 !important;
+      border-color: #581c87 !important;
+      span { color: #ddd6fe !important; }
+      strong { color: #d8b4fe !important; }
     }
   }
 
   .admin-score-sim {
-    background: #064e3b;
-    border-color: #047857;
+    background: #064e3b !important;
+    border-color: #047857 !important;
 
     .ass-label {
-      color: #86efac;
+      color: #86efac !important;
     }
 
     p {
-      color: #bbf7d0;
+      color: #bbf7d0 !important;
     }
   }
 }

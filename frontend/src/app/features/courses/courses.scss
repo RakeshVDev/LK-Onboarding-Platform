@@ -1241,21 +1241,283 @@
     p { color: #94a3b8; }
   }
 
-  .material-row {
+  .material-row,
+  .material-item-card {
     background: #182230;
-    border-color: #293548;
+    border-color: #263244;
+    color: #f8fafc;
 
-    .mat-title { color: #f8fafc; }
-    .mat-meta, .mat-type-badge { color: #a5b4fc; }
+    &:hover {
+      background: #1f2937;
+      border-color: #374151;
+    }
+
+    h4,
+    .mat-title {
+      color: #f8fafc;
+    }
+
+    .mat-meta,
+    .mat-type-badge {
+      color: #a5b4fc;
+    }
 
     .btn-open-res {
-      background: rgba(129, 140, 248, 0.15);
-      border-color: rgba(129, 140, 248, 0.32);
+      background: rgba(129, 140, 248, 0.16);
+      border-color: rgba(129, 140, 248, 0.35);
       color: #c7d2fe;
 
       &:hover {
-        background: rgba(129, 140, 248, 0.25);
+        background: rgba(129, 140, 248, 0.28);
+        color: #ffffff;
       }
+    }
+
+    .btn-del-res {
+      color: #94a3b8;
+
+      &:hover {
+        color: #ef4444;
+      }
+    }
+  }
+
+  /* Modals in Dark Theme */
+  .modal-card {
+    background: #111827;
+    border: 1px solid #1f2937;
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.7);
+
+    .modal-tag {
+      background: rgba(99, 102, 241, 0.16);
+      border-color: rgba(99, 102, 241, 0.35);
+      color: #c7d2fe;
+    }
+
+    .modal-header {
+      border-bottom-color: #1f2937;
+
+      h2, h3 {
+        color: #f8fafc;
+      }
+
+      .btn-close {
+        color: #94a3b8;
+        &:hover {
+          color: #f8fafc;
+        }
+      }
+    }
+
+    .modal-actions {
+      border-top-color: #1f2937;
+
+      .btn-secondary {
+        background: #1e293b;
+        border-color: #334155;
+        color: #cbd5e1;
+
+        &:hover {
+          background: #334155;
+          color: #ffffff;
+        }
+      }
+    }
+  }
+
+  /* Syllabus Section in Dark Theme */
+  .curriculum-add-box {
+    background: #182230;
+    border-color: #263244;
+
+    h3 {
+      color: #f8fafc;
+    }
+
+    .add-grid {
+      input {
+        background: #111827;
+        border-color: #334155;
+        color: #f8fafc;
+
+        &::placeholder {
+          color: #64748b;
+        }
+
+        &:focus {
+          border-color: #6366f1;
+        }
+      }
+
+      .btn-add-item {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: #ffffff;
+
+        &:hover:not(:disabled) {
+          background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+        }
+      }
+    }
+
+    textarea {
+      background: #111827;
+      border-color: #334155;
+      color: #f8fafc;
+
+      &::placeholder {
+        color: #64748b;
+      }
+
+      &:focus {
+        border-color: #6366f1;
+      }
+    }
+  }
+
+  .modules-list {
+    .module-row {
+      background: #182230;
+      border-color: #263244;
+
+      &:hover {
+        background: #1f2937;
+        border-color: #374151;
+      }
+
+      .module-order-badge {
+        background: rgba(99, 102, 241, 0.18);
+        border: 1px solid rgba(99, 102, 241, 0.35);
+        color: #c7d2fe;
+      }
+
+      .module-content {
+        h4 {
+          color: #f8fafc;
+        }
+
+        p {
+          color: #94a3b8;
+        }
+      }
+
+      .btn-del-item {
+        color: #94a3b8;
+
+        &:hover {
+          color: #ef4444;
+        }
+      }
+    }
+  }
+
+  /* Course Resource Vault in Dark Theme */
+  .resource-authoring-container {
+    .resource-box {
+      background: #182230;
+      border-color: #263244;
+
+      .box-header {
+        h4 {
+          color: #f8fafc;
+        }
+
+        p {
+          color: #94a3b8;
+        }
+      }
+
+      .upload-controls,
+      .link-controls {
+        input, select {
+          background: #111827;
+          border-color: #334155;
+          color: #f8fafc;
+
+          &::placeholder {
+            color: #64748b;
+          }
+
+          &:focus {
+            border-color: #6366f1;
+          }
+
+          option {
+            background: #111827;
+            color: #f8fafc;
+          }
+        }
+      }
+
+      .file-picker-row {
+        .btn-file-select {
+          background: #111827;
+          border-color: #818cf8;
+          color: #a5b4fc;
+
+          &:hover {
+            background: #1e1b4b;
+          }
+        }
+
+        .chosen-filename {
+          color: #cbd5e1;
+        }
+
+        .btn-upload-file {
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: #ffffff;
+        }
+      }
+
+      .link-submit-row {
+        .btn-add-link {
+          background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
+          color: #ffffff;
+        }
+      }
+    }
+  }
+
+  .materials-list-container {
+    h3 {
+      color: #f8fafc;
+    }
+  }
+
+  .empty-substate p {
+    color: #94a3b8;
+  }
+
+  /* Create Course Form in Dark Theme */
+  .modal-form {
+    .form-group {
+      label {
+        color: #e2e8f0;
+      }
+
+      input, select, textarea {
+        background: #1e293b;
+        border-color: #334155;
+        color: #f8fafc;
+
+        &::placeholder {
+          color: #64748b;
+        }
+
+        &:focus {
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        option {
+          background: #1e293b;
+          color: #f8fafc;
+        }
+      }
+    }
+
+    .form-checkbox label {
+      color: #cbd5e1;
     }
   }
 

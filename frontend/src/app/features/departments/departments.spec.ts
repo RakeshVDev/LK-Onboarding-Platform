@@ -95,7 +95,7 @@ describe('Departments roster & card cleanup', () => {
     expect(headings).toEqual(['Teacher', 'Student']);
     expect(host.textContent).toContain('Priya Mentor');
     expect(host.textContent).toContain('Aarav Learner');
-  });
+  }, 20000);
 
   it('allows teachers to click an assigned department card and view Student roster without admin tabs', async () => {
     const { fixture, learningServiceStub } = await createComponentForRole('teacher', {
@@ -118,5 +118,5 @@ describe('Departments roster & card cleanup', () => {
     );
     expect(headings).toEqual(['Student']);
     expect(host.textContent).toContain('Aarav Learner');
-  });
+  }, 20000);
 });

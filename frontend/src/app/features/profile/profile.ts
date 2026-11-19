@@ -58,6 +58,16 @@ export class Profile implements OnInit {
     }
   }
 
+  get roleTagline(): string {
+    switch (this.user()?.role) {
+      case 'superadmin': return 'System Administrator & Organization Governance';
+      case 'admin': return 'Academic Administrator & Assessment Operations';
+      case 'teacher': return 'Academic Faculty & Cohort Instructor';
+      case 'learner': return 'Skill Development & Onboarding Member';
+      default: return 'Platform Member';
+    }
+  }
+
   get formattedJoinDate(): string {
     const raw = this.user()?.created_at;
     if (!raw) return 'Active Member';
