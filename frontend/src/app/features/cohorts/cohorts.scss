@@ -2052,6 +2052,75 @@
 }
 
 /* ========================================================================= */
+/* REUSABLE PRIMARY & SECONDARY ACTION BUTTONS ACROSS ALL COHORT TABS        */
+/* ========================================================================= */
+.btn-primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #635bff 0%, #4f46e5 100%);
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(99, 91, 255, 0.28);
+  transition: all 0.18s ease;
+
+  &:hover {
+    background: linear-gradient(135deg, #7068ff 0%, #5b53f0 100%);
+    box-shadow: 0 6px 18px rgba(99, 91, 255, 0.42);
+    transform: translateY(-1px);
+    color: #ffffff !important;
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+.btn-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+
+  &:hover {
+    background: #eef2ff;
+    color: #4338ca;
+    border-color: #a5b4fc;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+/* ========================================================================= */
 /* LEARNER VIEW PREVIEW STYLES                                               */
 /* ========================================================================= */
 .today-live-spotlight {
@@ -2108,10 +2177,16 @@
     padding: 9px 18px;
     border-radius: 10px;
     background: #ffffff;
-    color: #635bff;
-    text-decoration: none;
+    color: #4f46e5 !important;
+    border: none;
     font-size: 13.5px;
     font-weight: 800;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+
+    &:hover {
+      background: #f8fafc;
+      color: #4338ca !important;
+    }
   }
 
   .checked-in-pill {
@@ -7446,6 +7521,44 @@
           color: #ffffff;
         }
       }
+    }
+  }
+
+  // Reusable Action Buttons in Dark Theme
+  .btn-primary-action {
+    background: linear-gradient(135deg, #635bff 0%, #4f46e5 100%);
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 4px 16px rgba(99, 91, 255, 0.38);
+
+    &:hover {
+      background: linear-gradient(135deg, #7068ff 0%, #5b53f0 100%);
+      box-shadow: 0 6px 22px rgba(99, 91, 255, 0.52);
+      transform: translateY(-1px);
+      color: #ffffff !important;
+    }
+  }
+
+  .btn-secondary-action {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+      border-color: #475569;
+    }
+  }
+
+  .btn-add-lesson-inline {
+    border-color: #334155;
+    color: #a5b4fc;
+
+    &:hover {
+      background: #1e293b;
+      color: #ffffff;
+      border-color: #4f46e5;
     }
   }
 }
