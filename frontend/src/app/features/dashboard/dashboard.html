@@ -45,14 +45,11 @@
 
       <p class="hero-subtitle">
         @if (user()?.role === 'learner') {
-        Welcome to your Skill Development &amp; Induction Workspace. Track onboarding milestones, complete assigned
-        assessments, and access curriculum tracks.
+        Track onboarding milestones, complete assigned assessments, and access curriculum tracks.
         } @else if (user()?.role === 'teacher') {
-        Welcome to the Faculty Evaluation Center. Oversee cohort performance, evaluate submissions, and conduct live
-        training sessions.
+        Oversee cohort performance, evaluate submissions, and conduct live training sessions.
         } @else {
-        Welcome to the Enterprise Operations Center. Monitor organizational telemetry, assessment analytics, and manage
-        access controls.
+        Monitor organizational telemetry, assessment analytics, and manage access controls.
         }
       </p>
 

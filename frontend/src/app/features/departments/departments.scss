@@ -1121,23 +1121,25 @@
           }
         }
 
-        &.btn-toggle {
-          &.deactivate {
-            color: #fbbf24;
-            border-color: #78350f;
+        &.btn-deactivate,
+        &.btn-toggle.deactivate {
+          background: rgba(245, 158, 11, 0.12);
+          color: #fbbf24;
+          border-color: rgba(245, 158, 11, 0.35);
 
-            &:hover {
-              background: #2e1d05;
-            }
+          &:hover {
+            background: rgba(245, 158, 11, 0.22);
           }
+        }
 
-          &.activate {
-            color: #4ade80;
-            border-color: #064e3b;
+        &.btn-activate,
+        &.btn-toggle.activate {
+          background: rgba(16, 185, 129, 0.12);
+          color: #4ade80;
+          border-color: rgba(16, 185, 129, 0.35);
 
-            &:hover {
-              background: #022c22;
-            }
+          &:hover {
+            background: rgba(16, 185, 129, 0.22);
           }
         }
 
@@ -1525,6 +1527,85 @@
 
       &:hover:not(:disabled) {
         background: rgba(239, 68, 68, 0.24);
+      }
+    }
+  }
+
+  /* Clickable Department Card in Dark Theme */
+  .dept-card-clickable:hover {
+    border-color: #818cf8;
+  }
+
+  /* Checkbox Labels in Dark Theme */
+  .form-group-checkbox .checkbox-label span {
+    color: #cbd5e1;
+  }
+
+  /* Department Roster Modal in Dark Theme */
+  .members-modal-card {
+    background: #111827;
+    border-color: #1f2937;
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.7);
+
+    .modal-header {
+      border-bottom-color: #1f2937;
+
+      .eyebrow {
+        color: #818cf8;
+      }
+
+      h2 {
+        color: #f8fafc;
+      }
+
+      .btn-close {
+        color: #94a3b8;
+        &:hover {
+          color: #f8fafc;
+        }
+      }
+    }
+  }
+
+  .members-loading {
+    color: #94a3b8;
+  }
+
+  .roster-section {
+    background: #182230;
+    border-color: #263244;
+
+    .roster-section-head h3 {
+      color: #f8fafc;
+    }
+
+    .roster-count-pill {
+      background: rgba(99, 102, 241, 0.18);
+      border-color: rgba(99, 102, 241, 0.35);
+      color: #c7d2fe;
+    }
+
+    .roster-empty {
+      color: #94a3b8;
+    }
+
+    .roster-row {
+      background: #111827;
+      border-color: #1f2937;
+
+      &:hover {
+        background: #151e2e;
+        border-color: #374151;
+      }
+
+      .roster-info {
+        strong {
+          color: #f8fafc;
+        }
+
+        span {
+          color: #94a3b8;
+        }
       }
     }
   }
