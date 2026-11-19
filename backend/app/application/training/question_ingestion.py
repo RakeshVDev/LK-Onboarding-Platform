@@ -120,20 +120,50 @@ def _norm_key(raw: str) -> str:
     return HEADER_ALIASES.get(cleaned, HEADER_ALIASES.get(cleaned.replace("_", ""), cleaned))
 
 
+def _predict_question_ml_safe(text: str) -> tuple[list[str], dict[str, Any]]:
+    try:
+        from services.assessment_intelligence.ml_report_model import predict_question_nlp
+        from services.assessment_intelligence.nlp_composition_analyzer import (
+            extract_question_nlp_tokens,
+        )
+
+        tokens = extract_question_nlp_tokens(text)
+        return tokens, predict_question_nlp(tokens)
+    except Exception:
+        return [], {}
+
+
 def _infer_category_nlp(text: str, passage_text: str | None = None, default_category: str | None = None) -> tuple[str, bool]:
     if passage_text and len(passage_text.strip()) > 40:
         return "reading_comprehension", True
 
-    haystack = f"{text or ''} {passage_text or ''}".lower()
-    scores: dict[str, int] = {}
+    combined = f"{text or ''} {passage_text or ''}"
+    haystack = combined.lower()
+    tokens, ml_pred = _predict_question_ml_safe(combined)
+    token_set = set(tokens)
+
+    scores: dict[str, float] = {}
     for category, keywords in CATEGORY_KEYWORD_LEXICON.items():
-        score = sum(2 if " " in kw else 1 for kw in keywords if kw in haystack)
+        score = 0.0
+        for kw in keywords:
+            if kw in haystack or (kw in token_set):
+                score += 2.0 if " " in kw else 1.2
         if score > 0:
             scores[category] = score
+
+    nb_cat = ml_pred.get("category")
+    nb_conf = float(ml_pred.get("category_confidence") or 0.0)
+    if nb_cat and nb_conf >= 0.45:
+        if nb_cat in scores:
+            scores[nb_cat] += nb_conf * 2.2
+        elif not scores and nb_conf >= 0.55:
+            scores[nb_cat] = nb_conf * 2.2
 
     if scores:
         best = max(scores.items(), key=lambda item: item[1])[0]
         return best, True
+    if nb_cat and nb_conf >= 0.42:
+        return str(nb_cat), True
     if default_category and default_category.strip():
         return default_category.strip().lower().replace(" ", "_"), False
     return "general_aptitude", True
@@ -157,6 +187,11 @@ def _infer_difficulty_nlp(text: str, explicit: str | None = None) -> str:
         return "Hard"
     if len(t) < 75 and "?" in t and not any(tok in t for tok in ("if ", "unless", "whereas", "although")):
         return "Easy"
+    _, ml_pred = _predict_question_ml_safe(text or "")
+    nb_diff = ml_pred.get("difficulty")
+    nb_conf = float(ml_pred.get("difficulty_confidence") or 0.0)
+    if nb_diff in {"Easy", "Medium", "Hard"} and nb_conf >= 0.58:
+        return str(nb_diff)
     return "Medium"
 
 

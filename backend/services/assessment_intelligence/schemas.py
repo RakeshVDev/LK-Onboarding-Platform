@@ -39,6 +39,17 @@ class EvaluateSessionRequest(BaseModel):
     scoring_version_tag: str | None = None
 
 
+class AskReportQuestionRequest(BaseModel):
+    question: str = Field(min_length=2, max_length=500)
+
+
+class AskReportQuestionResponse(BaseModel):
+    answer: str
+    intent: str
+    referenced_topics: list[str] = Field(default_factory=list)
+    follow_up_prompts: list[str] = Field(default_factory=list)
+
+
 class AssessmentIntelligenceResponse(BaseModel):
     session_id: int
     template_id: int | None = None

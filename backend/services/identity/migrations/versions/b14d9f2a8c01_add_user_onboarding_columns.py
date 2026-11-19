@@ -20,43 +20,54 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add sequential onboarding state columns to users."""
-    op.add_column(
-        "users",
-        sa.Column(
-            "all_assessments_completed",
-            sa.Boolean(),
-            server_default=sa.false(),
-            nullable=False,
-        ),
-    )
-    op.add_column(
-        "users",
-        sa.Column(
-            "is_activated_by_admin",
-            sa.Boolean(),
-            server_default=sa.false(),
-            nullable=False,
-        ),
-    )
-    op.add_column(
-        "users",
-        sa.Column("selected_department_id", sa.String(length=64), nullable=True),
-    )
-    op.add_column(
-        "users",
-        sa.Column(
-            "department_approved",
-            sa.Boolean(),
-            server_default=sa.false(),
-            nullable=False,
-        ),
-    )
-    op.create_index(
-        op.f("ix_users_selected_department_id"),
-        "users",
-        ["selected_department_id"],
-        unique=False,
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_cols = {c["name"] for c in inspector.get_columns("users")}
+    existing_indexes = {idx["name"] for idx in inspector.get_indexes("users")}
+
+    if "all_assessments_completed" not in existing_cols:
+        op.add_column(
+            "users",
+            sa.Column(
+                "all_assessments_completed",
+                sa.Boolean(),
+                server_default=sa.false(),
+                nullable=False,
+            ),
+        )
+    if "is_activated_by_admin" not in existing_cols:
+        op.add_column(
+            "users",
+            sa.Column(
+                "is_activated_by_admin",
+                sa.Boolean(),
+                server_default=sa.false(),
+                nullable=False,
+            ),
+        )
+    if "selected_department_id" not in existing_cols:
+        op.add_column(
+            "users",
+            sa.Column("selected_department_id", sa.String(length=64), nullable=True),
+        )
+    if "department_approved" not in existing_cols:
+        op.add_column(
+            "users",
+            sa.Column(
+                "department_approved",
+                sa.Boolean(),
+                server_default=sa.false(),
+                nullable=False,
+            ),
+        )
+    idx_name = op.f("ix_users_selected_department_id")
+    if idx_name not in existing_indexes:
+        op.create_index(
+            idx_name,
+            "users",
+            ["selected_department_id"],
+            unique=False,
+        )
 
 
 def downgrade() -> None:

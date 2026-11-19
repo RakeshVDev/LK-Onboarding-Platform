@@ -79,6 +79,46 @@ def _default_user_lookup(user_ids: list[int]) -> dict[int, dict[str, str]]:
         return {}
 
 
+def collect_prior_report_snippets(
+    db: Session,
+    *,
+    exclude_session_id: int | None = None,
+    template_id: int | None = None,
+    assessment_type: str | None = None,
+    limit: int = 8,
+) -> list[str]:
+    """Fetch recent summary & advice snippets from other sessions for cross-learner NLG diversity."""
+    try:
+        stmt = (
+            select(AssessmentReport.report_data)
+            .join(AssessmentSession, AssessmentSession.id == AssessmentReport.session_id)
+        )
+        if exclude_session_id is not None:
+            stmt = stmt.where(AssessmentReport.session_id != exclude_session_id)
+        if template_id is not None:
+            stmt = stmt.where(AssessmentSession.template_id == template_id)
+        elif assessment_type:
+            stmt = stmt.where(AssessmentSession.assessment_type_snapshot == assessment_type)
+        stmt = stmt.order_by(AssessmentReport.id.desc()).limit(limit)
+
+        snippets: list[str] = []
+        for rep_data in db.scalars(stmt).all():
+            if not isinstance(rep_data, dict):
+                continue
+            parts: list[str] = []
+            if rep_data.get("summary"):
+                parts.append(str(rep_data["summary"]))
+            parts.extend(str(s) for s in (rep_data.get("strengths") or [])[:2])
+            parts.extend(str(r) for r in (rep_data.get("recommendations") or [])[:3])
+            parts.extend(str(v) for v in (rep_data.get("category_interpretations") or {}).values())
+            joined = " ".join(parts).strip()
+            if joined:
+                snippets.append(joined)
+        return snippets
+    except Exception:
+        return []
+
+
 class AssessmentIntelligenceEngine:
     """Self-contained facade coordinating scoring, domain ML analyzers & insights."""
 
@@ -129,6 +169,37 @@ class AssessmentIntelligenceEngine:
         for dim_key, norm in rows:
             buckets[dim_key].append(float(norm))
         return {k: round(sum(vals) / len(vals), 2) for k, vals in buckets.items() if vals}
+
+    def _compute_cohort_percentile(
+        self,
+        db: Session,
+        template_id: int | None,
+        session_id: int,
+        overall_pct: float,
+    ) -> float | None:
+        if template_id is None:
+            return None
+        try:
+            peer_reports = db.scalars(
+                select(AssessmentReport.report_data)
+                .join(AssessmentSession, AssessmentSession.id == AssessmentReport.session_id)
+                .where(
+                    AssessmentSession.template_id == template_id,
+                    AssessmentSession.status == "completed",
+                    AssessmentReport.session_id != session_id,
+                )
+            ).all()
+            peer_scores = [
+                float(r.get("overall_percentage"))
+                for r in peer_reports
+                if isinstance(r, dict) and r.get("overall_percentage") is not None
+            ]
+            if len(peer_scores) < 2:
+                return None
+            below_or_eq = sum(1 for s in peer_scores if s <= overall_pct)
+            return round(max(1.0, min(99.5, (below_or_eq / len(peer_scores)) * 100.0)), 1)
+        except Exception:
+            return None
 
     def evaluate_session(
         self,
@@ -306,6 +377,18 @@ class AssessmentIntelligenceEngine:
             ))
 
         cohort_avgs = self._get_cohort_dimension_averages(db, session.template_id)
+        cohort_pct = self._compute_cohort_percentile(
+            db,
+            session.template_id,
+            session.id,
+            float(scoring_result.get("overall_percentage", 0.0)),
+        )
+        prior_snippets = collect_prior_report_snippets(
+            db,
+            exclude_session_id=session.id,
+            template_id=session.template_id,
+            assessment_type=ass_type,
+        )
         generated_report = generate_intelligence_report(
             assessment_type=ass_type,
             template_name=temp_name,
@@ -315,6 +398,10 @@ class AssessmentIntelligenceEngine:
             time_taken_seconds=time_taken_seconds,
             tab_switch_count=int(getattr(session, "tab_switch_count", 0) or 0),
             cohort_averages=cohort_avgs,
+            cohort_percentile=cohort_pct,
+            session_id=session.id,
+            learner_user_id=session.learner_user_id,
+            prior_report_texts=prior_snippets,
         )
 
         if existing_report is not None:
@@ -386,6 +473,35 @@ class AssessmentIntelligenceEngine:
             }
             for d in dims
         ]
+
+        # Back-fill deep_analytics on older persisted reports seamlessly
+        if not rep_data.get("deep_analytics"):
+            from services.assessment_intelligence.nlg_report_synthesizer import (
+                synthesize_deep_analytics_bundle,
+            )
+
+            overall_val = float(rep_data.get("overall_percentage", 0.0))
+            weighted_val = float(rep_data.get("weighted_percentage", overall_val))
+            cohort_pct = self._compute_cohort_percentile(db, session.template_id, session.id, overall_val)
+            deep_bundle = synthesize_deep_analytics_bundle(
+                clean_type=ass_type,
+                overall_pct=overall_val,
+                weighted_pct=weighted_val,
+                dimensions=dimension_items,
+                domain_analysis=intel.get("domain_analysis") or {},
+                ml_insights=rep_data.get("ml_insights") or intel.get("ml_insights") or {},
+                total_questions=int(rep_data.get("total_questions") or 0),
+                correct_answers=int(rep_data.get("correct_answers") or 0),
+                incorrect_answers=int(rep_data.get("incorrect_answers") or 0),
+                unattempted_questions=int(rep_data.get("unattempted_questions") or 0),
+                time_taken_seconds=rep_data.get("time_taken_seconds"),
+                cohort_percentile=cohort_pct,
+                session_id=session.id,
+                learner_user_id=session.learner_user_id,
+            )
+            rep_data["deep_analytics"] = deep_bundle
+            if isinstance(rep_data.get("intelligence"), dict):
+                rep_data["intelligence"]["deep_analytics"] = deep_bundle
 
         return {
             "session_id": session.id,
@@ -512,6 +628,17 @@ class AssessmentIntelligenceEngine:
                 for v in versions
             ],
         }
+
+    def answer_session_question(self, db: Session, session_id: int, question: str) -> dict[str, Any]:
+        """Answer a natural-language question about a completed session using local ML/NLP report data."""
+        from services.assessment_intelligence.nlg_report_synthesizer import answer_report_question
+
+        intel = self.get_session_intelligence(db, session_id=session_id)
+        return answer_report_question(
+            question=question,
+            report_data=intel.get("report_data") or {},
+            dimensions=intel.get("dimensions") or [],
+        )
 
 
 intelligence_engine = AssessmentIntelligenceEngine()

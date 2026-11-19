@@ -91,7 +91,10 @@ from services.training.app.services.assessment_report import (
 from services.training.app.services.assessment_scoring import (
     calculate_assessment_scores,
 )
-from services.assessment_intelligence.engine import intelligence_engine
+from services.assessment_intelligence.engine import (
+    collect_prior_report_snippets,
+    intelligence_engine,
+)
 from services.assessment_intelligence.nlp_composition_analyzer import analyze_composition_response
 from services.assessment_intelligence.programming_analyzer import evaluate_code_submission
 from services.assessment_intelligence.scoring_engine import evaluate_weighted_scores
@@ -3615,6 +3618,12 @@ def create_assessment_report(
         time_taken_seconds = max(0, int((c_utc - s_utc).total_seconds()))
 
     try:
+        prior_snippets = collect_prior_report_snippets(
+            db,
+            exclude_session_id=session_id,
+            template_id=resolved_tid,
+            assessment_type=ass_type,
+        )
         generated = generate_assessment_report(
             category_scores=score_data,
             assessment_type=ass_type,
@@ -3625,6 +3634,9 @@ def create_assessment_report(
             unattempted_count=unattempted_count,
             time_taken_seconds=time_taken_seconds,
             tab_switch_count=getattr(assessment_session, "tab_switch_count", 0) or 0,
+            session_id=assessment_session.id,
+            learner_user_id=assessment_session.learner_user_id,
+            prior_report_texts=prior_snippets,
         )
 
         report = AssessmentReport(
@@ -3825,6 +3837,12 @@ def get_assessment_report(
             c_utc = to_utc(assessment_session.completed_at)
             time_taken_seconds = max(0, int((c_utc - s_utc).total_seconds()))
 
+        prior_snippets = collect_prior_report_snippets(
+            db,
+            exclude_session_id=session_id,
+            template_id=assessment_session.template_id,
+            assessment_type=ass_type,
+        )
         generated = generate_assessment_report(
             category_scores=score_data,
             assessment_type=ass_type,
@@ -3835,6 +3853,9 @@ def get_assessment_report(
             unattempted_count=unattempted_count,
             time_taken_seconds=time_taken_seconds,
             tab_switch_count=getattr(assessment_session, "tab_switch_count", 0) or 0,
+            session_id=assessment_session.id,
+            learner_user_id=assessment_session.learner_user_id,
+            prior_report_texts=prior_snippets,
         )
 
         report = AssessmentReport(

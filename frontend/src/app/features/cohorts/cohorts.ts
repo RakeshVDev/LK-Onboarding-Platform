@@ -1343,8 +1343,9 @@ export class Cohorts implements OnInit {
         })
       );
       this.cohortService.syncBackendBatchesAndMaterials(backendBatches, deliveredByCohort);
+      await this.cohortService.loadWorkspaceFromBackend?.();
     } catch {
-      // keep fallback state cleanly when backend is unavailable
+      await this.cohortService.loadWorkspaceFromBackend?.();
     }
   }
 
@@ -1639,6 +1640,8 @@ export class Cohorts implements OnInit {
 
   selectBatchToManage(batchId: string): void {
     this.cohortService.setActiveBatch(batchId);
+    const target = this.batches().find(b => b.id === batchId);
+    void this.cohortService.loadWorkspaceFromBackend?.(target?.backendCohortId);
     this.showToast(`Switched active workspace to ${this.details().name}`, 'success');
     this.setTab('teacher_curriculum');
   }

@@ -28,9 +28,28 @@ def _get_existing_constraints(table_name: str) -> set[str]:
     if context.is_offline_mode():
         return set()
     bind = op.get_bind()
+    if bind.dialect.name.lower() == "mssql":
+        rows = bind.execute(
+            sa.text(
+                "SELECT name FROM sys.objects "
+                "WHERE parent_object_id = OBJECT_ID(:tbl) AND type IN ('UQ', 'C') AND name IS NOT NULL "
+                "UNION "
+                "SELECT name FROM sys.indexes "
+                "WHERE object_id = OBJECT_ID(:tbl) AND is_unique = 1 AND name IS NOT NULL"
+            ),
+            {"tbl": table_name},
+        ).fetchall()
+        return {r[0] for r in rows if r[0]}
     inspector = sa.inspect(bind)
-    names = {uc["name"] for uc in inspector.get_unique_constraints(table_name) if uc.get("name")}
-    names |= {cc["name"] for cc in inspector.get_check_constraints(table_name) if cc.get("name")}
+    names: set[str] = set()
+    try:
+        names |= {uc["name"] for uc in inspector.get_unique_constraints(table_name) if uc.get("name")}
+    except NotImplementedError:
+        pass
+    try:
+        names |= {cc["name"] for cc in inspector.get_check_constraints(table_name) if cc.get("name")}
+    except NotImplementedError:
+        pass
     return names
 
 

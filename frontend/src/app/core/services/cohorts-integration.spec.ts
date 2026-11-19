@@ -166,5 +166,38 @@ describe('Cohorts Platform Integration (AuthService, UserManagementService, Coho
     expect(post.author).toBe('Kiran Patel');
     expect(post.authorRole).toBe('Learner');
   });
+
+  it('loads persistent workspace state from SQL backend API without writing localStorage cohort cache', async () => {
+    const mockHttp = {
+      get: vi.fn().mockReturnValue(
+        of({
+          curriculum: [{ id: '1', backendId: 1, title: 'SQL Chapter', sequenceOrder: 1, lessons: [] }],
+          assignments: [],
+          quizzes: [],
+          announcements: [],
+          discussions: [],
+          attendance: { percentage: 100, totalSessions: 1, attended: 1, missed: 0, excused: 0, late: 0, minimumRequired: 85, checkedInToday: true, history: [] },
+          attendanceMatrix: { dateRangeLabel: 'Nov', days: [], students: [] },
+          progress: { overallPercentage: 100, modulesCompleted: 1, totalModules: 1, assignmentsSubmitted: 0, totalAssignments: 0, quizzesPassed: 0, totalQuizzes: 0, attendanceRate: 100, milestones: [], earnedBadges: [] },
+          bookmarkedMaterialKeys: []
+        })
+      ),
+      post: vi.fn().mockReturnValue(of({}))
+    } as any;
+    const auth = new AuthService({
+      get: vi.fn().mockReturnValue(of({ id: 2, full_name: 'Teacher', email: 't@example.com', role: 'teacher', is_active: true }))
+    } as any);
+    sessionStorage.setItem('lk_access_token', 'valid-jwt');
+    await auth.getCurrentUser();
+
+    localStorage.removeItem('ase_cohort_state_v5');
+    localStorage.removeItem('ase_cohort_state_v6');
+    const cohortService = new CohortService(mockHttp, auth);
+    await cohortService.loadWorkspaceFromBackend(10);
+
+    expect(mockHttp.get).toHaveBeenCalled();
+    expect(cohortService.getCohortData().curriculum.map(c => c.title)).toEqual(['SQL Chapter']);
+    expect(localStorage.getItem('ase_cohort_state_v6')).toBeNull();
+  });
 });
 
