@@ -722,7 +722,6 @@ export class CohortService {
               });
               existingEmails.add(parsed.email.toLowerCase().trim());
             }
-            }
           }
         } catch { }
       }
