@@ -23,16 +23,16 @@
     <a class="tab-item active" routerLink="/assessment-results">Learner Results &amp; Intelligence</a>
   </nav>
 
-  <!-- SuperAdmin Joinee-First Results & Report View -->
-  @if (isSuperAdmin()) {
+  <!-- SuperAdmin, Admin & Teacher Learner-First Results & Report View -->
+  @if (isStaffDirectoryView()) {
     @if (!selectedJoinee()) {
-      <!-- Joinee Search Toolbar -->
+      <!-- Learner Search Toolbar -->
       <div class="filter-toolbar">
         <div class="search-box">
           <span class="search-icon">🔍</span>
           <input
             type="text"
-            placeholder="Search joinee by name..."
+            placeholder="Search learner by name..."
             [ngModel]="joineeSearch()"
             (ngModelChange)="onJoineeSearchChange($event)" />
         </div>
@@ -41,19 +41,19 @@
       @if (loading()) {
         <div class="loading-state">
           <span class="spinner"></span>
-          <p>Loading joinees...</p>
+          <p>Loading learners...</p>
         </div>
       } @else if (joineeDirectory().length === 0) {
         <div class="empty-state">
           <div class="empty-icon">▥</div>
-          <h3>No joinees found</h3>
-          <p>No joinee assessment records match your search yet.</p>
+          <h3>No learners found</h3>
+          <p>No learner assessment records match your search yet.</p>
         </div>
       } @else {
         <div class="joinee-directory-card">
           <div class="joinee-directory-head">
-            <h2>Select a Joinee</h2>
-            <span class="joinee-count-pill">{{ joineeDirectory().length }} {{ joineeDirectory().length === 1 ? 'Joinee' : 'Joinees' }}</span>
+            <h2>Select a Learner</h2>
+            <span class="joinee-count-pill">{{ joineeDirectory().length }} {{ joineeDirectory().length === 1 ? 'Learner' : 'Learners' }}</span>
           </div>
 
           <ul class="joinee-name-list">
@@ -79,7 +79,7 @@
       @if (selectedJoinee(); as joinee) {
         <div class="selected-joinee-bar">
           <button type="button" class="btn-back-joinees" (click)="backToJoineeList()">
-            &larr; Back to Joinees
+            &larr; Back to Learners
           </button>
 
           <div class="selected-joinee-meta">

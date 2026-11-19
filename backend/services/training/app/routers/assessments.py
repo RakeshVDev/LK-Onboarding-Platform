@@ -1296,6 +1296,7 @@ def get_assigned_rows_for_learner(
     db: Session,
     user_id: int,
     only_active_templates: bool = True,
+    bypass_stage_gating: bool = False,
 ) -> tuple[list[dict], list[str]]:
     """Return deduplicated assigned templates for a specific learner with matched assignment metadata."""
     learner_cohort_ids, cohort_names_by_id, cohort_names = get_learner_cohort_context(db, user_id)
@@ -1369,7 +1370,13 @@ def get_assigned_rows_for_learner(
         is_common_dept = (t_dept_id is None) or (common_id is not None and t_dept_id == common_id)
 
         # Strict Pre-Assessment -> Common (on dept choice) -> Department (on approval) gating:
-        if department_approved:
+        if bypass_stage_gating:
+            # Staff results view: include both Pre-Assessments and all other assessments
+            # applicable to this learner (direct, cohort, common, or their department).
+            if not direct_matches and not cohort_matches and all_matches:
+                if not is_common_dept and approved_dept_id is not None and t_dept_id != approved_dept_id:
+                    continue
+        elif department_approved:
             # Once approved, hide Pre-Assessments from My Assessments; keep completed history in Results/Reports
             if t_tag == "Pre-Assessment":
                 continue
@@ -3348,6 +3355,54 @@ def _is_session_hidden_by_reactivation(
     return ref_dt <= cleared_at
 
 
+def _get_learner_ids_in_departments(db: Session, dept_ids: set[int]) -> set[int]:
+    """Return learner user IDs belonging to any of the given department IDs."""
+    if not dept_ids:
+        return set()
+
+    learner_ids: set[int] = set()
+
+    # 1. Approved or pending StudentDepartmentRequest rows for these departments
+    req_user_ids = db.scalars(
+        select(StudentDepartmentRequest.user_id).where(
+            StudentDepartmentRequest.department_id.in_(dept_ids),
+            StudentDepartmentRequest.status.in_(["approved", "pending"]),
+        )
+    ).all()
+    for uid in req_user_ids:
+        if uid is not None:
+            learner_ids.add(int(uid))
+
+    # 2. Cohort members belonging to cohorts in these departments
+    cohort_user_ids = db.scalars(
+        select(CohortMember.user_id)
+        .join(Cohort, CohortMember.cohort_id == Cohort.id)
+        .where(Cohort.department_id.in_(dept_ids))
+    ).all()
+    for uid in cohort_user_ids:
+        if uid is not None:
+            learner_ids.add(int(uid))
+
+    # 3. Identity users directly assigned/approved to these departments
+    dept_str_ids = {str(d) for d in dept_ids}
+    try:
+        with IdentitySessionLocal() as id_db:
+            direct_ids = id_db.scalars(
+                select(IdentityUser.id).where(
+                    func.lower(IdentityUser.role) == Role.LEARNER.value,
+                    IdentityUser.is_active == True,  # noqa: E712
+                    IdentityUser.selected_department_id.in_(dept_str_ids),
+                )
+            ).all()
+            for uid in direct_ids:
+                if uid is not None:
+                    learner_ids.add(int(uid))
+    except Exception:
+        pass
+
+    return learner_ids
+
+
 @router.get(
     "/sessions/{session_id}/results",
     response_model=AssessmentScoresResponse,
@@ -3408,6 +3463,12 @@ def get_assessment_results(
     )
     if role == Role.TEACHER.value:
         require_teacher_department_access(db, current_user, resolved_dept_id, allow_common_read=True)
+        teacher_depts = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if int(assessment_session.learner_user_id) not in _get_learner_ids_in_departments(db, teacher_depts):
+            raise HTTPException(
+                status_code=403,
+                detail="Teachers can only view assessment results for learners in their assigned department",
+            )
     user_info = get_users_map([assessment_session.learner_user_id]).get(assessment_session.learner_user_id, {})
 
     # Retrieve saved scores from MySQL.
@@ -3535,6 +3596,12 @@ def create_assessment_report(
     )
     if role == Role.TEACHER.value:
         require_teacher_department_access(db, current_user, resolved_dept_id, allow_common_read=True)
+        teacher_depts = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if int(assessment_session.learner_user_id) not in _get_learner_ids_in_departments(db, teacher_depts):
+            raise HTTPException(
+                status_code=403,
+                detail="Teachers can only view assessment results for learners in their assigned department",
+            )
 
     if existing_report:
         rep_data = dict(existing_report.report_data or {})
@@ -3768,6 +3835,23 @@ def get_assessment_report(
             detail="Assessment has not been completed",
         )
 
+    if role == Role.TEACHER.value:
+        template_for_scope = (
+            db.scalar(
+                select(AssessmentTemplate).where(AssessmentTemplate.id == assessment_session.template_id)
+            )
+            if assessment_session.template_id is not None
+            else None
+        )
+        _, _, _, _, scoped_dept_id = _session_template_meta(assessment_session, template_for_scope)
+        require_teacher_department_access(db, current_user, scoped_dept_id, allow_common_read=True)
+        teacher_depts = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if int(assessment_session.learner_user_id) not in _get_learner_ids_in_departments(db, teacher_depts):
+            raise HTTPException(
+                status_code=403,
+                detail="Teachers can only view assessment reports for learners in their assigned department",
+            )
+
     report = db.scalar(
         select(AssessmentReport).where(
             AssessmentReport.session_id == session_id
@@ -3895,6 +3979,12 @@ def get_assessment_report(
     )
     if role == Role.TEACHER.value:
         require_teacher_department_access(db, current_user, resolved_dept_id, allow_common_read=True)
+        teacher_depts = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if int(assessment_session.learner_user_id) not in _get_learner_ids_in_departments(db, teacher_depts):
+            raise HTTPException(
+                status_code=403,
+                detail="Teachers can only view assessment results for learners in their assigned department",
+            )
     rep_data = dict(report.report_data or {})
 
     if not rep_data.get("report_title"):
@@ -4108,6 +4198,9 @@ def get_admin_assessment_results(
     teacher_allowed_depts = (
         get_teacher_assigned_dept_ids(db, int(current_user.id)) if is_teacher_caller else set()
     )
+    teacher_learner_ids = (
+        _get_learner_ids_in_departments(db, teacher_allowed_depts) if is_teacher_caller else set()
+    )
     common_dept_ids = get_common_department_ids(db) if is_teacher_caller else set()
 
     def _teacher_can_view_dept(dept_id: int | None) -> bool:
@@ -4119,8 +4212,15 @@ def get_admin_assessment_results(
             return True
         return int(dept_id) in teacher_allowed_depts
 
+    def _teacher_can_view_learner(uid: int) -> bool:
+        if not is_teacher_caller:
+            return True
+        return int(uid) in teacher_learner_ids
+
     for session, template in sessions:
         resolved_tid, resolved_name, resolved_type, _, resolved_dept_id = _session_template_meta(session, template)
+        if not _teacher_can_view_learner(session.learner_user_id):
+            continue
         if not _teacher_can_view_dept(resolved_dept_id):
             continue
         if resolved_tid is not None:
@@ -4195,20 +4295,33 @@ def get_admin_assessment_results(
 
     if include_unattempted and (status is None or status in {"all", "not_started"}):
         with IdentitySessionLocal() as id_db:
-            active_learners = id_db.scalars(
-                select(IdentityUser)
-                .where(
-                    func.lower(IdentityUser.role) == Role.LEARNER.value,
-                    IdentityUser.is_active == True,
-                )
-                .order_by(IdentityUser.full_name.asc(), IdentityUser.id.asc())
-            ).all()
+            learner_stmt = select(IdentityUser).where(
+                func.lower(IdentityUser.role) == Role.LEARNER.value,
+                IdentityUser.is_active == True,
+            )
+            if learner_user_id is not None:
+                learner_stmt = learner_stmt.where(IdentityUser.id == learner_user_id)
+            if is_teacher_caller:
+                if not teacher_learner_ids:
+                    active_learners = []
+                else:
+                    active_learners = id_db.scalars(
+                        learner_stmt.where(IdentityUser.id.in_(teacher_learner_ids))
+                        .order_by(IdentityUser.full_name.asc(), IdentityUser.id.asc())
+                    ).all()
+            else:
+                active_learners = id_db.scalars(
+                    learner_stmt.order_by(IdentityUser.full_name.asc(), IdentityUser.id.asc())
+                ).all()
 
         for learner in active_learners:
             learner_name = learner.full_name or f"Learner #{learner.id}"
             learner_email = learner.email or ""
             assigned_entries, _ = get_assigned_rows_for_learner(
-                db, learner.id, only_active_templates=True
+                db,
+                learner.id,
+                only_active_templates=True,
+                bypass_stage_gating=True,
             )
             for entry in assigned_entries:
                 tpl = entry["template"]

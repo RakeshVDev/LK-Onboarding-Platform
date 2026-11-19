@@ -41,7 +41,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .error-actions {
@@ -257,10 +259,10 @@
   border-radius: 999px;
 }
 
-/* Row 1: Balanced 3-Column KPI Strip */
+/* Row 1: Side-by-Side Executive KPI Cards (before Detailed Performance Analysis) */
 .kpi-strip-grid {
   display: grid;
-  grid-template-columns: 1.35fr 1.4fr 0.95fr;
+  grid-template-columns: 1.35fr 1.25fr 1fr;
   gap: 18px;
   align-items: stretch;
 }
@@ -374,9 +376,20 @@
   font-weight: 700;
   flex-shrink: 0;
 
-  &.blue { background: #e0e7ff; color: #4338ca; }
-  &.green { background: #dcfce7; color: #15803d; }
-  &.purple { background: #f3e8ff; color: #7e22ce; }
+  &.blue {
+    background: #e0e7ff;
+    color: #4338ca;
+  }
+
+  &.green {
+    background: #dcfce7;
+    color: #15803d;
+  }
+
+  &.purple {
+    background: #f3e8ff;
+    color: #7e22ce;
+  }
 }
 
 .side-stat-label {
@@ -505,23 +518,18 @@
   color: #475569;
 }
 
-/* Balanced 2-Column Rows (Row 2, Row 3, Row 4) */
+/* Individual Full-Width Stacked Card Rows (no 2 cards side by side) */
 .two-col-grid {
   display: grid;
+  grid-template-columns: 1fr;
   gap: 18px;
   align-items: stretch;
 }
 
-.primary-analysis-row {
-  grid-template-columns: 1.12fr 1fr;
-}
-
-.insights-row {
-  grid-template-columns: 1.2fr 1fr;
-}
-
+.primary-analysis-row,
+.insights-row,
 .action-row {
-  grid-template-columns: 1.15fr 1fr;
+  grid-template-columns: 1fr;
 }
 
 /* Row 2 Left: Detailed Performance Analysis */
@@ -638,8 +646,13 @@
     margin-right: 5px;
   }
 
-  .dot-your { background: #2563eb; }
-  .dot-avg { background: #94a3b8; }
+  .dot-your {
+    background: #2563eb;
+  }
+
+  .dot-avg {
+    background: #94a3b8;
+  }
 }
 
 .line-chart-svg {
@@ -663,9 +676,19 @@
   stroke-width: 2.8;
 }
 
-.node-avg { fill: #94a3b8; }
-.node-your { fill: #2563eb; }
-.node-your.active-node { fill: #4f46e5; stroke: #ffffff; stroke-width: 2.2; }
+.node-avg {
+  fill: #94a3b8;
+}
+
+.node-your {
+  fill: #2563eb;
+}
+
+.node-your.active-node {
+  fill: #4f46e5;
+  stroke: #ffffff;
+  stroke-width: 2.2;
+}
 
 .axis-lbl {
   font-size: 10.5px;
@@ -733,10 +756,25 @@
   font-weight: 800;
   flex-shrink: 0;
 
-  &.green { background: #dcfce7; color: #15803d; }
-  &.blue { background: #dbeafe; color: #1d4ed8; }
-  &.amber { background: #fef3c7; color: #b45309; }
-  &.rose { background: #ffe4e6; color: #be123c; }
+  &.green {
+    background: #dcfce7;
+    color: #15803d;
+  }
+
+  &.blue {
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
+
+  &.amber {
+    background: #fef3c7;
+    color: #b45309;
+  }
+
+  &.rose {
+    background: #ffe4e6;
+    color: #be123c;
+  }
 }
 
 /* Row 3 Left: Strengths & Weaknesses */
@@ -779,13 +817,19 @@
 .sw-strengths {
   background: linear-gradient(180deg, #ecfdf5 0%, #f0fdf4 100%);
   border: 1px solid #bbf7d0;
-  h3 { color: #166534; }
+
+  h3 {
+    color: #166534;
+  }
 }
 
 .sw-weaknesses {
   background: linear-gradient(180deg, #fff1f2 0%, #fef2f2 100%);
   border: 1px solid #fecdd3;
-  h3 { color: #9f1239; }
+
+  h3 {
+    color: #9f1239;
+  }
 }
 
 .sw-dot {
@@ -800,9 +844,20 @@
   flex-shrink: 0;
   margin-top: 2px;
 
-  &.ok { background: #16a34a; color: #ffffff; }
-  &.warn { background: #e11d48; color: #ffffff; }
-  &.info { background: #4f46e5; color: #ffffff; }
+  &.ok {
+    background: #16a34a;
+    color: #ffffff;
+  }
+
+  &.warn {
+    background: #e11d48;
+    color: #ffffff;
+  }
+
+  &.info {
+    background: #4f46e5;
+    color: #ffffff;
+  }
 }
 
 /* Row 3 Right: AI Insights */
@@ -866,8 +921,15 @@
   border-radius: 999px;
 }
 
-.plan-pill { background: #ede9fe; color: #5b21b6; }
-.assistant-status-pill { background: #e0e7ff; color: #3730a3; }
+.plan-pill {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.assistant-status-pill {
+  background: #e0e7ff;
+  color: #3730a3;
+}
 
 .plan-timeline {
   display: flex;
@@ -982,7 +1044,9 @@
   font-size: 13px;
   line-height: 1.48;
 
-  p { margin: 0; }
+  p {
+    margin: 0;
+  }
 }
 
 .user-bubble {
@@ -1057,7 +1121,9 @@
   font-size: 14px;
   color: #e0e7ff;
 
-  strong { color: #ffffff; }
+  strong {
+    color: #ffffff;
+  }
 }
 
 .btn-download-gradient {
@@ -1071,7 +1137,9 @@
   cursor: pointer;
   box-shadow: 0 8px 20px rgba(192, 38, 211, 0.30);
 
-  &:hover { filter: brightness(1.08); }
+  &:hover {
+    filter: brightness(1.08);
+  }
 }
 
 /* Transcript & Next Step */
@@ -1079,7 +1147,11 @@
   summary {
     cursor: pointer;
     list-style: none;
-    h3 { margin: 4px 0 0; font-size: 15px; }
+
+    h3 {
+      margin: 4px 0 0;
+      font-size: 15px;
+    }
   }
 
   pre {
@@ -1096,8 +1168,17 @@
 
 .tech-track-next-step-panel {
   border-left: 4px solid #4f46e5;
-  h2 { margin: 6px 0 8px; font-size: 18px; }
-  p { margin: 0 0 14px; font-size: 13.5px; color: #475569; }
+
+  h2 {
+    margin: 6px 0 8px;
+    font-size: 18px;
+  }
+
+  p {
+    margin: 0 0 14px;
+    font-size: 13.5px;
+    color: #475569;
+  }
 }
 
 .btn-track-cta {
@@ -1126,7 +1207,10 @@
   .footer-brand {
     display: flex;
     flex-direction: column;
-    strong { color: #0f172a; }
+
+    strong {
+      color: #0f172a;
+    }
   }
 
   .footer-disclaimer {
@@ -1137,16 +1221,19 @@
 
 /* Responsive Breakpoints */
 @media (max-width: 1080px) {
+
   .kpi-strip-grid,
   .primary-analysis-row,
   .insights-row,
   .action-row {
     grid-template-columns: 1fr;
   }
+
   .deep-hero-banner {
     flex-direction: column;
     align-items: flex-start;
   }
+
   .hero-right-pills {
     width: 100%;
     flex-wrap: wrap;
@@ -1154,10 +1241,14 @@
 }
 
 @media (max-width: 680px) {
-  .report-page { padding: 12px; }
+  .report-page {
+    padding: 12px;
+  }
+
   .sw-columns {
     grid-template-columns: 1fr;
   }
+
   .score-gauge-card,
   .perf-split-body,
   .radar-ml-split {
@@ -1167,9 +1258,19 @@
 }
 
 @media print {
-  .no-print { display: none !important; }
-  .report-page { background: #ffffff; padding: 0; }
-  .glass-card { box-shadow: none; break-inside: avoid; }
+  .no-print {
+    display: none !important;
+  }
+
+  .report-page {
+    background: #ffffff;
+    padding: 0;
+  }
+
+  .glass-card {
+    box-shadow: none;
+    break-inside: avoid;
+  }
 }
 
 /* ========================================================= */

@@ -505,20 +505,5 @@
       </section>
     }
 
-    <!-- Official Report Footer -->
-    <footer class="report-footer">
-      <div class="footer-brand">
-        <strong>ASE Assessment Tool</strong>
-        <span>Official Evaluation Suite</span>
-      </div>
-      <p class="footer-disclaimer">
-        @if (isPsychometric) {
-          Developmental feedback only. This report is not a clinical diagnosis or a standalone employment-suitability decision.
-        } @else {
-          This official {{ reportTitle }} certifies candidate proficiency demonstrated during the timed ASE Assessment Tool examination.
-        }
-      </p>
-      <small>Session Ref #{{ report.session_id }}</small>
-    </footer>
   }
 </div>

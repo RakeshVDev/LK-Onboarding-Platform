@@ -25,6 +25,21 @@ class DepartmentResponse(BaseModel):
     is_active: bool
 
 
+class DepartmentMemberItem(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    role: str
+    is_active: bool = True
+
+
+class DepartmentMembersResponse(BaseModel):
+    department_id: int
+    department_name: str
+    teachers: list[DepartmentMemberItem] = Field(default_factory=list)
+    students: list[DepartmentMemberItem] = Field(default_factory=list)
+
+
 # ---------- Course schemas ----------
 
 class CourseCreate(BaseModel):
