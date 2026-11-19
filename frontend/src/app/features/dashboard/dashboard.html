@@ -977,7 +977,7 @@
         </a>
 
         <a routerLink="/assessments" class="shortcut-card">
-          <div class="shortcut-icon">✦</div>
+          <div class="shortcut-icon">📋</div>
           <div>
             <h4>Create Assessment</h4>
             <p>Add new examination templates with custom category configs and assignments.</p>
@@ -1149,7 +1149,6 @@
         <div class="card-top-tag" [attr.data-type]="item.assessment_type"></div>
         <div class="test-card-body">
           <div class="test-header">
-            <span class="test-symbol">{{ getAssessmentIcon(item.assessment_type) }}</span>
             <div class="card-badges-right">
               <span class="test-badge">{{ item.category_label }}</span>
               <span class="lifecycle-badge" [attr.data-status]="item.status">

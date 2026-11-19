@@ -23,6 +23,204 @@
     <a class="tab-item active" routerLink="/assessment-results">Learner Results &amp; Intelligence</a>
   </nav>
 
+  <!-- SuperAdmin Joinee-First Results & Report View -->
+  @if (isSuperAdmin()) {
+    @if (!selectedJoinee()) {
+      <!-- Joinee Search Toolbar -->
+      <div class="filter-toolbar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input
+            type="text"
+            placeholder="Search joinee by name..."
+            [ngModel]="joineeSearch()"
+            (ngModelChange)="onJoineeSearchChange($event)" />
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="loading-state">
+          <span class="spinner"></span>
+          <p>Loading joinees...</p>
+        </div>
+      } @else if (joineeDirectory().length === 0) {
+        <div class="empty-state">
+          <div class="empty-icon">▥</div>
+          <h3>No joinees found</h3>
+          <p>No joinee assessment records match your search yet.</p>
+        </div>
+      } @else {
+        <div class="joinee-directory-card">
+          <div class="joinee-directory-head">
+            <h2>Select a Joinee</h2>
+            <span class="joinee-count-pill">{{ joineeDirectory().length }} {{ joineeDirectory().length === 1 ? 'Joinee' : 'Joinees' }}</span>
+          </div>
+
+          <ul class="joinee-name-list">
+            @for (joinee of joineeDirectory(); track joinee.userId) {
+              <li class="joinee-name-row">
+                <div class="joinee-identity">
+                  <div class="avatar">{{ getUserInitials(joinee.name) }}</div>
+                  <strong class="joinee-name">{{ joinee.name }}</strong>
+                </div>
+
+                <button
+                  type="button"
+                  class="btn-joinee-result"
+                  (click)="openJoineeResults(joinee)">
+                  Result &rarr;
+                </button>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    } @else {
+      @if (selectedJoinee(); as joinee) {
+        <div class="selected-joinee-bar">
+          <button type="button" class="btn-back-joinees" (click)="backToJoineeList()">
+            &larr; Back to Joinees
+          </button>
+
+          <div class="selected-joinee-meta">
+            <div class="avatar">{{ getUserInitials(joinee.name) }}</div>
+            <div>
+              <h2>{{ joinee.name }}</h2>
+              <span class="user-email">{{ joinee.email || ('User #' + joinee.userId) }}</span>
+            </div>
+          </div>
+
+          <div class="selected-joinee-kpis">
+            <span class="joinee-kpi-chip">Assessments: <strong>{{ selectedJoineeStats().total }}</strong></span>
+            <span class="joinee-kpi-chip">Completed: <strong>{{ selectedJoineeStats().completed }}</strong></span>
+            <span class="joinee-kpi-chip">Avg Score: <strong>{{ selectedJoineeStats().averageScore }}%</strong></span>
+          </div>
+        </div>
+
+        @if (selectedJoineeLoading()) {
+          <div class="loading-state">
+            <span class="spinner"></span>
+            <p>Loading results and reports for {{ joinee.name }}...</p>
+          </div>
+        } @else if (selectedJoineeResults().length === 0) {
+          <div class="empty-state">
+            <div class="empty-icon">▥</div>
+            <h3>No results yet for {{ joinee.name }}</h3>
+            <p>This joinee has no assessment results or reports recorded yet.</p>
+          </div>
+        } @else {
+          <div class="table-container">
+            <table class="results-table">
+              <thead>
+                <tr>
+                  <th>Assessment</th>
+                  <th>Status</th>
+                  <th>Proctoring</th>
+                  <th>Score</th>
+                  <th>Performance</th>
+                  <th>Date</th>
+                  <th class="actions-col">Report &amp; Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of selectedJoineeResults(); track (item.session_id ?? ('pending-' + item.learner_user_id + '-' + item.template_id))) {
+                  <tr>
+                    <td>
+                      <div class="assessment-cell">
+                        <span class="test-name">{{ item.template_name }}</span>
+                        <span class="type-pill" [attr.data-type]="item.assessment_type">
+                          {{ typeLabel(item.assessment_type) }}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="status-pill" [class.status-completed]="item.status === 'completed'"
+                        [class.status-progress]="item.status === 'in_progress'" [class.status-expired]="item.status === 'expired'"
+                        [class.status-pending]="item.status === 'not_started'">
+                        {{ statusLabel(item.status) }}
+                      </span>
+                    </td>
+                    <td>
+                      @if (item.status === 'not_started') {
+                        <span class="text-muted">—</span>
+                      } @else if (item.tab_switch_count === 0 || !item.tab_switch_count) {
+                        <span class="proctor-pill proctor-clean">
+                          <span class="proctor-dot dot-clean"></span>
+                          Clean (0)
+                        </span>
+                      } @else if (item.tab_switch_count < 3) {
+                        <span class="proctor-pill proctor-warning">
+                          <span class="proctor-dot dot-warning"></span>
+                          {{ item.tab_switch_count }} {{ item.tab_switch_count === 1 ? 'Switch' : 'Switches' }}
+                        </span>
+                      } @else {
+                        <span class="proctor-pill proctor-danger">
+                          <span class="proctor-dot dot-danger"></span>
+                          {{ item.tab_switch_count }} Switches (Terminated)
+                        </span>
+                      }
+                    </td>
+                    <td>
+                      @if (item.status === 'completed') {
+                        <span class="points-val">
+                          <strong>{{ item.total_score | number:'1.0-1' }}</strong> / {{ item.max_score | number:'1.0-1' }}
+                        </span>
+                      } @else {
+                        <span class="text-muted">—</span>
+                      }
+                    </td>
+                    <td>
+                      @if (item.status === 'completed') {
+                        <div class="pct-cell">
+                          <span class="pct-badge" [ngClass]="getGrade(item.overall_percentage).class">
+                            {{ item.overall_percentage | number:'1.0-0' }}%
+                          </span>
+                          <div class="table-track">
+                            <div class="table-fill" [style.width.%]="item.overall_percentage"
+                              [ngClass]="getGrade(item.overall_percentage).class">
+                            </div>
+                          </div>
+                        </div>
+                      } @else {
+                        <span class="text-muted">—</span>
+                      }
+                    </td>
+                    <td>
+                      @if (item.completed_at || item.started_at) {
+                        <span class="date-text">
+                          {{ (item.completed_at || item.started_at) | date:'mediumDate' }}
+                        </span>
+                      } @else {
+                        <span class="text-muted">Assigned</span>
+                      }
+                    </td>
+                    <td class="actions-col">
+                      @if (item.status === 'completed' && item.session_id) {
+                        <div class="btn-group">
+                          <button class="btn-action-primary" type="button" (click)="viewReport(item.session_id)">
+                            Report Card
+                          </button>
+                          <button class="btn-action-secondary" type="button" (click)="viewScores(item.session_id)">
+                            Scores
+                          </button>
+                        </div>
+                      } @else if (item.status === 'expired') {
+                        <span class="expired-label">Expired</span>
+                      } @else if (item.status === 'not_started') {
+                        <span class="pending-label">Not attended yet</span>
+                      } @else {
+                        <span class="in-prog-label">In progress...</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+  } @else {
   <!-- Statistics -->
   <div class="stats-grid">
     <div class="stat-card">
@@ -335,6 +533,7 @@
       </div>
     </div>
   </div>
+  }
   }
 
 </div>

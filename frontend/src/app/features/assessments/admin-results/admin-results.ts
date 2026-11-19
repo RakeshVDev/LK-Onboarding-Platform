@@ -2,6 +2,7 @@ import {
   ChangeDetectorRef,
   Component,
   OnInit,
+  computed,
   inject,
   signal
 } from '@angular/core';
@@ -10,12 +11,19 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 
+import { AuthService } from '../../../core/services/auth.service';
 import {
   AssessmentService,
   AssessmentTemplate,
   AdminAssessmentResultItem,
   AdminAssessmentResultsResponse
 } from '../services/assessment';
+
+export interface JoineeDirectoryEntry {
+  userId: number;
+  name: string;
+  email: string;
+}
 
 @Component({
   selector: 'app-admin-results',
@@ -30,10 +38,48 @@ import {
 })
 export class AdminResults implements OnInit {
   private readonly api = inject(AssessmentService);
+  private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
 
+  readonly isSuperAdmin = computed(() => this.authService.hasRole('superadmin'));
   readonly results = signal<AdminAssessmentResultItem[]>([]);
+  readonly selectedJoinee = signal<JoineeDirectoryEntry | null>(null);
+  readonly selectedJoineeResults = signal<AdminAssessmentResultItem[]>([]);
+  readonly selectedJoineeLoading = signal(false);
+  readonly joineeSearch = signal('');
+
+  readonly joineeDirectory = computed<JoineeDirectoryEntry[]>(() => {
+    const map = new Map<number, JoineeDirectoryEntry>();
+    for (const row of this.results()) {
+      if (!row.learner_user_id) continue;
+      if (!map.has(row.learner_user_id)) {
+        map.set(row.learner_user_id, {
+          userId: row.learner_user_id,
+          name: (row.learner_name || '').trim() || `Joinee #${row.learner_user_id}`,
+          email: (row.learner_email || '').trim(),
+        });
+      }
+    }
+    const q = this.joineeSearch().trim().toLowerCase();
+    return Array.from(map.values())
+      .filter((j) => !q || j.name.toLowerCase().includes(q) || j.email.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  readonly selectedJoineeStats = computed(() => {
+    const rows = this.selectedJoineeResults();
+    const completed = rows.filter((r) => r.status === 'completed');
+    const avg = completed.length
+      ? Math.round((completed.reduce((acc, r) => acc + Number(r.overall_percentage || 0), 0) / completed.length) * 10) / 10
+      : 0;
+    return {
+      total: rows.length,
+      completed: completed.length,
+      averageScore: avg,
+    };
+  });
+
   templates: AssessmentTemplate[] = [];
 
   readonly loading = signal(true);
@@ -160,6 +206,38 @@ export class AdminResults implements OnInit {
   closeLearnerHistory(): void {
     this.historyLearner.set(null);
     this.historyResults.set([]);
+  }
+
+  openJoineeResults(joinee: JoineeDirectoryEntry): void {
+    this.selectedJoinee.set(joinee);
+    this.selectedJoineeResults.set([]);
+    this.selectedJoineeLoading.set(true);
+    this.cdr.detectChanges();
+
+    this.api.getAdminResults({ learner_user_id: joinee.userId, include_not_started: true }).subscribe({
+      next: (res) => {
+        const onlyThisJoinee = (res.results || []).filter(
+          (r) => r.learner_user_id === joinee.userId
+        );
+        this.selectedJoineeResults.set(onlyThisJoinee);
+        this.selectedJoineeLoading.set(false);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.selectedJoineeLoading.set(false);
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  backToJoineeList(): void {
+    this.selectedJoinee.set(null);
+    this.selectedJoineeResults.set([]);
+    this.cdr.detectChanges();
+  }
+
+  onJoineeSearchChange(value: string): void {
+    this.joineeSearch.set(value);
   }
 
   viewReport(sessionId: number | null): void {

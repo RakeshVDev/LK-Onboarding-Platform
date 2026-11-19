@@ -22,10 +22,16 @@ def upgrade():
     if "assessment_templates" in tables:
         cols = [c["name"] for c in inspector.get_columns("assessment_templates")]
         if "department_id" not in cols:
-            op.add_column(
-                "assessment_templates",
-                sa.Column("department_id", sa.Integer(), sa.ForeignKey("departments.id"), nullable=True),
-            )
+            with op.batch_alter_table("assessment_templates") as batch_op:
+                batch_op.add_column(
+                    sa.Column("department_id", sa.Integer(), nullable=True),
+                )
+                batch_op.create_foreign_key(
+                    "fk_assessment_templates_department_id",
+                    "departments",
+                    ["department_id"],
+                    ["id"],
+                )
 
     # 2. Create student_department_requests table
     if "student_department_requests" not in tables:

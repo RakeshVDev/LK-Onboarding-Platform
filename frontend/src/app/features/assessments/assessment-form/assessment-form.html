@@ -68,7 +68,6 @@
           <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'logical_reasoning'">
             <input type="radio" formControlName="assessment_type" value="logical_reasoning"
               (change)="onTypeChange('logical_reasoning')">
-            <div class="type-icon icon-yellow">⚡</div>
             <div class="type-meta">
               <strong>Logical Reasoning</strong>
               <span>25 MCQs · 30 Mins · 3 Sets (A/B/C)</span>
@@ -78,7 +77,6 @@
           <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'english_grammar'">
             <input type="radio" formControlName="assessment_type" value="english_grammar"
               (change)="onTypeChange('english_grammar')">
-            <div class="type-icon icon-purple">✍</div>
             <div class="type-meta">
               <strong>English Grammar</strong>
               <span>20 MCQs · 15 Mins · 3 Sets (A/B/C)</span>
@@ -88,7 +86,6 @@
           <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'technical'">
             <input type="radio" formControlName="assessment_type" value="technical"
               (change)="onTypeChange('technical')">
-            <div class="type-icon icon-blue">💻</div>
             <div class="type-meta">
               <strong>Technical Skills</strong>
               <span>20 MCQs · 15 Mins · 3 Sets (A/B/C)</span>
@@ -98,7 +95,6 @@
           <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'psychometric'">
             <input type="radio" formControlName="assessment_type" value="psychometric"
               (change)="onTypeChange('psychometric')">
-            <div class="type-icon icon-teal">✦</div>
             <div class="type-meta">
               <strong>Psychometric &amp; EQ</strong>
               <span>20 Scenarios · 15 Mins · 3 Sets (A/B/C)</span>
@@ -108,7 +104,6 @@
           <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'programming'">
             <input type="radio" formControlName="assessment_type" value="programming"
               (change)="onTypeChange('programming')">
-            <div class="type-icon icon-indigo">💻</div>
             <div class="type-meta">
               <strong>Programming &amp; Logic</strong>
               <span>20 Items · 30 Mins · 3 Sets (A/B/C)</span>
@@ -118,7 +113,6 @@
           <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'cognitive'">
             <input type="radio" formControlName="assessment_type" value="cognitive"
               (change)="onTypeChange('cognitive')">
-            <div class="type-icon icon-emerald">🧠</div>
             <div class="type-meta">
               <strong>Cognitive Aptitude</strong>
               <span>25 Items · 30 Mins · 3 Sets (A/B/C)</span>
@@ -128,7 +122,6 @@
           <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'composition'">
             <input type="radio" formControlName="assessment_type" value="composition"
               (change)="onTypeChange('composition')">
-            <div class="type-icon icon-rose">📝</div>
             <div class="type-meta">
               <strong>Written Composition</strong>
               <span>20 Items · 15 Mins · 3 Sets (A/B/C)</span>
@@ -138,7 +131,6 @@
           <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'algorithm'">
             <input type="radio" formControlName="assessment_type" value="algorithm"
               (change)="onTypeChange('algorithm')">
-            <div class="type-icon icon-blue">⚙</div>
             <div class="type-meta">
               <strong>Algorithms &amp; Complexity</strong>
               <span>20 Items · 30 Mins · 3 Sets (A/B/C)</span>
@@ -148,7 +140,6 @@
           <label class="type-card" [class.selected]="form.controls.assessment_type.value === 'comprehension'">
             <input type="radio" formControlName="assessment_type" value="comprehension"
               (change)="onTypeChange('comprehension')">
-            <div class="type-icon icon-teal">📖</div>
             <div class="type-meta">
               <strong>Reading Comprehension</strong>
               <span>10 Items · Passage · 3 Sets (A/B/C)</span>
@@ -163,7 +154,8 @@
         <label class="group-label">Question Set Selection (3 Distinct Sets per Category) <span>*</span></label>
         <div class="set-choice-grid" role="radiogroup" aria-label="Question Set Selection">
           <label class="set-choice-card" [class.selected]="selectedQuestionSet === 'AUTO'">
-            <input type="radio" name="selectedQuestionSet" value="AUTO" [(ngModel)]="selectedQuestionSet" [ngModelOptions]="{ standalone: true }">
+            <input type="radio" name="selectedQuestionSet" value="AUTO" [(ngModel)]="selectedQuestionSet"
+              [ngModelOptions]="{ standalone: true }">
             <div class="set-choice-body">
               <div class="set-choice-top">
                 <strong>Auto-Rotate (All 3 Sets)</strong>
@@ -174,7 +166,8 @@
           </label>
 
           <label class="set-choice-card" [class.selected]="selectedQuestionSet === 'A'">
-            <input type="radio" name="selectedQuestionSet" value="A" [(ngModel)]="selectedQuestionSet" [ngModelOptions]="{ standalone: true }">
+            <input type="radio" name="selectedQuestionSet" value="A" [(ngModel)]="selectedQuestionSet"
+              [ngModelOptions]="{ standalone: true }">
             <div class="set-choice-body">
               <strong>Set A</strong>
               <span>Deliver Set A question paper to all assigned learners</span>
@@ -182,7 +175,8 @@
           </label>
 
           <label class="set-choice-card" [class.selected]="selectedQuestionSet === 'B'">
-            <input type="radio" name="selectedQuestionSet" value="B" [(ngModel)]="selectedQuestionSet" [ngModelOptions]="{ standalone: true }">
+            <input type="radio" name="selectedQuestionSet" value="B" [(ngModel)]="selectedQuestionSet"
+              [ngModelOptions]="{ standalone: true }">
             <div class="set-choice-body">
               <strong>Set B</strong>
               <span>Deliver Set B question paper to all assigned learners</span>
@@ -190,7 +184,8 @@
           </label>
 
           <label class="set-choice-card" [class.selected]="selectedQuestionSet === 'C'">
-            <input type="radio" name="selectedQuestionSet" value="C" [(ngModel)]="selectedQuestionSet" [ngModelOptions]="{ standalone: true }">
+            <input type="radio" name="selectedQuestionSet" value="C" [(ngModel)]="selectedQuestionSet"
+              [ngModelOptions]="{ standalone: true }">
             <div class="set-choice-body">
               <strong>Set C</strong>
               <span>Deliver Set C question paper to all assigned learners</span>
@@ -198,7 +193,8 @@
           </label>
         </div>
         <small class="field-hint">
-          Every assessment category includes 3 non-overlapping sets (Set A, Set B, Set C). Pick a specific set or keep Auto-Rotate enabled to prevent collusion.
+          Every assessment category includes 3 non-overlapping sets (Set A, Set B, Set C). Pick a specific set or keep
+          Auto-Rotate enabled to prevent collusion.
         </small>
       </div>
 
@@ -290,19 +286,17 @@
           <input id="question_count" type="number" min="1" max="200" formControlName="question_count">
           <div class="quick-preset-row" aria-label="Question count presets">
             @for (preset of questionCountPresets; track preset) {
-              <button
-                type="button"
-                class="preset-chip"
-                [class.active]="form.controls.question_count.value === preset"
-                (click)="applyQuestionCountPreset(preset)">
-                {{ preset }} Qs
-              </button>
+            <button type="button" class="preset-chip" [class.active]="form.controls.question_count.value === preset"
+              (click)="applyQuestionCountPreset(preset)">
+              {{ preset }} Qs
+            </button>
             }
           </div>
           @if (form.controls.question_count.touched && form.controls.question_count.invalid) {
-            <small class="field-error">Enter a valid question count between 1 and 200.</small>
+          <small class="field-error">Enter a valid question count between 1 and 200.</small>
           } @else {
-            <small class="field-hint">Fully customizable (1–200). Works seamlessly for 25, 30, 40+ questions across all categories.</small>
+          <small class="field-hint">Fully customizable (1–200). Works seamlessly for 25, 30, 40+ questions across all
+            categories.</small>
           }
         </div>
 
@@ -311,19 +305,17 @@
           <input id="duration_minutes" type="number" min="1" max="300" formControlName="duration_minutes">
           <div class="quick-preset-row" aria-label="Duration presets">
             @for (mins of durationPresets; track mins) {
-              <button
-                type="button"
-                class="preset-chip"
-                [class.active]="form.controls.duration_minutes.value === mins"
-                (click)="applyDurationPreset(mins)">
-                {{ mins }}m
-              </button>
+            <button type="button" class="preset-chip" [class.active]="form.controls.duration_minutes.value === mins"
+              (click)="applyDurationPreset(mins)">
+              {{ mins }}m
+            </button>
             }
           </div>
           @if (form.controls.duration_minutes.touched && form.controls.duration_minutes.invalid) {
-            <small class="field-error">Enter a valid duration between 1 and 300 minutes.</small>
+          <small class="field-error">Enter a valid duration between 1 and 300 minutes.</small>
           } @else {
-            <small class="field-hint">Customize timer freely (1–300 mins). Enforced live during candidate assessment.</small>
+          <small class="field-hint">Customize timer freely (1–300 mins). Enforced live during candidate
+            assessment.</small>
           }
         </div>
       </div>

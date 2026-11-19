@@ -6,7 +6,7 @@ from sqlalchemy import engine_from_config, pool
 
 from services.identity.app.core.config import settings
 from services.identity.app.db.base import Base
-from services.identity.app.models import User
+from services.identity.app.models import User, UserDepartment  # noqa: F401
 
 config = context.config
 
