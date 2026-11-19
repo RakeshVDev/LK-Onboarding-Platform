@@ -1780,6 +1780,7 @@
 
   .form-card,
   .builder-card,
+  .add-question-card,
   .question-item,
   .category-box,
   .preview-modal,
@@ -1830,16 +1831,252 @@
   }
 
   .btn-preview-assessment,
-  .btn-preview-outline {
+  .btn-preview-outline,
+  .btn-preview-inline {
     background: #1e293b;
     border-color: #334155;
     color: #a5b4fc;
 
-    &:hover {
+    &:hover,
+    &.active {
       background: #334155;
       border-color: #475569;
       color: #ffffff;
     }
+  }
+
+  .btn-bulk-upload {
+    background: rgba(14, 165, 233, 0.15);
+    border-color: rgba(14, 165, 233, 0.35);
+    color: #38bdf8;
+
+    &:hover {
+      background: rgba(14, 165, 233, 0.25);
+    }
+  }
+
+  .add-question-card {
+    background: #111827;
+    border-color: #1f2937;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+
+    .card-title-bar {
+      h4 {
+        color: #f8fafc;
+      }
+
+      .badge-badge {
+        background: rgba(99, 102, 241, 0.2);
+        color: #a5b4fc;
+
+        &.is-edit {
+          background: rgba(245, 158, 11, 0.2);
+          color: #fcd34d;
+        }
+      }
+    }
+  }
+
+  .diff-btn {
+    background: #1e293b;
+    border-color: #334155;
+    color: #94a3b8;
+
+    &:hover {
+      background: #334155;
+      color: #f8fafc;
+    }
+
+    &.easy.active {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: #10b981;
+      color: #6ee7b7;
+    }
+
+    &.medium.active {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: #f59e0b;
+      color: #fcd34d;
+    }
+
+    &.hard.active {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+      color: #fca5a5;
+    }
+  }
+
+  .placement-checkbox {
+    background: #182230;
+    border-color: #334155;
+    color: #e2e8f0 !important;
+  }
+
+  .btn-add-option {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.35);
+    color: #a5b4fc;
+
+    &:hover:not(:disabled) {
+      background: #4f46e5;
+      color: #ffffff;
+    }
+  }
+
+  .btn-remove-opt {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
+
+  .type-card {
+    background: #182230;
+    border-color: #293548;
+
+    .type-meta {
+      strong {
+        color: #f9fafb;
+      }
+      span {
+        color: #94a3b8;
+      }
+    }
+
+    &:hover {
+      background: #1e293b;
+      border-color: #4f46e5;
+    }
+
+    &.selected {
+      background: rgba(99, 91, 255, 0.16);
+      border-color: #818cf8;
+      box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.25);
+
+      .type-meta strong {
+        color: #c7d2fe;
+      }
+    }
+  }
+
+  .tag-choice-pill {
+    background: #182230;
+    border-color: #293548;
+
+    div {
+      strong {
+        color: #f9fafb;
+      }
+      span {
+        color: #94a3b8;
+      }
+    }
+
+    &:hover {
+      background: #1e293b;
+      border-color: #4f46e5;
+    }
+
+    &.selected {
+      background: rgba(99, 91, 255, 0.16);
+      border-color: #818cf8;
+      box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.25);
+
+      div strong {
+        color: #c7d2fe;
+      }
+    }
+  }
+
+  .structure-card,
+  .assignment-card {
+    background: #182230;
+    border-color: #1f2937;
+
+    .structure-header h4,
+    .assignment-header h4 {
+      color: #f8fafc;
+    }
+
+    .assignment-header p {
+      color: #94a3b8;
+    }
+
+    .sub-pill {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  }
+
+  .cat-chip {
+    background: #111827;
+    border-color: #293548;
+    color: #cbd5e1;
+
+    strong {
+      color: #e2e8f0;
+    }
+  }
+
+  .scope-pill {
+    background: #111827;
+    border-color: #334155;
+
+    strong {
+      color: #f8fafc;
+    }
+
+    span {
+      color: #94a3b8;
+    }
+
+    &:hover {
+      background: #1e293b;
+      border-color: #4f46e5;
+    }
+
+    &.selected {
+      background: rgba(99, 91, 255, 0.16);
+      border-color: #818cf8;
+      box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.25);
+
+      strong {
+        color: #c7d2fe;
+      }
+    }
+  }
+
+  .inline-preview-surface {
+    background: #111827;
+    border-color: #1f2937;
+  }
+
+  .drag-handle {
+    background: #1e293b;
+    color: #94a3b8;
+  }
+
+  .btn-move,
+  .btn-item-action {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &:hover:not(:disabled) {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+
+  .type-badge {
+    background: #182230;
+    border-color: #334155;
+    color: #94a3b8;
+  }
+
+  .pool-badge {
+    background: #182230;
+    border-color: #334155;
+    color: #cbd5e1;
   }
 
   .sequence-toolbar {
