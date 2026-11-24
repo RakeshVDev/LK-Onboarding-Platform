@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 ASSESSMENT_DURATION_MINUTES = 15
+SUBMITTED_STATUSES: set[str] = {"completed", "submitted"}
 
 from services.identity.app.dependencies.auth import get_current_user
 from services.identity.app.core.roles import Role
@@ -60,6 +61,7 @@ from services.training.app.schemas.assessment import (
     AssessmentReportResponse,
     LearnerAssessmentStatusResponse,
     AssessmentResumeResponse,
+    AssessmentSessionCheckResponse,
     AssessmentAnswerSaveRequest,
     AssessmentAnswerSaveResponse,
     AssessmentBankQuestionCreate,
@@ -1268,7 +1270,7 @@ def _resolve_learner_gate_context(
             db.scalars(
                 select(AssessmentSession.template_id).where(
                     AssessmentSession.learner_user_id == user_id,
-                    AssessmentSession.status == "completed",
+                    AssessmentSession.status.in_(SUBMITTED_STATUSES),
                     AssessmentSession.template_id.in_(pre_template_ids),
                 )
             ).all()
@@ -1500,10 +1502,10 @@ def _build_learner_assigned_data(
 
         t_sessions = sessions_by_template.get(template.id, [])
         completed_session = next(
-            (s for s in t_sessions if s.status == "completed" and s.id in scores_by_session),
+            (s for s in t_sessions if s.status in SUBMITTED_STATUSES and s.id in scores_by_session),
             None,
         ) or next(
-            (s for s in t_sessions if s.status == "completed"),
+            (s for s in t_sessions if s.status in SUBMITTED_STATUSES),
             None,
         )
         in_progress_session = next(
@@ -1787,7 +1789,7 @@ def compute_learner_assessment_status(
             select(AssessmentSession.id)
             .where(
                 AssessmentSession.learner_user_id == user_id,
-                AssessmentSession.status == "completed",
+                AssessmentSession.status.in_(SUBMITTED_STATUSES),
             )
             .order_by(AssessmentSession.completed_at.desc())
         )
@@ -2525,7 +2527,7 @@ def start_assessment(
         select(AssessmentSession).where(
             AssessmentSession.learner_user_id == current_user.id,
             AssessmentSession.template_id == template.id,
-            AssessmentSession.status == "completed",
+            AssessmentSession.status.in_(SUBMITTED_STATUSES),
         ).order_by(AssessmentSession.completed_at.desc())
     )
     if completed_session:
@@ -2764,6 +2766,73 @@ def start_assessment(
 
 
 # --------------------------------------------------
+# Learner: Check assessment session lifecycle & submission status
+# --------------------------------------------------
+
+@router.get(
+    "/sessions/{session_id}/check",
+    response_model=AssessmentSessionCheckResponse,
+)
+def check_assessment_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    purge_expired_assessments(db)
+    assessment_session = db.scalar(
+        select(AssessmentSession).where(
+            AssessmentSession.id == session_id,
+            AssessmentSession.learner_user_id == current_user.id,
+        )
+    )
+    if assessment_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assessment session not found",
+        )
+
+    is_submitted = assessment_session.status in SUBMITTED_STATUSES
+    is_expired = assessment_session.status == "expired"
+    is_in_progress = assessment_session.status == "in_progress"
+
+    has_report = False
+    if is_submitted:
+        has_report = db.scalar(
+            select(AssessmentReport.id).where(AssessmentReport.session_id == session_id)
+        ) is not None
+
+    redirect_url = None
+    if is_submitted:
+        redirect_url = f"/assessments/report/{session_id}" if has_report else f"/assessments/results/{session_id}"
+    elif is_expired:
+        redirect_url = "/my-assessments"
+
+    remaining_seconds = None
+    if is_in_progress and assessment_session.expires_at:
+        now_dt = datetime.now(timezone.utc)
+        exp_dt = to_utc(assessment_session.expires_at)
+        if exp_dt:
+            remaining_seconds = max(0, int((exp_dt - now_dt).total_seconds()))
+
+    return AssessmentSessionCheckResponse(
+        session_id=assessment_session.id,
+        template_id=assessment_session.template_id,
+        template_name=assessment_session.template_name_snapshot,
+        assessment_type=assessment_session.assessment_type_snapshot,
+        assessment_tag=assessment_session.assessment_tag_snapshot,
+        status=assessment_session.status,
+        is_submitted=is_submitted,
+        is_expired=is_expired,
+        is_in_progress=is_in_progress,
+        remaining_seconds=remaining_seconds,
+        started_at=to_utc(assessment_session.started_at),
+        completed_at=to_utc(assessment_session.completed_at),
+        has_report=has_report,
+        redirect_url=redirect_url,
+    )
+
+
+# --------------------------------------------------
 # Learner: Resume an in-progress assessment
 # --------------------------------------------------
 
@@ -2807,7 +2876,7 @@ def resume_assessment(
             detail="This assessment has expired without a submission",
         )
 
-    if assessment_session.status == "completed":
+    if assessment_session.status in SUBMITTED_STATUSES:
         raise HTTPException(
             status_code=409,
             detail="This assessment has already been submitted",
@@ -2815,7 +2884,7 @@ def resume_assessment(
 
     if assessment_session.status != "in_progress":
         raise HTTPException(
-            status_code=409,
+            status_code=400,
             detail="This assessment is no longer in progress",
         )
 
@@ -2952,10 +3021,10 @@ def save_assessment_answer(
             detail="Assessment session not found",
         )
 
-    if assessment_session.status != "in_progress":
+    if assessment_session.status in SUBMITTED_STATUSES or assessment_session.status != "in_progress":
         raise HTTPException(
             status_code=409,
-            detail="This assessment is no longer in progress",
+            detail="This assessment has already been submitted and cannot accept answer modifications",
         )
 
     template = db.get(AssessmentTemplate, assessment_session.template_id)
@@ -3046,13 +3115,14 @@ def submit_assessment(
             detail="You are not authorized to submit assessments",
         )
 
-    # Lock this learner's session so simultaneous submissions cannot both succeed.
+    # Lock this learner's session with row-level locking so simultaneous submissions cannot race or produce duplicates.
     assessment_session = db.scalar(
         select(AssessmentSession)
         .where(
             AssessmentSession.id == session_id,
             AssessmentSession.learner_user_id == current_user.id,
         )
+        .with_for_update()
     )
 
     if assessment_session is None:
@@ -3061,11 +3131,20 @@ def submit_assessment(
             detail="Assessment session not found",
         )
 
-    # A completed session is immutable: every later submission is rejected.
+    # Safe handling: if already submitted, return the existing completion safely and idempotently without duplicate submissions
+    if assessment_session.status in SUBMITTED_STATUSES:
+        return AssessmentSubmitResponse(
+            session_id=assessment_session.id,
+            status=assessment_session.status,
+            completed_at=assessment_session.completed_at or now_utc(),
+            message="Assessment has already been submitted.",
+        )
+
+    # A non in-progress session (e.g. expired) cannot be submitted.
     if assessment_session.status != "in_progress":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This assessment has already been submitted",
+            detail="This assessment is no longer in progress",
         )
 
     if assessment_session.started_at is None:
@@ -3302,7 +3381,7 @@ def record_tab_switch(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Assessment session not found",
         )
-    if session.status != "in_progress":
+    if session.status in SUBMITTED_STATUSES or session.status != "in_progress":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cannot update proctoring metrics after session completion",
@@ -3445,7 +3524,7 @@ def get_assessment_results(
             detail="Not authorized to view assessment results",
         )
 
-    if assessment_session.status != "completed":
+    if assessment_session.status not in SUBMITTED_STATUSES:
         raise HTTPException(
             status_code=409,
             detail="Assessment has not been completed yet",
@@ -3569,7 +3648,7 @@ def create_assessment_report(
             detail="Not authorized to generate assessment report",
         )
 
-    if assessment_session.status != "completed":
+    if assessment_session.status not in SUBMITTED_STATUSES:
         raise HTTPException(
             status_code=409,
             detail="Complete the assessment before generating a report",
@@ -3829,7 +3908,7 @@ def get_assessment_report(
             detail="Not authorized to view assessment reports",
         )
 
-    if assessment_session.status != "completed":
+    if assessment_session.status not in SUBMITTED_STATUSES:
         raise HTTPException(
             status_code=409,
             detail="Assessment has not been completed",

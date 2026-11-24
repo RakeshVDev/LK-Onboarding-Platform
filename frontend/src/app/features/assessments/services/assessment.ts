@@ -121,6 +121,23 @@ export interface AssignableTargetsResponse {
   learners: AssignableLearnerItem[];
 }
 
+export interface AssessmentSessionCheckResponse {
+  session_id: number;
+  template_id?: number | null;
+  template_name?: string | null;
+  assessment_type?: string | null;
+  assessment_tag?: string | null;
+  status: string;
+  is_submitted: boolean;
+  is_expired: boolean;
+  is_in_progress: boolean;
+  remaining_seconds?: number | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  has_report?: boolean;
+  redirect_url?: string | null;
+}
+
 export interface StudentAssignedAssessmentItem {
   template_id: number;
   assignment_id?: number | null;
@@ -464,7 +481,26 @@ export class AssessmentService {
   private readonly apiUrl =
     '/training-api/api/v1/assessments';
 
+  private readonly submittedSessionIds = new Set<number>();
+
   readonly syncVersion = signal(0);
+
+  markSessionSubmitted(sessionId: number): void {
+    if (sessionId && Number.isFinite(sessionId)) {
+      this.submittedSessionIds.add(sessionId);
+    }
+    this.notifyStatusChanged();
+  }
+
+  isSessionLocallySubmitted(sessionId: number): boolean {
+    return this.submittedSessionIds.has(sessionId);
+  }
+
+  checkSession(sessionId: number): Observable<AssessmentSessionCheckResponse> {
+    return this.http.get<AssessmentSessionCheckResponse>(
+      `${this.apiUrl}/sessions/${sessionId}/check`
+    );
+  }
 
   notifyStatusChanged(): void {
     this.assessmentStatusService.clearCache();

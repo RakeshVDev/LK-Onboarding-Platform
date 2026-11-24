@@ -464,6 +464,27 @@ class AssessmentResumeResponse(BaseModel):
         return serialize_utc_datetime(dt)
 
 
+class AssessmentSessionCheckResponse(BaseModel):
+    session_id: int
+    template_id: int | None = None
+    template_name: str | None = None
+    assessment_type: str | None = None
+    assessment_tag: str | None = None
+    status: str
+    is_submitted: bool
+    is_expired: bool
+    is_in_progress: bool
+    remaining_seconds: int | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    has_report: bool = False
+    redirect_url: str | None = None
+
+    @field_serializer("started_at", "completed_at", mode="plain", check_fields=False)
+    def serialize_dates(self, dt: datetime | None):
+        return serialize_utc_datetime(dt)
+
+
 class AssessmentAnswerSaveRequest(BaseModel):
     question_id: int = Field(gt=0)
     answer: str | list[str] | None = None
