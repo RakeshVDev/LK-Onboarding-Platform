@@ -71,17 +71,19 @@ class LiveClassResponse(BaseModel):
     description: str | None = None
     department_id: int
     department_name: str | None = None
-    instructor_user_id: int
+    instructor_user_id: int | None = None
     instructor_name: str | None = None
     scheduled_start: datetime
     duration_minutes: int
     meeting_url: str
     platform: str
     status: str
+    ended_at: datetime | None = None
+    reopen_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
-    @field_serializer("scheduled_start", "created_at", "updated_at", mode="plain", check_fields=False)
+    @field_serializer("scheduled_start", "ended_at", "reopen_at", "created_at", "updated_at", mode="plain", check_fields=False)
     def serialize_dt(self, dt: datetime | None):
         return _serialize_utc(dt)
 

@@ -1,9 +1,10 @@
 import { Component, DestroyRef, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { DomSanitizer, SafeHtml, SafeResourceUrl } from '@angular/platform-browser';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, interval } from 'rxjs';
 import {
   CohortService,
   CohortFullData,
@@ -67,7 +68,13 @@ export class Cohorts implements OnInit {
   private readonly userManagementService = inject(UserManagementService);
   private readonly learningService = inject(LearningService);
   private readonly liveClassesService = inject(LiveClassesService);
+  private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly sanitizer = inject(DomSanitizer);
+
+  // Live Session 5-Minute Cooldown Countdown Clock
+  readonly nowTickMs = signal<number>(Date.now());
+  private lastCooldownSyncAtMs = 0;
 
   // Role & View Mode
   readonly isTeacherRole = computed(() => this.authService.hasRole('teacher', 'admin', 'superadmin'));
@@ -321,7 +328,7 @@ export class Cohorts implements OnInit {
   newBatchTrack = 'Associate Software Engineer Track';
   newBatchLearnerCount = 0;
 
-  // Super Admin Learners & 1–3 Teachers for Batch Creation
+  // Super Admin Learners & 1–5 Teachers for Batch Creation
   readonly superAdminLearners = signal<ManagedUser[]>([]);
   readonly candidateLearnersForBatch = signal<CohortCandidateUser[]>([]);
   readonly candidateTeachersForBatch = signal<CohortCandidateUser[]>([]);
@@ -376,8 +383,29 @@ export class Cohorts implements OnInit {
   // Class Not Started Feedback Modal
   readonly isClassNotStartedModalOpen = signal<boolean>(false);
 
-  // Video Player Streaming Modal
+  // Video Player Streaming Modal & Read-Only Notes Viewer Modal
   readonly activeWatchingVideo = signal<LearningMaterialItem | null>(null);
+  readonly activeViewingResource = signal<{
+    title: string;
+    module: string;
+    author?: string;
+    type: string;
+    description: string;
+    lectureNotes: string;
+    renderedMarkdown?: SafeHtml;
+    previewUrl?: string;
+  } | null>(null);
+  readonly activeFilePreview = signal<{
+    title: string;
+    fileName: string;
+    safeUrl: SafeResourceUrl;
+    blobUrl: string;
+    isPdf: boolean;
+    downloadUrl: string;
+    mat?: LearningMaterialItem;
+    les?: CurriculumLesson;
+  } | null>(null);
+  readonly isLoadingFilePreview = signal<boolean>(false);
   readonly isFetchingVideoDuration = signal<boolean>(false);
 
   // Teacher Quiz Results Filters
@@ -418,6 +446,7 @@ export class Cohorts implements OnInit {
   newAsgPoints = 100;
   newAsgDueDate = '2026-11-18';
   newAsgRequirementsText = 'Clean modular code\nUnit tests 85%+\nDockerized container setup';
+  readonly newAsgAttachmentFile = signal<File | null>(null);
 
   // Teacher Quiz / Test Creation
   readonly isCreatingQuiz = signal<boolean>(false);
@@ -456,6 +485,7 @@ export class Cohorts implements OnInit {
   readonly activeAssignmentForModal = signal<CohortAssignment | null>(null);
   assignmentRepoUrl = '';
   assignmentNotes = '';
+  readonly assignmentZipFile = signal<File | null>(null);
   readonly assignmentSubmitting = signal(false);
 
   // Learner Quiz Runner Modal
@@ -728,28 +758,119 @@ export class Cohorts implements OnInit {
     }
     const deptFilter = this.teacherDeptFilter().trim().toLowerCase();
     if (deptFilter && deptFilter !== 'all') {
-      return itemNorm === deptFilter;
+      const selectedDept = allowedDepts.find(d => d.name.trim().toLowerCase() === deptFilter);
+      if (itemNorm === deptFilter) {
+        return true;
+      }
+      if (selectedDept && itemDeptId !== undefined && itemDeptId !== null && Number(selectedDept.id) === Number(itemDeptId)) {
+        return true;
+      }
+      return false;
     }
     return true;
+  }
+
+  selectTeacherDepartmentFilter(deptName: string): void {
+    this.teacherDeptFilter.set(deptName);
+    const norm = deptName.trim().toLowerCase();
+    if (norm && norm !== 'all') {
+      const matched = this.teacherAssignedDepartments().find(
+        d => d.name.trim().toLowerCase() === norm
+      );
+      if (matched) {
+        this.newChapterDepartmentId = matched.id;
+        this.lessonDepartmentId = matched.id;
+        this.newSessionDepartmentId = matched.id;
+        this.newAsgDepartmentId = matched.id;
+        this.newQuizDepartmentId = matched.id;
+      }
+    }
+  }
+
+  private getPreferredTeacherDepartmentId(allowedDepts: Department[]): number | null {
+    const activeFilter = this.teacherDeptFilter().trim().toLowerCase();
+    if (activeFilter && activeFilter !== 'all') {
+      const filteredMatch = allowedDepts.find(
+        d => d.name.trim().toLowerCase() === activeFilter
+      );
+      if (filteredMatch) {
+        return filteredMatch.id;
+      }
+    }
+    const detailMatch = allowedDepts.find(
+      d => d.name.trim().toLowerCase() === (this.details().department || '').trim().toLowerCase()
+    );
+    return detailMatch?.id ?? allowedDepts[0]?.id ?? null;
   }
 
   private matchesSessionDepartment(sess: TrainingSession): boolean {
     return this.matchesLearnerDepartment(sess.departmentName, sess.departmentId);
   }
 
+  getSessionReopenRemainingSec(sess?: TrainingSession | null): number {
+    if (!sess || sess.status !== 'completed' || !sess.reopenAtIso) return 0;
+    const reopenMs = Date.parse(sess.reopenAtIso);
+    if (Number.isNaN(reopenMs)) return 0;
+    return Math.max(0, Math.ceil((reopenMs - this.nowTickMs()) / 1000));
+  }
+
+  formatCooldownMmSs(totalSec: number): string {
+    const clamped = Math.max(0, Math.floor(totalSec));
+    const mins = Math.floor(clamped / 60);
+    const secs = clamped % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  canGoLiveAgain(sess?: TrainingSession | null): boolean {
+    if (!sess || sess.status !== 'completed') return false;
+    if (this.getSessionReopenRemainingSec(sess) > 0) return false;
+    return this.canStartCohortSession(sess);
+  }
+
   canStartCohortSession(sess?: TrainingSession | null): boolean {
+    if (!sess || !this.isTeacherRole()) return false;
+    if (sess.status === 'today') {
+      return this.canEndCohortSession(sess);
+    }
+    if (sess.status === 'completed') {
+      if (this.getSessionReopenRemainingSec(sess) > 0) return false;
+      return this.matchesTeacherDepartment(sess.departmentName, sess.departmentId);
+    }
+    const uid = this.currentUserId();
+    if (sess.trainerId !== undefined && sess.trainerId !== null && uid !== null) {
+      return Number(sess.trainerId) === Number(uid);
+    }
+    // Unassigned department live class: any instructor assigned to that department can start it
+    return this.matchesTeacherDepartment(sess.departmentName, sess.departmentId);
+  }
+
+  canEndCohortSession(sess?: TrainingSession | null): boolean {
     if (!sess || !this.isTeacherRole()) return false;
     const uid = this.currentUserId();
     if (sess.trainerId !== undefined && sess.trainerId !== null && uid !== null) {
-      return sess.trainerId === uid;
+      return Number(sess.trainerId) === Number(uid);
     }
-    return (sess.trainer || '').trim().toLowerCase() === this.getCurrentTeacherName().trim().toLowerCase();
+    return (
+      Boolean(sess.trainer) &&
+      sess.trainer !== 'Department Instructors' &&
+      sess.trainer.trim().toLowerCase() === this.getCurrentTeacherName().trim().toLowerCase()
+    );
   }
 
   canStartActiveSpotlight(): boolean {
     const spotlight = this.activeSpotlightSession();
     if (spotlight) {
-      return this.canStartCohortSession(spotlight);
+      return spotlight.status === 'today'
+        ? this.canEndCohortSession(spotlight)
+        : this.canStartCohortSession(spotlight);
+    }
+    return this.isTeacherRole();
+  }
+
+  canEndActiveSpotlight(): boolean {
+    const live = this.currentLiveSession();
+    if (live) {
+      return this.canEndCohortSession(live);
     }
     return (
       this.isTeacherRole() &&
@@ -804,19 +925,22 @@ export class Cohorts implements OnInit {
     return list;
   });
 
-  // Filtered Curriculum for Learner vs Teacher
+  // Filtered Curriculum for Learner vs Teacher (strictly video, text, download — live/assignment routed elsewhere)
   readonly filteredCurriculum = computed<CurriculumChapter[]>(() => {
+    const allowedTypes = new Set<string>(['video', 'text', 'download']);
     const all = this.curriculum();
     if (this.viewMode() === 'learner') {
       return all
         .filter(chap => this.matchesLearnerDepartment(chap.departmentName, chap.departmentId))
         .map(chap => ({
           ...chap,
-          lessons: chap.lessons.filter(les =>
-            this.matchesLearnerDepartment(
-              les.departmentName || chap.departmentName,
-              les.departmentId ?? chap.departmentId
-            )
+          lessons: chap.lessons.filter(
+            les =>
+              allowedTypes.has(String(les.type || '').toLowerCase()) &&
+              this.matchesLearnerDepartment(
+                les.departmentName || chap.departmentName,
+                les.departmentId ?? chap.departmentId
+              )
           )
         }));
     }
@@ -824,11 +948,13 @@ export class Cohorts implements OnInit {
       .filter(chap => this.matchesTeacherDepartment(chap.departmentName, chap.departmentId))
       .map(chap => ({
         ...chap,
-        lessons: chap.lessons.filter(les =>
-          this.matchesTeacherDepartment(
-            les.departmentName || chap.departmentName,
-            les.departmentId ?? chap.departmentId
-          )
+        lessons: chap.lessons.filter(
+          les =>
+            allowedTypes.has(String(les.type || '').toLowerCase()) &&
+            this.matchesTeacherDepartment(
+              les.departmentName || chap.departmentName,
+              les.departmentId ?? chap.departmentId
+            )
         )
       }));
   });
@@ -877,13 +1003,10 @@ export class Cohorts implements OnInit {
   );
 
   readonly filteredBatchLearners = computed<ManagedUser[]>(() => {
-    let list = this.availableSuperAdminLearners();
+    const list = this.availableSuperAdminLearners();
     const query = this.batchLearnerSearch().toLowerCase().trim();
     if (!query) return list;
-    return list.filter(u =>
-      u.full_name.toLowerCase().includes(query) ||
-      u.email.toLowerCase().includes(query)
-    );
+    return list.filter(u => u.full_name.toLowerCase().includes(query));
   });
 
   // Selected Chapter for Curriculum Builder
@@ -892,16 +1015,64 @@ export class Cohorts implements OnInit {
     return visibleChaps.find(c => c.id === this.selectedChapterId()) || visibleChaps[0];
   });
 
-  // Student filter for Attendance Spreadsheet (Screenshot 4)
+  // Student filter & search for Attendance Spreadsheet (Screenshot 4)
   readonly selectedStudentFilter = signal<string>('all');
+  readonly attendanceSearch = signal<string>('');
+
+  readonly isAdminOrSuperAdminRole = computed<boolean>(() =>
+    this.authService.hasRole('superadmin', 'admin')
+  );
+
+  // Role-scoped Attendance Roster:
+  // - SuperAdmin & Admin: all students across all departments (filtered by dept bar only if a specific dept pill is selected)
+  // - Teacher: strictly students belonging to the teacher's assigned department(s)
+  readonly scopedMatrixStudents = computed<AttendanceStudentRow[]>(() => {
+    const students = this.attendanceMatrix()?.students || [];
+    const deptFilter = this.teacherDeptFilter().trim().toLowerCase();
+
+    if (this.isAdminOrSuperAdminRole()) {
+      if (deptFilter && deptFilter !== 'all') {
+        const selectedDept = this.teacherAssignedDepartments().find(
+          d => d.name.trim().toLowerCase() === deptFilter
+        );
+        return students.filter(s => {
+          const sDeptNorm = (s.departmentName || '').trim().toLowerCase();
+          if (sDeptNorm === deptFilter) return true;
+          if (selectedDept && s.departmentId != null && Number(s.departmentId) === Number(selectedDept.id)) {
+            return true;
+          }
+          return false;
+        });
+      }
+      return students;
+    }
+
+    if (this.authService.hasRole('teacher')) {
+      return students.filter(s => this.matchesTeacherDepartment(s.departmentName, s.departmentId));
+    }
+
+    return students;
+  });
 
   readonly displayedMatrixStudents = computed<AttendanceStudentRow[]>(() => {
     const filter = this.selectedStudentFilter();
-    const students = this.attendanceMatrix()?.students || [];
-    if (filter === 'all') {
-      return students;
+    const search = this.attendanceSearch().trim().toLowerCase();
+    let students = this.scopedMatrixStudents();
+
+    if (filter !== 'all') {
+      students = students.filter(s => String(s.studentId) === String(filter) || s.name === filter);
     }
-    return students.filter(s => String(s.studentId) === String(filter) || s.name === filter);
+
+    if (search) {
+      students = students.filter(s =>
+        (s.name || '').toLowerCase().includes(search) ||
+        (s.admissionNo || '').toLowerCase().includes(search) ||
+        (s.email || '').toLowerCase().includes(search) ||
+        (s.departmentName || '').toLowerCase().includes(search)
+      );
+    }
+
+    return students;
   });
 
   // Attendance Matrix Day Totals Calculations (Screenshot 4)
@@ -1176,19 +1347,77 @@ export class Cohorts implements OnInit {
         void this.loadSuperAdminTeachers();
         void this.loadSuperAdminLearners();
       };
+      const handleMaterialsChanged = () => {
+        void this.syncRealBatchesAndMaterials();
+      };
       window.addEventListener('ase_users_changed', handleUsersChanged);
+      window.addEventListener('ase_materials_changed', handleMaterialsChanged);
       this.destroyRef.onDestroy(() => {
         window.removeEventListener('ase_users_changed', handleUsersChanged);
+        window.removeEventListener('ase_materials_changed', handleMaterialsChanged);
       });
     }
 
-    // Initialize default view mode based on role
+    // Initialize default view mode based on role and optional ?tab= query parameter
+    const requestedTab = (this.route.snapshot?.queryParamMap?.get('tab') || '').trim().toLowerCase();
     if (this.isTeacherRole()) {
       this.viewMode.set('teacher');
-      this.activeTab.set('teacher_batches');
+      if (requestedTab === 'schedule' || requestedTab === 'teacher_schedule' || requestedTab === 'live') {
+        this.activeTab.set('teacher_schedule');
+      } else {
+        this.activeTab.set('teacher_batches');
+      }
     } else {
       this.viewMode.set('learner');
-      this.activeTab.set('overview');
+      if (requestedTab === 'schedule' || requestedTab === 'live') {
+        this.activeTab.set('schedule');
+      } else {
+        this.activeTab.set('overview');
+      }
+    }
+
+    // Real-time 4-second live session sync so live class start/end/delete reflects immediately for everyone
+    if (typeof (this.liveClassesService as any)?.listSessions === 'function' && typeof window !== 'undefined') {
+      interval(4000)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe(() => {
+          if (typeof document === 'undefined' || !document.hidden) {
+            void this.syncRealLiveSessions();
+          }
+        });
+      // 1-second tick for 5-minute live session cooldown countdown + auto-reopen sync
+      interval(1000)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe(() => {
+          const hasEndedWithCooldown = this.sessions().some(
+            s => s.status === 'completed' && Boolean(s.reopenAtIso)
+          );
+          if (!hasEndedWithCooldown) return;
+          const now = Date.now();
+          this.nowTickMs.set(now);
+          const anyExpired = this.sessions().some(
+            s =>
+              s.status === 'completed' &&
+              Boolean(s.reopenAtIso) &&
+              Date.parse(s.reopenAtIso!) <= now
+          );
+          if (anyExpired && now - this.lastCooldownSyncAtMs > 3000) {
+            this.lastCooldownSyncAtMs = now;
+            void this.syncRealLiveSessions();
+          }
+        });
+      const onWindowFocus = () => {
+        if (typeof document === 'undefined' || !document.hidden) {
+          void this.syncRealLiveSessions();
+          void this.cohortService.loadWorkspaceFromBackend?.();
+        }
+      };
+      window.addEventListener('focus', onWindowFocus);
+      document.addEventListener('visibilitychange', onWindowFocus);
+      this.destroyRef.onDestroy(() => {
+        window.removeEventListener('focus', onWindowFocus);
+        document.removeEventListener('visibilitychange', onWindowFocus);
+      });
     }
 
     this.cohortService.data$
@@ -1196,6 +1425,10 @@ export class Cohorts implements OnInit {
       .subscribe(data => {
         this.cohortData.set(data);
       });
+
+    this.destroyRef.onDestroy(() => {
+      this.closeFilePreview();
+    });
   }
 
   async loadDepartmentContext(): Promise<void> {
@@ -1416,8 +1649,8 @@ export class Cohorts implements OnInit {
     if (next.has(teacherId)) {
       next.delete(teacherId);
     } else {
-      if (next.size >= 3) {
-        this.showToast('A batch can have at most 3 assigned teachers.', 'warning');
+      if (next.size >= 5) {
+        this.showToast('A batch can have at most 5 assigned teachers.', 'warning');
         return;
       }
       next.add(teacherId);
@@ -1464,14 +1697,18 @@ export class Cohorts implements OnInit {
   }
 
   async syncRealLiveSessions(): Promise<void> {
-    if (!this.liveClassesService?.listSessions || !this.cohortService?.setSessions) {
+    if (
+      typeof (this.liveClassesService as any)?.listSessions !== 'function' ||
+      typeof (this.cohortService as any)?.setSessions !== 'function'
+    ) {
       return;
     }
     try {
       const res = await firstValueFrom(this.liveClassesService.listSessions());
       const realSessions = Array.isArray(res?.sessions) ? res.sessions : [];
-      if (realSessions.length > 0) {
-        const mapped: TrainingSession[] = realSessions.map(s => {
+      const mapped: TrainingSession[] = realSessions
+        .filter(s => s.status !== 'cancelled')
+        .map(s => {
           const start = s.scheduled_start ? new Date(s.scheduled_start) : new Date();
           const dateStr = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
           const timeStr = start.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -1479,7 +1716,7 @@ export class Cohorts implements OnInit {
           let status: 'today' | 'upcoming' | 'completed' = 'upcoming';
           if (s.status === 'live') {
             status = 'today';
-          } else if (s.status === 'completed' || s.status === 'cancelled') {
+          } else if (s.status === 'completed') {
             status = 'completed';
           }
 
@@ -1487,9 +1724,16 @@ export class Cohorts implements OnInit {
 
           return {
             id: `live-sess-${s.id}`,
+            backendLiveId: s.id,
+            liveRawStatus: s.status,
+            platform: s.platform || 'Video Call',
+            scheduledStartIso: s.scheduled_start,
+            endedAtIso: s.ended_at ?? null,
+            reopenAtIso: s.reopen_at ?? null,
             title: s.title,
             module: s.department_name ? `${s.department_name} Track` : 'Technical Curriculum',
-            trainer: s.instructor_name || this.getCurrentTeacherName(),
+            trainer: s.instructor_name || 'Department Instructors',
+            trainerId: s.instructor_user_id ?? undefined,
             date: s.status === 'live' ? 'Today (Live Session)' : dateStr,
             time: timeStr,
             duration: s.duration_minutes ? `${s.duration_minutes} Mins` : '60 Mins',
@@ -1503,8 +1747,8 @@ export class Cohorts implements OnInit {
           };
         });
 
-        this.cohortService.setSessions(mapped);
-      }
+      // Always apply mapped sessions (even when empty) so deleted live sessions disappear for everyone
+      this.cohortService.setSessions(mapped);
     } catch (err) {
       console.warn('Could not sync real live sessions in cohorts:', err);
     }
@@ -1525,11 +1769,18 @@ export class Cohorts implements OnInit {
   }
 
   setTab(tab: CohortTab): void {
+    if (tab === 'teacher_quizzes' || tab === 'assessments' || tab === 'progress') {
+      this.activeTab.set(this.viewMode() === 'teacher' ? 'teacher_batches' : 'overview');
+      return;
+    }
     if (this.viewMode() === 'learner' && tab === 'members') {
       this.activeTab.set('overview');
       return;
     }
     this.activeTab.set(tab);
+    if (tab === 'teacher_curriculum' || tab === 'materials') {
+      void this.syncRealBatchesAndMaterials();
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1583,8 +1834,8 @@ export class Cohorts implements OnInit {
       return;
     }
     const teacherIds = Array.from(this.selectedBatchTeacherIds());
-    if (teacherIds.length < 1 || teacherIds.length > 3) {
-      this.showToast('Assign between 1 and 3 teachers to this batch.', 'warning');
+    if (teacherIds.length < 1 || teacherIds.length > 5) {
+      this.showToast('Assign between 1 and 5 teachers to this batch.', 'warning');
       return;
     }
 
@@ -1668,7 +1919,7 @@ export class Cohorts implements OnInit {
       this.showToast('No departments are assigned to your teacher account.', 'warning');
       return;
     }
-    this.newChapterDepartmentId = allowed[0].id;
+    this.newChapterDepartmentId = this.getPreferredTeacherDepartmentId(allowed);
     this.isAddingNewChapter.set(true);
     this.newChapterTitleInput = '';
   }
@@ -1736,34 +1987,17 @@ export class Cohorts implements OnInit {
     }
   }
 
-  saveLessonToCurriculum(): void {
+  async saveLessonToCurriculum(): Promise<void> {
     const chapter = this.selectedChapter();
     if (!chapter) return;
 
-    if (!this.lessonTitleInput.trim()) {
-      this.showToast('Please provide a lesson title.', 'warning');
+    const cleanTitle = this.lessonTitleInput.trim();
+    if (!cleanTitle) {
+      this.showToast('Please provide a title.', 'warning');
       return;
     }
 
-    let durationVal: string | undefined = undefined;
-    if (this.activeLessonType() === 'live') {
-      durationVal = this.lessonDurationSelect || '2 Hours';
-    } else if (this.activeLessonType() === 'video') {
-      durationVal = this.lessonDurationInput || '12:45';
-    } else {
-      durationVal = undefined; // Notes, File, Quiz, Assignment must NEVER have duration!
-    }
-
-    const isLiveNow = this.activeLessonType() === 'live' ? this.lessonIsLiveNow() : false;
-    const hasAttachedFile = this.activeLessonType() === 'download' || this.activeLessonType() === 'quiz' || this.activeLessonType() === 'assignment';
-    const fileName = hasAttachedFile ? (this.uploadedFileName() || undefined) : undefined;
-    const downloadUrl = (hasAttachedFile && this.uploadedFileDataUrl())
-      ? this.uploadedFileDataUrl()
-      : (hasAttachedFile && this.lessonDownloadUrlInput.trim() ? this.lessonDownloadUrlInput.trim() : '#');
-    const fileSize = (hasAttachedFile && this.uploadedFileSize())
-      ? this.uploadedFileSize()
-      : (hasAttachedFile ? this.lessonFileSizeInput.trim() : undefined);
-
+    const lessonType = this.activeLessonType();
     const allowedDepts = this.teacherAssignedDepartments();
     const resolvedDept =
       allowedDepts.find(d => Number(d.id) === Number(this.lessonDepartmentId)) ||
@@ -1779,47 +2013,191 @@ export class Cohorts implements OnInit {
     }
 
     const teacherName = this.getCurrentTeacherName();
+
+    // Option 4: Live Session -> routes ONLY to Schedule & Cohort Details (NEVER Curriculum & Materials)
+    if (lessonType === 'live') {
+      const isLiveNow = this.lessonIsLiveNow();
+      const durationStr = this.lessonDurationSelect || '2 Hours';
+      const parsedMins = parseInt(durationStr, 10);
+      const durationMinutes = !Number.isNaN(parsedMins) && parsedMins >= 5
+        ? (durationStr.toLowerCase().includes('hour') ? parsedMins * 60 : parsedMins)
+        : 60;
+      const cleanUrl = (this.lessonMeetingUrlInput || '').trim() || this.details().meetingLink || 'https://meet.google.com/ase-cohort-live';
+      const startIso = new Date(Date.now() + (isLiveNow ? 0 : 60 * 60 * 1000)).toISOString();
+
+      if (typeof (this.liveClassesService as any)?.createSession === 'function' && cleanTitle.length >= 3 && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))) {
+        try {
+          const created = await firstValueFrom(
+            this.liveClassesService.createSession({
+              title: cleanTitle,
+              description: this.lessonDescriptionInput.trim() || null,
+              department_id: resolvedDept.id,
+              instructor_user_id: null,
+              scheduled_start: startIso,
+              duration_minutes: Math.min(480, Math.max(5, durationMinutes)),
+              meeting_url: cleanUrl,
+              platform: 'Video Call'
+            })
+          );
+          if (isLiveNow && created?.id && typeof (this.liveClassesService as any)?.updateSession === 'function') {
+            await firstValueFrom(this.liveClassesService.updateSession(created.id, { status: 'live' }));
+          }
+          await this.syncRealLiveSessions();
+        } catch {
+          (this.cohortService as any).addSession?.({
+            title: cleanTitle,
+            module: chapter.title,
+            trainer: isLiveNow ? teacherName : 'Department Instructors',
+            trainerId: isLiveNow ? (this.currentUserId() ?? undefined) : undefined,
+            departmentId: resolvedDept.id,
+            departmentName: resolvedDept.name,
+            date: this.lessonScheduledDate || 'Today',
+            time: this.lessonScheduledTime || '10:00 AM – 12:00 PM IST',
+            duration: durationStr,
+            location: 'Virtual Classroom (Live Session)',
+            meetingUrl: cleanUrl,
+            topics: this.lessonDescriptionInput.trim() ? [this.lessonDescriptionInput.trim()] : [cleanTitle],
+            isLiveNow
+          });
+        }
+      } else {
+        (this.cohortService as any).addSession?.({
+          title: cleanTitle,
+          module: chapter.title,
+          trainer: isLiveNow ? teacherName : 'Department Instructors',
+          trainerId: isLiveNow ? (this.currentUserId() ?? undefined) : undefined,
+          departmentId: resolvedDept.id,
+          departmentName: resolvedDept.name,
+          date: this.lessonScheduledDate || 'Today',
+          time: this.lessonScheduledTime || '10:00 AM – 12:00 PM IST',
+          duration: durationStr,
+          location: 'Virtual Classroom (Live Session)',
+          meetingUrl: cleanUrl,
+          topics: this.lessonDescriptionInput.trim() ? [this.lessonDescriptionInput.trim()] : [cleanTitle],
+          isLiveNow
+        });
+      }
+
+      this.showToast(
+        isLiveNow
+          ? `Live session "${cleanTitle}" is now LIVE on Schedule & Cohort Details!`
+          : `Live session "${cleanTitle}" added to Schedule & Cohort Details!`,
+        'success'
+      );
+      this.lessonTitleInput = '';
+      this.lessonDescriptionInput = '';
+      this.lessonIsLiveNow.set(false);
+      this.removeUploadedFile();
+      return;
+    }
+
+    // Option 5: Assignment -> routes ONLY to Assignments tab (NEVER Curriculum & Materials)
+    if (lessonType === 'assignment') {
+      const dueDate = this.lessonScheduledDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      const attachedFile = this.uploadedFile();
+      try {
+        if (typeof (this.cohortService as any)?.createAssignmentWithFile === 'function') {
+          await this.cohortService.createAssignmentWithFile({
+            title: cleanTitle,
+            module: chapter.title,
+            description: this.lessonDescriptionInput.trim() || 'Complete the practical task according to rubric.',
+            points: this.lessonAssignmentPoints || 100,
+            dueDate,
+            requirements: ['Implement required specification', 'Attach your ZIP, PDF, or project solution'],
+            departmentId: resolvedDept.id,
+            departmentName: resolvedDept.name,
+            file: attachedFile
+          });
+        } else {
+          (this.cohortService as any).addAssignment?.({
+            title: cleanTitle,
+            module: chapter.title,
+            description: this.lessonDescriptionInput.trim() || 'Complete the practical task according to rubric.',
+            points: this.lessonAssignmentPoints || 100,
+            dueDate,
+            requirements: ['Implement required specification'],
+            departmentId: resolvedDept.id,
+            departmentName: resolvedDept.name
+          });
+        }
+        this.showToast(
+          attachedFile
+            ? `Assignment "${cleanTitle}" (with ${attachedFile.name}) published to Assignments tab!`
+            : `Assignment "${cleanTitle}" published to Assignments tab!`,
+          'success'
+        );
+      } catch (err: any) {
+        this.showToast(err?.error?.detail || 'Failed to create assignment.', 'warning');
+        return;
+      }
+
+      this.lessonTitleInput = '';
+      this.lessonDescriptionInput = '';
+      this.removeUploadedFile();
+      return;
+    }
+
+    // Option 3: Downloadables -> strictly file-upload only (persisted server-side)
+    if (lessonType === 'download') {
+      const fileObj = this.uploadedFile();
+      if (!fileObj) {
+        this.showToast('Please upload a file for Downloadable material (file upload only).', 'warning');
+        return;
+      }
+      try {
+        if (typeof (this.cohortService as any)?.uploadDownloadableLesson === 'function') {
+          await this.cohortService.uploadDownloadableLesson(chapter.id, fileObj, {
+            title: cleanTitle,
+            description: this.lessonDescriptionInput.trim(),
+            departmentId: resolvedDept.id,
+            departmentName: resolvedDept.name
+          });
+        } else {
+          this.cohortService.addLessonToChapter(chapter.id, {
+            title: cleanTitle,
+            type: 'download',
+            description: this.lessonDescriptionInput.trim(),
+            fileName: fileObj.name,
+            fileSize: this.uploadedFileSize() || 'File',
+            downloadUrl: this.uploadedFileDataUrl() || '#',
+            trainer: teacherName,
+            departmentId: resolvedDept.id,
+            departmentName: resolvedDept.name
+          });
+        }
+        this.showToast(`Downloadable file "${fileObj.name}" published to Curriculum & Materials!`, 'success');
+      } catch (err: any) {
+        this.showToast(err?.error?.detail || 'Failed to upload downloadable file.', 'warning');
+        return;
+      }
+
+      this.lessonTitleInput = '';
+      this.lessonDescriptionInput = '';
+      this.removeUploadedFile();
+      return;
+    }
+
+    // Option 1 (Video) & Option 2 (Text / Notes) -> stored in Curriculum & Materials
+    // Do NOT auto-duplicate into Course Resource Vault (Vault -> Batch delivery is strictly one-way).
+    const durationVal = lessonType === 'video' ? (this.lessonDurationInput || '12:45') : undefined;
     this.cohortService.addLessonToChapter(chapter.id, {
-      title: this.lessonTitleInput.trim(),
-      type: this.activeLessonType(),
+      title: cleanTitle,
+      type: lessonType,
       duration: durationVal,
       description: this.lessonDescriptionInput.trim(),
-      videoUrl: this.lessonVideoUrlInput.trim(),
-      textNotes: this.lessonTextNotesInput.trim(),
-      downloadUrl: downloadUrl,
-      fileSize: fileSize,
-      fileName: fileName,
-      scheduledDate: this.lessonScheduledDate,
-      scheduledTime: this.lessonScheduledTime,
-      meetingUrl: this.lessonMeetingUrlInput.trim() || this.details().meetingLink,
-      isLiveNow: isLiveNow,
+      videoUrl: lessonType === 'video' ? this.lessonVideoUrlInput.trim() : undefined,
+      textNotes: lessonType === 'text' ? this.lessonTextNotesInput.trim() : undefined,
       trainer: teacherName,
       departmentId: resolvedDept.id,
-      departmentName: resolvedDept.name,
-      quizQuestionsCount: this.lessonQuizQuestionsCount || 5,
-      points: this.lessonAssignmentPoints || 100
+      departmentName: resolvedDept.name
     });
 
-    // Archive published study resource into the Department's 1:1 Course Permanent Resource Vault
-    void this.archiveCohortResourceToVault(
-      resolvedDept.id,
-      this.lessonTitleInput.trim(),
-      this.activeLessonType(),
-      this.lessonVideoUrlInput.trim() || (downloadUrl !== '#' && !downloadUrl.startsWith('data:') ? downloadUrl : ''),
-      this.uploadedFile()
+    this.showToast(
+      lessonType === 'video'
+        ? `Video "${cleanTitle}" published to Curriculum & Materials!`
+        : `Notes "${cleanTitle}" published to Curriculum & Materials!`,
+      'success'
     );
-
-    if (isLiveNow) {
-      this.showToast(`Lesson "${this.lessonTitleInput}" published and is now LIVE! Learners can join directly.`, 'success');
-    } else if (this.activeLessonType() === 'download' && fileName) {
-      this.showToast(`Resource "${fileName}" (${fileSize}) published to ${chapter.title} and Learning Materials!`, 'success');
-    } else if (this.activeLessonType() === 'quiz' && fileName) {
-      this.showToast(`Quiz "${this.lessonTitleInput}" published with attached file "${fileName}"!`, 'success');
-    } else if (this.activeLessonType() === 'assignment' && fileName) {
-      this.showToast(`Assignment "${this.lessonTitleInput}" published with attached file "${fileName}"!`, 'success');
-    } else {
-      this.showToast(`Lesson "${this.lessonTitleInput}" published to ${chapter.title}! Learners can now access this resource.`, 'success');
-    }
 
     this.lessonTitleInput = '';
     this.lessonDescriptionInput = '';
@@ -1924,16 +2302,317 @@ export class Cohorts implements OnInit {
     this.lessonFileSizeInput = '3.5 MB';
   }
 
-  downloadMaterial(mat: LearningMaterialItem): void {
+  renderMarkdownHtml(raw: string): SafeHtml {
+    const escaped = (raw || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const codeBlocks: string[] = [];
+    let text = escaped.replace(/```([\s\S]*?)```/g, (_m, code) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push(
+        `<pre style="background:#0f172a;color:#e2e8f0;padding:12px 14px;border-radius:8px;overflow-x:auto;font-family:monospace;font-size:13px;margin:10px 0;"><code>${code.trim()}</code></pre>`
+      );
+      return `@@CODEBLOCK_${idx}@@`;
+    });
+
+    const lines = text.split(/\r?\n/);
+    const out: string[] = [];
+    let inUl = false;
+    let inOl = false;
+
+    const formatInline = (line: string): string =>
+      line
+        .replace(/`([^`]+)`/g, '<code style="background:#e2e8f0;color:#0f172a;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:0.92em;">$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    const closeLists = () => {
+      if (inUl) { out.push('</ul>'); inUl = false; }
+      if (inOl) { out.push('</ol>'); inOl = false; }
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) {
+        closeLists();
+        continue;
+      }
+      if (/^@@CODEBLOCK_\d+@@$/.test(line)) {
+        closeLists();
+        out.push(line);
+        continue;
+      }
+      const h3 = line.match(/^###\s+(.+)$/);
+      const h2 = line.match(/^##\s+(.+)$/);
+      const h1 = line.match(/^#\s+(.+)$/);
+      const ul = line.match(/^[-*]\s+(.+)$/);
+      const ol = line.match(/^\d+\.\s+(.+)$/);
+
+      if (h1) {
+        closeLists();
+        out.push(`<h3 style="margin:12px 0 6px;font-size:1.15rem;color:#0f172a;">${formatInline(h1[1])}</h3>`);
+      } else if (h2) {
+        closeLists();
+        out.push(`<h4 style="margin:10px 0 6px;font-size:1.05rem;color:#0f172a;">${formatInline(h2[1])}</h4>`);
+      } else if (h3) {
+        closeLists();
+        out.push(`<h5 style="margin:8px 0 4px;font-size:0.98rem;color:#1e293b;">${formatInline(h3[1])}</h5>`);
+      } else if (ul) {
+        if (inOl) { out.push('</ol>'); inOl = false; }
+        if (!inUl) { out.push('<ul style="margin:6px 0 10px 20px;list-style:disc;">'); inUl = true; }
+        out.push(`<li style="margin:3px 0;">${formatInline(ul[1])}</li>`);
+      } else if (ol) {
+        if (inUl) { out.push('</ul>'); inUl = false; }
+        if (!inOl) { out.push('<ol style="margin:6px 0 10px 20px;list-style:decimal;">'); inOl = true; }
+        out.push(`<li style="margin:3px 0;">${formatInline(ol[1])}</li>`);
+      } else {
+        closeLists();
+        out.push(`<p style="margin:6px 0;line-height:1.65;">${formatInline(line)}</p>`);
+      }
+    }
+    closeLists();
+
+    let html = out.join('\n');
+    codeBlocks.forEach((block, i) => {
+      html = html.replace(`@@CODEBLOCK_${i}@@`, block);
+    });
+    return this.sanitizer.bypassSecurityTrustHtml(html);
+  }
+
+  viewNotesMaterial(mat: LearningMaterialItem): void {
+    const rawUrl = mat.downloadUrl && mat.downloadUrl !== '#' && !mat.downloadUrl.startsWith('/training-api/')
+      ? mat.downloadUrl
+      : undefined;
+    // Also cross-check curriculum lessons in case textNotes is stored on the matching lesson
+    let matchedLessonNotes = mat.textNotes || '';
+    if (!matchedLessonNotes && mat.id.startsWith('mat-')) {
+      const targetLessonId = mat.id.slice(4);
+      for (const ch of this.curriculum()) {
+        const found = ch.lessons.find(l => l.id === targetLessonId);
+        if (found?.textNotes) {
+          matchedLessonNotes = found.textNotes;
+          break;
+        }
+      }
+    }
+    const desc = (mat.description || '').trim();
+    const notes = (matchedLessonNotes || '').trim();
+    const mdSource = notes || desc || 'Lecture notes and reference material shared by your department instructor.';
+    this.activeViewingResource.set({
+      title: mat.title,
+      module: mat.module,
+      author: mat.author,
+      type: 'NOTES',
+      description: desc,
+      lectureNotes: notes,
+      renderedMarkdown: this.renderMarkdownHtml(mdSource),
+      previewUrl: rawUrl
+    });
+  }
+
+  viewLessonNotes(les: CurriculumLesson): void {
+    const desc = (les.description || '').trim();
+    const notes = (les.textNotes || '').trim();
+    const mdSource = notes || desc || 'Curriculum lecture notes published by your instructor.';
+    this.activeViewingResource.set({
+      title: les.title,
+      module: les.departmentName ? `${les.departmentName} Curriculum` : 'Curriculum Notes',
+      author: les.trainer || 'Department Instructor',
+      type: 'NOTES',
+      description: desc,
+      lectureNotes: notes,
+      renderedMarkdown: this.renderMarkdownHtml(mdSource)
+    });
+  }
+
+  closeViewingResource(): void {
+    this.activeViewingResource.set(null);
+  }
+
+  async downloadLesson(les: CurriculumLesson): Promise<void> {
+    if (les.type !== 'download') {
+      this.viewLessonNotes(les);
+      return;
+    }
+    const filename = les.fileName || `${les.title.replace(/\s+/g, '_')}`;
+    if ((les.hasFile || les.downloadUrl?.includes('/training-api/')) && typeof (this.cohortService as any)?.downloadLessonFile === 'function') {
+      try {
+        await this.cohortService.downloadLessonFile(les.backendId ?? les.id, filename);
+        this.showToast(`Downloading: ${filename}...`, 'success');
+        return;
+      } catch {
+        this.showToast('Unable to download file right now.', 'warning');
+        return;
+      }
+    }
+    if (les.downloadUrl && les.downloadUrl !== '#') {
+      const link = document.createElement('a');
+      link.href = les.downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      this.showToast(`Downloading: ${filename}...`, 'success');
+    }
+  }
+
+  async downloadMaterial(mat: LearningMaterialItem): Promise<void> {
+    if (!mat.isDownloadable && mat.type !== 'code') {
+      this.viewNotesMaterial(mat);
+      return;
+    }
+    const filename =
+      mat.fileName ||
+      (mat.type === 'pdf' && !mat.title.toLowerCase().endsWith('.pdf')
+        ? `${mat.title.replace(/\s+/g, '_')}.pdf`
+        : mat.title.replace(/\s+/g, '_'));
+    if (mat.downloadUrl?.includes('/training-api/') && typeof (this.cohortService as any)?.downloadAuthenticatedUrl === 'function') {
+      try {
+        await this.cohortService.downloadAuthenticatedUrl(mat.downloadUrl, filename);
+        this.showToast(`Downloading: ${filename}...`, 'success');
+        return;
+      } catch {
+        this.showToast('Unable to download file right now.', 'warning');
+        return;
+      }
+    }
+    if ((mat.hasFile || mat.downloadUrl?.includes('/training-api/')) && (mat.backendLessonId || mat.id.startsWith('mat-les-'))) {
+      try {
+        const lessonKey = mat.backendLessonId ?? mat.id.replace(/^mat-/, '');
+        await (this.cohortService as any).downloadLessonFile?.(lessonKey, filename);
+        this.showToast(`Downloading: ${filename}...`, 'success');
+        return;
+      } catch {
+        this.showToast('Unable to download file right now.', 'warning');
+        return;
+      }
+    }
     this.showToast(`Downloading: ${mat.title}...`, 'success');
     if (mat.downloadUrl && mat.downloadUrl !== '#') {
       const link = document.createElement('a');
       link.href = mat.downloadUrl;
-      link.download = mat.fileName || `${mat.title.replace(/\s+/g, '_')}.${mat.type === 'pdf' ? 'pdf' : 'zip'}`;
+      link.download = filename;
       link.target = '_blank';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    }
+  }
+
+  private resolvePreviewMimeType(fileName: string, fallbackBlobType?: string): string {
+    const lower = (fileName || '').toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.txt') || lower.endsWith('.md') || lower.endsWith('.csv') || lower.endsWith('.json') || lower.endsWith('.py') || lower.endsWith('.ts') || lower.endsWith('.js')) {
+      return 'text/plain;charset=utf-8';
+    }
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    return fallbackBlobType && fallbackBlobType !== 'application/octet-stream'
+      ? fallbackBlobType
+      : 'application/octet-stream';
+  }
+
+  async previewDownloadableMaterial(mat: LearningMaterialItem): Promise<void> {
+    if (!mat.isDownloadable && mat.type !== 'code') {
+      this.viewNotesMaterial(mat);
+      return;
+    }
+    const filename =
+      mat.fileName ||
+      (mat.type === 'pdf' && !mat.title.toLowerCase().endsWith('.pdf')
+        ? `${mat.title}.pdf`
+        : mat.title);
+    const targetUrl = mat.downloadUrl || '';
+    await this.openAuthenticatedFileReader(mat.title, filename, targetUrl, { mat });
+  }
+
+  async previewDownloadableLesson(les: CurriculumLesson): Promise<void> {
+    if (les.type !== 'download') {
+      this.viewLessonNotes(les);
+      return;
+    }
+    const filename = les.fileName || les.title;
+    const targetUrl =
+      les.downloadUrl && les.downloadUrl !== '#'
+        ? les.downloadUrl
+        : les.backendId
+          ? `/training-api/api/v1/cohorts/workspace/lessons/${les.backendId}/file`
+          : '';
+    await this.openAuthenticatedFileReader(les.title, filename, targetUrl, { les });
+  }
+
+  private async openAuthenticatedFileReader(
+    title: string,
+    fileName: string,
+    url: string,
+    ctx: { mat?: LearningMaterialItem; les?: CurriculumLesson }
+  ): Promise<void> {
+    if (!url || url === '#') {
+      this.showToast('File preview is unavailable for this item.', 'warning');
+      return;
+    }
+    this.closeFilePreview();
+    const isPdf = fileName.toLowerCase().endsWith('.pdf') || ctx.mat?.type === 'pdf';
+    if (url.includes('/training-api/') && typeof (this.cohortService as any)?.fetchAuthenticatedFileBlob === 'function') {
+      this.isLoadingFilePreview.set(true);
+      try {
+        const rawBlob = await this.cohortService.fetchAuthenticatedFileBlob(url, true);
+        const mime = this.resolvePreviewMimeType(fileName, rawBlob.type);
+        const typedBlob = rawBlob.type === mime ? rawBlob : new Blob([rawBlob], { type: mime });
+        const blobUrl = URL.createObjectURL(typedBlob);
+        this.activeFilePreview.set({
+          title,
+          fileName,
+          blobUrl,
+          safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(blobUrl),
+          isPdf: isPdf || mime === 'application/pdf',
+          downloadUrl: url,
+          ...ctx
+        });
+      } catch {
+        this.showToast('Unable to open file preview. Try downloading the file instead.', 'warning');
+      } finally {
+        this.isLoadingFilePreview.set(false);
+      }
+      return;
+    }
+    this.activeFilePreview.set({
+      title,
+      fileName,
+      blobUrl: url,
+      safeUrl: this.sanitizer.bypassSecurityTrustResourceUrl(url),
+      isPdf,
+      downloadUrl: url,
+      ...ctx
+    });
+  }
+
+  closeFilePreview(): void {
+    const prev = this.activeFilePreview();
+    if (prev?.blobUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(prev.blobUrl);
+    }
+    this.activeFilePreview.set(null);
+  }
+
+  openPreviewInNewTab(): void {
+    const prev = this.activeFilePreview();
+    if (prev?.blobUrl) {
+      window.open(prev.blobUrl, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  async downloadActivePreview(): Promise<void> {
+    const prev = this.activeFilePreview();
+    if (!prev) return;
+    if (prev.mat) {
+      await this.downloadMaterial(prev.mat);
+    } else if (prev.les) {
+      await this.downloadLesson(prev.les);
     }
   }
 
@@ -2178,10 +2857,7 @@ export class Cohorts implements OnInit {
     this.newSessionMeetingUrl = this.details().meetingLink || 'https://meet.google.com/ase-cohort-live';
     this.newSessionTopicsText = 'Angular Signals, Reactive state, RxJS interop';
     this.newSessionIsLiveNow = false;
-    const matchedDept = selectableDepts.find(
-      d => d.name.trim().toLowerCase() === (this.details().department || '').trim().toLowerCase()
-    );
-    this.newSessionDepartmentId = matchedDept?.id ?? selectableDepts[0]?.id ?? null;
+    this.newSessionDepartmentId = this.getPreferredTeacherDepartmentId(selectableDepts);
 
     const hosts = this.availableInstructors();
     const selfHost = hosts.find(h => typeof h.id === 'number' && h.id === this.currentUserId()) || hosts[0];
@@ -2189,7 +2865,7 @@ export class Cohorts implements OnInit {
     this.newSessionTrainerId = typeof selfHost?.id === 'number' ? selfHost.id : null;
   }
 
-  saveNewSession(): void {
+  async saveNewSession(): Promise<void> {
     if (!this.newSessionTitle.trim()) {
       this.showToast('Please enter a session title.', 'warning');
       return;
@@ -2208,85 +2884,119 @@ export class Cohorts implements OnInit {
       .map(t => t.trim())
       .filter(t => t.length > 0);
 
-    const trainerName =
-      this.newSessionTrainer || this.availableInstructors()[0]?.full_name || this.getCurrentTeacherName();
+    const starterName = this.getCurrentTeacherName();
+    const allowImmediateLive = Boolean(this.newSessionIsLiveNow);
+    const cleanUrl = (this.newSessionMeetingUrl || '').trim() || 'https://meet.google.com/ase-cohort-live';
+    const parsedMins = parseInt(this.newSessionDuration, 10);
+    const durationMinutes = !Number.isNaN(parsedMins) && parsedMins >= 5
+      ? (this.newSessionDuration.toLowerCase().includes('hour') ? parsedMins * 60 : parsedMins)
+      : 60;
 
-    const matchedHost = this.availableInstructors().find(
-      i => i.full_name.trim().toLowerCase() === trainerName.trim().toLowerCase()
-    );
-    const trainerId =
-      typeof matchedHost?.id === 'number' ? matchedHost.id : this.newSessionTrainerId ?? undefined;
-
-    const allowImmediateLive = this.newSessionIsLiveNow && this.isSelectedTrainerCurrentUser();
-
-    this.cohortService.addSession({
-      title: this.newSessionTitle.trim(),
-      module: this.newSessionModule,
-      trainer: trainerName,
-      trainerId,
-      departmentId: selectedDept.id,
-      departmentName: selectedDept.name,
-      date: this.newSessionDate,
-      time: this.newSessionTime,
-      duration: this.newSessionDuration,
-      location: this.newSessionLocation,
-      meetingUrl: this.newSessionMeetingUrl,
-      topics,
-      isLiveNow: allowImmediateLive
-    });
-
-    // Also mirror scheduled session into backend department-gated live_class_sessions when valid URL & title
-    const cleanUrl = (this.newSessionMeetingUrl || '').trim();
-    if (this.newSessionTitle.trim().length >= 3 && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))) {
-      const startIso = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-      void firstValueFrom(
-        this.liveClassesService.createSession({
-          title: this.newSessionTitle.trim(),
-          description: topics.join(', ') || null,
-          department_id: selectedDept.id,
-          instructor_user_id: trainerId ?? null,
-          scheduled_start: startIso,
-          duration_minutes: 60,
-          meeting_url: cleanUrl,
-          platform: 'Video Call'
-        })
-      ).then(async created => {
-        if (allowImmediateLive && created?.id) {
-          await firstValueFrom(this.liveClassesService.updateSession(created.id, { status: 'live' })).catch(() => { });
+    if (typeof (this.liveClassesService as any)?.createSession === 'function' && this.newSessionTitle.trim().length >= 3 && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))) {
+      try {
+        const startIso = new Date(Date.now() + (allowImmediateLive ? 0 : 60 * 60 * 1000)).toISOString();
+        const created = await firstValueFrom(
+          this.liveClassesService.createSession({
+            title: this.newSessionTitle.trim(),
+            description: topics.join(', ') || null,
+            department_id: selectedDept.id,
+            instructor_user_id: null,
+            scheduled_start: startIso,
+            duration_minutes: Math.min(480, Math.max(5, durationMinutes)),
+            meeting_url: cleanUrl,
+            platform: 'Video Call'
+          })
+        );
+        if (allowImmediateLive && created?.id && typeof (this.liveClassesService as any)?.updateSession === 'function') {
+          await firstValueFrom(this.liveClassesService.updateSession(created.id, { status: 'live' }));
         }
-      }).catch(() => { });
+        await this.syncRealLiveSessions();
+      } catch (err: any) {
+        (this.cohortService as any).addSession?.({
+          title: this.newSessionTitle.trim(),
+          module: this.newSessionModule,
+          trainer: allowImmediateLive ? starterName : 'Department Instructors',
+          trainerId: allowImmediateLive ? (this.currentUserId() ?? undefined) : undefined,
+          departmentId: selectedDept.id,
+          departmentName: selectedDept.name,
+          date: this.newSessionDate,
+          time: this.newSessionTime,
+          duration: this.newSessionDuration,
+          location: this.newSessionLocation,
+          meetingUrl: cleanUrl,
+          topics,
+          isLiveNow: allowImmediateLive
+        });
+      }
+    } else {
+      (this.cohortService as any).addSession?.({
+        title: this.newSessionTitle.trim(),
+        module: this.newSessionModule,
+        trainer: allowImmediateLive ? starterName : 'Department Instructors',
+        trainerId: allowImmediateLive ? (this.currentUserId() ?? undefined) : undefined,
+        departmentId: selectedDept.id,
+        departmentName: selectedDept.name,
+        date: this.newSessionDate,
+        time: this.newSessionTime,
+        duration: this.newSessionDuration,
+        location: this.newSessionLocation,
+        meetingUrl: cleanUrl,
+        topics,
+        isLiveNow: allowImmediateLive
+      });
     }
 
     this.isCreatingSession.set(false);
     if (allowImmediateLive) {
-      this.showToast(`Training session "${this.newSessionTitle}" is now LIVE with instructor ${trainerName} (${selectedDept.name})!`, 'success');
-      if (this.newSessionMeetingUrl) {
-        window.open(this.newSessionMeetingUrl, '_blank', 'noopener,noreferrer');
+      this.showToast(`Live session "${this.newSessionTitle}" is now LIVE (${selectedDept.name})! Only you (${starterName}) can end it.`, 'success');
+      if (cleanUrl) {
+        window.open(cleanUrl, '_blank', 'noopener,noreferrer');
       }
     } else {
-      this.showToast(`Training session "${this.newSessionTitle}" scheduled as Upcoming for ${selectedDept.name} with instructor ${trainerName}!`, 'success');
+      this.showToast(`Live session "${this.newSessionTitle}" scheduled for ${selectedDept.name}! Any ${selectedDept.name} instructor can start it.`, 'success');
     }
   }
 
-  startTrainingSession(sess: TrainingSession): void {
+  async startTrainingSession(sess: TrainingSession): Promise<void> {
     if (!this.canStartCohortSession(sess)) {
-      this.showToast(`Only the assigned teacher (${sess.trainer}) can start this live class.`, 'warning');
+      this.showToast('Only an instructor assigned to this department can start this live session.', 'warning');
       return;
     }
-    this.cohortService.startSession(sess.id, sess.trainer);
-    this.showToast(`Training "${sess.title}" is now LIVE with instructor ${sess.trainer}! Learners can join now.`, 'success');
+    const starterName = this.getCurrentTeacherName();
+    if (sess.backendLiveId && typeof (this.liveClassesService as any)?.updateSession === 'function') {
+      try {
+        await firstValueFrom(this.liveClassesService.updateSession(sess.backendLiveId, { status: 'live' }));
+        await this.syncRealLiveSessions();
+      } catch (err: any) {
+        this.showToast(err?.error?.detail || 'Unable to start live session.', 'warning');
+        return;
+      }
+    } else {
+      (this.cohortService as any).startSession?.(sess.id, starterName);
+    }
+    this.showToast(`"${sess.title}" is now LIVE for all learners! Only you (${starterName}) can end this session.`, 'success');
     if (sess.meetingUrl) {
       window.open(sess.meetingUrl, '_blank', 'noopener,noreferrer');
     }
   }
 
-  endTrainingSession(sess: TrainingSession): void {
-    if (!this.canStartCohortSession(sess)) {
-      this.showToast(`Only the assigned teacher (${sess.trainer}) can end this live class.`, 'warning');
+  async endTrainingSession(sess: TrainingSession): Promise<void> {
+    if (!this.canEndCohortSession(sess)) {
+      this.showToast(`Only the instructor who started this class (${sess.trainer}) can end it.`, 'warning');
       return;
     }
-    this.cohortService.endSession(sess.id);
-    this.showToast(`Live training "${sess.title}" has concluded.`, 'info');
+    if (sess.backendLiveId && typeof (this.liveClassesService as any)?.updateSession === 'function') {
+      try {
+        await firstValueFrom(this.liveClassesService.updateSession(sess.backendLiveId, { status: 'completed' }));
+        await this.syncRealLiveSessions();
+      } catch (err: any) {
+        this.showToast(err?.error?.detail || 'Only the instructor who started this live class can end it.', 'warning');
+        return;
+      }
+    } else {
+      (this.cohortService as any).endSession?.(sess.id);
+    }
+    this.showToast(`Live session "${sess.title}" has ended for everyone.`, 'info');
   }
 
   getTrainerInitials(trainerName?: string): string {
@@ -2330,12 +3040,25 @@ export class Cohorts implements OnInit {
     this.selectedSessionDetails.set(null);
   }
 
-  deleteSession(sessionId: string): void {
-    if (confirm('Delete this scheduled training session?')) {
-      this.cohortService.deleteSession(sessionId);
-      this.closeSessionPopover();
-      this.showToast('Session deleted from timetable.', 'info');
+  async deleteSession(sessionId: string): Promise<void> {
+    if (!confirm('Delete this live session for everyone?')) {
+      return;
     }
+    const target = this.sessions().find(s => s.id === sessionId);
+    const backendId = target?.backendLiveId ?? (sessionId.startsWith('live-sess-') ? Number(sessionId.replace('live-sess-', '')) : null);
+    if (backendId && !Number.isNaN(backendId) && typeof (this.liveClassesService as any)?.deleteSession === 'function') {
+      try {
+        await firstValueFrom(this.liveClassesService.deleteSession(backendId));
+        await this.syncRealLiveSessions();
+      } catch (err: any) {
+        this.showToast(err?.error?.detail || 'Unable to delete live session.', 'warning');
+        return;
+      }
+    } else {
+      (this.cohortService as any).deleteSession?.(sessionId);
+    }
+    this.closeSessionPopover();
+    this.showToast('Live session deleted for everyone.', 'info');
   }
 
   // ---------------- TEACHER: ASSIGNMENTS CREATION & GRADING ----------------
@@ -2355,13 +3078,38 @@ export class Cohorts implements OnInit {
     this.newAsgPoints = 100;
     this.newAsgDueDate = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
     this.newAsgRequirementsText = 'Clean modular architecture\nComprehensive unit tests\nDocumentation in README';
-    const matchedDept = allowedDepts.find(
-      d => d.name.trim().toLowerCase() === (this.details().department || '').trim().toLowerCase()
-    );
-    this.newAsgDepartmentId = matchedDept?.id ?? allowedDepts[0]?.id ?? null;
+    this.newAsgDepartmentId = this.getPreferredTeacherDepartmentId(allowedDepts);
+    this.newAsgAttachmentFile.set(null);
   }
 
-  saveNewAssignment(): void {
+  onNewAsgFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.newAsgAttachmentFile.set(input.files?.[0] || null);
+  }
+
+  async downloadAssignmentAttachment(asg: CohortAssignment): Promise<void> {
+    const filename = asg.attachmentName || 'assignment-file.pdf';
+    if ((asg.hasAttachmentFile || asg.attachmentUrl?.includes('/training-api/')) && typeof (this.cohortService as any)?.downloadAssignmentAttachment === 'function') {
+      try {
+        await this.cohortService.downloadAssignmentAttachment(asg.backendId ?? asg.id, filename);
+        this.showToast(`Downloading: ${filename}...`, 'success');
+        return;
+      } catch {
+        this.showToast('Unable to download assignment file.', 'warning');
+        return;
+      }
+    }
+    if (asg.attachmentUrl && asg.attachmentUrl !== '#') {
+      const link = document.createElement('a');
+      link.href = asg.attachmentUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  }
+
+  async saveNewAssignment(): Promise<void> {
     if (!this.newAsgTitle.trim() || !this.newAsgDescription.trim()) {
       this.showToast('Please specify title and description.', 'warning');
       return;
@@ -2380,19 +3128,43 @@ export class Cohorts implements OnInit {
       .map(r => r.trim())
       .filter(r => r.length > 0);
 
-    this.cohortService.addAssignment({
-      title: this.newAsgTitle.trim(),
-      module: this.newAsgModule,
-      description: this.newAsgDescription.trim(),
-      points: this.newAsgPoints || 100,
-      dueDate: this.newAsgDueDate,
-      requirements: reqs,
-      departmentId: selectedDept.id,
-      departmentName: selectedDept.name
-    });
-
-    this.isCreatingAssignment.set(false);
-    this.showToast(`Assignment "${this.newAsgTitle}" assigned to ${selectedDept.name} learners!`, 'success');
+    const attachedFile = this.newAsgAttachmentFile();
+    try {
+      if (typeof (this.cohortService as any)?.createAssignmentWithFile === 'function') {
+        await this.cohortService.createAssignmentWithFile({
+          title: this.newAsgTitle.trim(),
+          module: this.newAsgModule,
+          description: this.newAsgDescription.trim(),
+          points: this.newAsgPoints || 100,
+          dueDate: this.newAsgDueDate,
+          requirements: reqs,
+          departmentId: selectedDept.id,
+          departmentName: selectedDept.name,
+          file: attachedFile
+        });
+      } else {
+        this.cohortService.addAssignment({
+          title: this.newAsgTitle.trim(),
+          module: this.newAsgModule,
+          description: this.newAsgDescription.trim(),
+          points: this.newAsgPoints || 100,
+          dueDate: this.newAsgDueDate,
+          requirements: reqs,
+          departmentId: selectedDept.id,
+          departmentName: selectedDept.name
+        });
+      }
+      this.isCreatingAssignment.set(false);
+      this.newAsgAttachmentFile.set(null);
+      this.showToast(
+        attachedFile
+          ? `Assignment "${this.newAsgTitle}" (with ${attachedFile.name}) assigned to ${selectedDept.name} learners!`
+          : `Assignment "${this.newAsgTitle}" assigned to ${selectedDept.name} learners!`,
+        'success'
+      );
+    } catch (err: any) {
+      this.showToast(err?.error?.detail || 'Failed to create assignment.', 'warning');
+    }
   }
 
   // ---------------- TEACHER: QUIZ / TEST CREATION ----------------
@@ -2412,10 +3184,7 @@ export class Cohorts implements OnInit {
     this.newQuizDurationMinutes = 15;
     this.newQuizPassingScore = 70;
     this.newQuizDueDate = new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0];
-    const matchedDept = allowedDepts.find(
-      d => d.name.trim().toLowerCase() === (this.details().department || '').trim().toLowerCase()
-    );
-    this.newQuizDepartmentId = matchedDept?.id ?? allowedDepts[0]?.id ?? null;
+    this.newQuizDepartmentId = this.getPreferredTeacherDepartmentId(allowedDepts);
   }
 
   saveNewQuiz(): void {
@@ -2511,40 +3280,86 @@ export class Cohorts implements OnInit {
   }
 
   openSubmissionModal(assignment: CohortAssignment): void {
+    if (assignment.status !== 'pending') {
+      this.showToast('This assignment has already been submitted and is permanently locked.', 'warning');
+      return;
+    }
     this.activeAssignmentForModal.set(assignment);
-    this.assignmentRepoUrl = assignment.submissionUrl || '';
-    this.assignmentNotes = assignment.submissionNotes || '';
+    this.assignmentRepoUrl = '';
+    this.assignmentNotes = '';
+    this.assignmentZipFile.set(null);
   }
 
   closeSubmissionModal(): void {
     this.activeAssignmentForModal.set(null);
     this.assignmentRepoUrl = '';
     this.assignmentNotes = '';
+    this.assignmentZipFile.set(null);
   }
 
-  submitAssignment(): void {
+  onAssignmentZipSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] || null;
+    this.assignmentZipFile.set(file);
+  }
+
+  async downloadAssignmentZip(asg: CohortAssignment): Promise<void> {
+    if (!asg.submissionId) return;
+    try {
+      await (this.cohortService as any).downloadAssignmentSubmissionFile?.(
+        asg.backendId ?? asg.id,
+        asg.submissionId,
+        asg.submissionFileName || 'submission.zip'
+      );
+    } catch {
+      this.showToast('Unable to download submitted archive.', 'warning');
+    }
+  }
+
+  async submitAssignment(): Promise<void> {
     const assignment = this.activeAssignmentForModal();
     if (!assignment) return;
+    if (assignment.status !== 'pending') {
+      this.showToast('This assignment is already locked and cannot be resubmitted.', 'warning');
+      this.closeSubmissionModal();
+      return;
+    }
 
-    if (!this.assignmentRepoUrl.trim()) {
-      this.showToast('Please provide a repository URL or project link.', 'warning');
+    const cleanUrl = this.assignmentRepoUrl.trim();
+    const zipFile = this.assignmentZipFile();
+    if (!cleanUrl && !zipFile) {
+      this.showToast('Provide a GitHub repository URL or attach a .zip / project file.', 'warning');
       return;
     }
 
     this.assignmentSubmitting.set(true);
-    setTimeout(() => {
-      const ok = this.cohortService.submitAssignment(
-        assignment.id,
-        this.assignmentRepoUrl.trim(),
-        this.assignmentNotes.trim()
-      );
+    try {
+      let ok = false;
+      if (typeof (this.cohortService as any).submitAssignmentWithFile === 'function' && (zipFile || assignment.backendId)) {
+        ok = await this.cohortService.submitAssignmentWithFile(
+          assignment.id,
+          zipFile,
+          cleanUrl,
+          this.assignmentNotes.trim()
+        );
+      } else {
+        ok = this.cohortService.submitAssignment(
+          assignment.id,
+          cleanUrl,
+          this.assignmentNotes.trim()
+        );
+      }
       this.assignmentSubmitting.set(false);
       this.closeSubmissionModal();
-
       if (ok) {
-        this.showToast(`"${assignment.title}" submitted successfully for trainer review!`, 'success');
+        this.showToast(`"${assignment.title}" submitted and permanently locked for manual instructor grading!`, 'success');
+      } else {
+        this.showToast('Assignment submission is already locked.', 'warning');
       }
-    }, 400);
+    } catch (err: any) {
+      this.assignmentSubmitting.set(false);
+      this.showToast(err?.error?.detail || 'Unable to submit assignment.', 'warning');
+    }
   }
 
   startQuiz(quiz: CohortQuiz): void {

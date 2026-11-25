@@ -123,6 +123,31 @@ class AssessmentSession(Base):
         Integer, default=0, nullable=False
     )
 
+    submission_type: Mapped[str] = mapped_column(
+        String(30), default="mcq", nullable=False
+    )
+    grading_status: Mapped[str] = mapped_column(
+        String(30), default="auto_graded", nullable=False
+    )
+    submission_github_url: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+    submission_file_storage_key: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+    submission_file_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    submission_notes: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    graded_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    trainer_feedback: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+
     # Keep model and prompt versions for reproducibility.
     ai_model: Mapped[str | None] = mapped_column(
         String(100), nullable=True

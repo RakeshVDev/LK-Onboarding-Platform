@@ -27,7 +27,6 @@ LEARNER_FULL_NAV_ITEMS: tuple[NavItemPermission, ...] = (
     NavItemPermission(key="dashboard", label="Dashboard", route="/dashboard", allowed=True),
     NavItemPermission(key="courses", label="Courses", route="/courses", allowed=True),
     NavItemPermission(key="cohorts", label="Cohorts", route="/cohorts", allowed=True),
-    NavItemPermission(key="live_classes", label="Live Classes", route="/live-classes", allowed=True),
     NavItemPermission(key="assessment", label="Assessment", route="/my-assessments", allowed=True),
     NavItemPermission(key="result", label="Result", route="/my-results", allowed=True),
     NavItemPermission(key="report", label="Report", route="/my-reports", allowed=True),
@@ -80,6 +79,7 @@ class SqlAlchemyTrainingBridge:
                 "completed_count": int(res.completed_count),
                 "pending_count": int(res.pending_count),
                 "all_completed": bool(res.all_completed),
+                "pre_assessments_completed": bool(res.pre_assessments_completed),
                 "has_approved_department": bool(res.has_approved_department),
             }
 
@@ -323,7 +323,7 @@ def sync_learner_assessments_if_completed(
     user: User,
     bridge: TrainingOnboardingBridge,
 ) -> dict[str, Any] | None:
-    """Refresh user.all_assessments_completed from training when already complete."""
+    """Synchronize user.all_assessments_completed bidirectionally with pending Pre-Assessments."""
     if user.role != Role.LEARNER.value:
         return None
     try:
@@ -331,10 +331,17 @@ def sync_learner_assessments_if_completed(
     except Exception:
         return None
 
-    if (
+    if status_info.get("pre_assessments_completed") is False and bool(user.all_assessments_completed):
+        user.all_assessments_completed = False
+        db.commit()
+        db.refresh(user)
+    elif (
         not bool(user.all_assessments_completed)
         and status_info.get("all_completed") is True
-        and int(status_info.get("total_assigned", 0)) > 0
+        and (
+            int(status_info.get("total_assigned", 0)) > 0
+            or status_info.get("pre_assessments_completed") is True
+        )
     ):
         user.all_assessments_completed = True
         db.commit()
@@ -382,7 +389,6 @@ def build_navigation_permissions(
             NavItemPermission(key="departments", label="Departments", route="/departments"),
             NavItemPermission(key="courses", label="Courses", route="/courses"),
             NavItemPermission(key="cohorts", label="Cohorts", route="/cohorts"),
-            NavItemPermission(key="live_classes", label="Live Classes", route="/live-classes"),
             NavItemPermission(key="users", label="User Management", route="/users"),
             NavItemPermission(key="assessments", label="Assessment Admin", route="/assessments"),
             NavItemPermission(key="profile", label="Profile", route="/profile"),
@@ -411,7 +417,6 @@ def build_navigation_permissions(
             NavItemPermission(key="dashboard", label="Dashboard", route="/dashboard"),
             NavItemPermission(key="courses", label="Courses", route="/courses"),
             NavItemPermission(key="cohorts", label="Cohorts", route="/cohorts"),
-            NavItemPermission(key="live_classes", label="Live Classes", route="/live-classes"),
             NavItemPermission(key="assessments", label="Assessments", route="/assessments"),
             NavItemPermission(key="profile", label="Profile", route="/profile"),
         ]
@@ -460,7 +465,6 @@ def build_navigation_permissions(
         "dashboard",
         "courses",
         "cohorts",
-        "live_classes",
         "departments",
         "users",
         "profile",
@@ -469,7 +473,10 @@ def build_navigation_permissions(
     redirect_to = "/department-selection" if can_select else "/my-assessments"
 
     if stage == "assessment_pending":
-        msg = "Complete all assigned assessments before awaiting admin activation."
+        if bool(user.department_approved):
+            msg = "A priority Pre-Assessment is pending. Complete it to unlock workspace navigation."
+        else:
+            msg = "Complete all assigned pre-assessments before awaiting admin activation."
     elif stage == "awaiting_activation":
         msg = "All assessments completed. Waiting for an administrator to activate your department selection."
     elif stage == "department_selection":

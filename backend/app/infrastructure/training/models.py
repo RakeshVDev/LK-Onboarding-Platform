@@ -28,13 +28,14 @@ class LiveClassSession(TrainingBase):
     department_id: Mapped[int] = mapped_column(
         ForeignKey("departments.id"), nullable=False, index=True
     )
-    instructor_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    instructor_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     instructor_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     scheduled_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     meeting_url: Mapped[str] = mapped_column(String(500), nullable=False)
     platform: Mapped[str] = mapped_column(String(60), default="Video Call", nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="scheduled", nullable=False, index=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

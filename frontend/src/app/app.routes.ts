@@ -1,5 +1,6 @@
 
-import { Routes } from '@angular/router';
+import { Routes, Router } from '@angular/router';
+import { inject } from '@angular/core';
 
 import { AuthLayout } from './layouts/auth-layout/auth-layout';
 import { MainLayout } from './layouts/main-layout/main-layout';
@@ -111,16 +112,11 @@ export const routes: Routes = [
             .then(m => m.Cohorts)
       },
 
-      // Department-Gated Live Classes
+      // Live Classes consolidated into Cohorts -> Schedule tab
       {
         path: 'live-classes',
-        data: { navKey: 'live_classes' },
-        canActivate: [
-          roleGuard(['superadmin', 'admin', 'teacher', 'learner'])
-        ],
-        loadComponent: () =>
-          import('./features/live-classes')
-            .then(m => m.LiveClassesPage)
+        pathMatch: 'full',
+        redirectTo: () => inject(Router).createUrlTree(['/cohorts'], { queryParams: { tab: 'schedule' } })
       },
 
       // Assessment Management - Admin and Teacher only

@@ -138,3 +138,4 @@ class WorkspaceResponse(BaseModel):
     attendanceMatrix: dict[str, Any]
     progress: dict[str, Any]
     bookmarkedMaterialKeys: list[str]
+    deliveredMaterials: list[dict[str, Any]] = Field(default_factory=list)

@@ -76,7 +76,7 @@ export interface LearningMaterial {
   id: number;
   course_id: number;
   title: string;
-  material_type: 'pdf' | 'link' | 'doc' | 'video';
+  material_type: 'pdf' | 'link' | 'doc' | 'video' | 'notes';
   storage_key: string;
   is_active: boolean;
 }
@@ -464,7 +464,7 @@ export class LearningService {
   addMaterialLink(
     courseId: number,
     title: string,
-    materialType: 'link' | 'video' | 'doc' | 'pdf',
+    materialType: 'link' | 'video' | 'doc' | 'pdf' | 'notes',
     storageKey: string
   ): Promise<LearningMaterial> {
     return firstValueFrom(
@@ -531,6 +531,16 @@ export class LearningService {
       this.http.delete<void>(
         `${this.apiUrl}/courses/${courseId}/materials/${materialId}`,
         { headers: this.getHeaders() }
+      )
+    );
+  }
+
+  fetchMaterialFileBlob(courseId: number, materialId: number, inline = false): Promise<Blob> {
+    const query = inline ? '?inline=true' : '';
+    return firstValueFrom(
+      this.http.get(
+        `${this.apiUrl}/courses/${courseId}/materials/${materialId}/file${query}`,
+        { headers: this.getHeaders(), responseType: 'blob' }
       )
     );
   }

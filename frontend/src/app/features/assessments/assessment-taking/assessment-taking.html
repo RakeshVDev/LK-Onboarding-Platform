@@ -23,6 +23,102 @@
         </a>
       </div>
     </div>
+  } @else if (assessmentMode === 'pdf_submission') {
+    <!-- PDF QUESTION PAPER + GITHUB / ZIP PROJECT SUBMISSION WORKSPACE -->
+    <header class="exam-header">
+      <div class="header-left">
+        <div class="exam-badge-row">
+          <span class="exam-tag">PDF ASSESSMENT &amp; MANUAL GRADING</span>
+          <span class="exam-type-pill">{{ templateName }}</span>
+        </div>
+        <div class="exam-title-row">
+          <h1>{{ templateName }}</h1>
+          <span class="question-tracker">Maximum Marks: <strong>{{ maxMarks }}</strong></span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="exam-timer" [class.timer-warning]="isTimerWarning" [class.timer-critical]="isTimerCritical" role="timer">
+          <div class="timer-icon">⏱</div>
+          <div class="timer-text">
+            <span class="timer-label">TIME REMAINING</span>
+            <strong class="timer-digits">{{ formattedTime }}</strong>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    @if (errorMessage) {
+      <div class="exam-alert error-banner" role="alert">
+        <span>⚠</span> {{ errorMessage }}
+      </div>
+    }
+
+    <div style="max-width: 820px; margin: 28px auto; padding: 0 20px; display: flex; flex-direction: column; gap: 20px;">
+      <!-- Step 1: Download Question Paper PDF -->
+      <section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #4f46e5;">STEP 1 · DOWNLOAD QUESTION PAPER</span>
+        <h2 style="margin: 6px 0 8px; font-size: 20px;">Official Question Paper PDF</h2>
+        <p style="color: #475569; margin-bottom: 16px;">
+          Download the instructor's PDF question paper below, complete your solution locally, and submit either a GitHub repository link, a <code>.zip</code> archive, or both.
+        </p>
+        <button type="button" class="btn-primary" [disabled]="downloadingPdf || !templateId" (click)="downloadQuestionPaper()">
+          {{ downloadingPdf ? 'Downloading PDF...' : ('⬇ Download Question PDF (' + (questionPdfName || 'question_paper.pdf') + ')') }}
+        </button>
+      </section>
+
+      <!-- Step 2: Submit Solution via GitHub Link and/or ZIP Upload -->
+      <section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #059669;">STEP 2 · SUBMIT SOLUTION FOR MANUAL GRADING</span>
+        <h2 style="margin: 6px 0 8px; font-size: 20px;">Project Deliverable Submission</h2>
+        <p style="color: #475569; margin-bottom: 18px;">
+          Provide a GitHub repository URL and/or upload a compressed project archive (<code>.zip</code>, <code>.tar.gz</code>, <code>.pdf</code>, etc.). Your instructor will manually evaluate and score your submission out of <strong>{{ maxMarks }} marks</strong>.
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div>
+            <label for="pdfGhUrl" style="display: block; font-weight: 600; margin-bottom: 6px;">GitHub Repository URL</label>
+            <input
+              id="pdfGhUrl"
+              type="url"
+              style="width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px;"
+              [(ngModel)]="projectGithubUrl"
+              placeholder="https://github.com/your-username/assessment-solution" />
+          </div>
+
+          <div>
+            <label for="pdfZipFile" style="display: block; font-weight: 600; margin-bottom: 6px;">Upload Solution Archive (.zip, .tar.gz, .pdf, etc.)</label>
+            <input
+              id="pdfZipFile"
+              type="file"
+              style="width: 100%; padding: 10px; border: 1px dashed #94a3b8; border-radius: 8px; background: #f8fafc;"
+              accept=".zip,.tar,.gz,.7z,.rar,.pdf,.py,.ts,.js,.java,.cs,.php,.sql"
+              (change)="onProjectFileSelected($event)" />
+            @if (projectZipFile) {
+              <small style="display: block; margin-top: 6px; color: #059669; font-weight: 600;">✓ Attached: {{ projectZipFile.name }}</small>
+            }
+          </div>
+
+          <div>
+            <label for="pdfNotes" style="display: block; font-weight: 600; margin-bottom: 6px;">Notes / Setup Instructions (Optional)</label>
+            <textarea
+              id="pdfNotes"
+              rows="3"
+              style="width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px;"
+              [(ngModel)]="projectNotes"
+              placeholder="Add setup steps, branch name, or architecture notes for your instructor..."></textarea>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 12px; padding-top: 8px;">
+            <a routerLink="/my-assessments" class="btn-secondary">Back</a>
+            <button type="button" class="btn-primary" [disabled]="submitting" (click)="submitProjectFinal()">
+              {{ submitting ? 'Submitting Assessment...' : 'Submit Final Assessment →' }}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+
   } @else if (questions.length > 0) {
 
     <!-- Top Examination Header -->

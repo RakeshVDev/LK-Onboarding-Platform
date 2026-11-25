@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 import json
+import os
 from typing import Any
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
+from fastapi.responses import FileResponse
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from services.identity.app.core.roles import Role
@@ -32,9 +35,12 @@ from services.training.app.models.cohort_workspace import (
 )
 from services.training.app.models.entities import (
     Cohort,
+    CohortMaterialDelivery,
     CohortMember,
     CohortTeacher,
+    Course,
     Department,
+    LearningMaterial,
 )
 from services.training.app.routers.assessments import get_learner_allowed_dept_ids
 from services.training.app.schemas.cohort_workspace import (
@@ -64,6 +70,65 @@ from services.training.app.services.teacher_scope import (
 router = APIRouter(prefix="/cohorts/workspace", tags=["Cohort Workspace"])
 
 _STAFF_ROLES = {Role.SUPERADMIN.value, Role.ADMIN.value, Role.TEACHER.value}
+
+ASSIGNMENT_SUBMISSIONS_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "assignment_submissions")
+)
+ASSIGNMENT_ATTACHMENTS_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "assignment_attachments")
+)
+COHORT_DOWNLOADABLES_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "cohort_downloadables")
+)
+for _upload_dir in (ASSIGNMENT_SUBMISSIONS_DIR, ASSIGNMENT_ATTACHMENTS_DIR, COHORT_DOWNLOADABLES_DIR):
+    os.makedirs(_upload_dir, exist_ok=True)
+
+ALLOWED_SUBMISSION_EXTENSIONS = {
+    ".zip", ".tar", ".gz", ".tgz", ".7z", ".rar", ".pdf", ".docx", ".doc",
+    ".pptx", ".ppt", ".xlsx", ".xls", ".csv", ".txt", ".md", ".json",
+    ".sql", ".py", ".js", ".ts", ".java", ".cs", ".php",
+}
+ALLOWED_RESOURCE_EXTENSIONS = ALLOWED_SUBMISSION_EXTENSIONS | {".html", ".css", ".png", ".jpg", ".jpeg"}
+MAX_SUBMISSION_BYTES = 25 * 1024 * 1024
+
+
+def _format_byte_size(num_bytes: int) -> str:
+    if num_bytes < 1024:
+        return f"{num_bytes} B"
+    if num_bytes < 1024 * 1024:
+        return f"{num_bytes / 1024:.1f} KB"
+    return f"{num_bytes / (1024 * 1024):.1f} MB"
+
+
+async def _save_uploaded_file(
+    upload: UploadFile,
+    target_dir: str,
+    prefix: str,
+    allowed_exts: set[str],
+) -> tuple[str, str, str]:
+    raw_name = os.path.basename((upload.filename or "").strip())
+    if not raw_name:
+        raise HTTPException(status_code=422, detail="Uploaded file must have a valid filename.")
+    _, ext = os.path.splitext(raw_name)
+    ext_lower = ext.lower()
+    if ext_lower not in allowed_exts:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported file type '{ext_lower}'. Allowed types: PDF, ZIP, DOCX, PPTX, CSV, code/text files.",
+        )
+    content = await upload.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=422, detail="Uploaded file is empty.")
+    if len(content) > MAX_SUBMISSION_BYTES:
+        raise HTTPException(status_code=422, detail="Uploaded file exceeds the 25 MB limit.")
+
+    safe_key = f"{prefix}_{uuid.uuid4().hex}{ext_lower}"
+    dest_path = os.path.realpath(os.path.join(target_dir, safe_key))
+    if not dest_path.startswith(os.path.realpath(target_dir) + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid upload destination")
+    with open(dest_path, "wb") as fp:
+        fp.write(content)
+    return safe_key, raw_name, _format_byte_size(len(content))
 
 
 def get_db():
@@ -138,11 +203,72 @@ def _fetch_identity_learners(user_ids: list[int] | None = None) -> list[dict[str
                     "id": int(u.id),
                     "full_name": u.full_name,
                     "email": u.email,
+                    "selected_department_id": u.selected_department_id,
+                    "department_approved": bool(u.department_approved),
                 }
                 for u in rows
             ]
     except Exception:
         return []
+
+
+def _resolve_learner_departments(
+    db: Session,
+    learner_profiles: list[dict[str, Any]],
+) -> dict[int, tuple[int | None, str | None]]:
+    """Resolve each learner's concrete (department_id, department_name) from Identity, requests, and cohorts."""
+    if not learner_profiles:
+        return {}
+
+    dept_map = {
+        int(d.id): d.name
+        for d in db.scalars(select(Department).where(Department.is_active == True)).all()  # noqa: E712
+    }
+    learner_ids = [int(lp["id"]) for lp in learner_profiles]
+
+    req_dept_by_user: dict[int, int] = {}
+    from services.training.app.models.entities import StudentDepartmentRequest
+
+    req_rows = db.scalars(
+        select(StudentDepartmentRequest)
+        .where(
+            StudentDepartmentRequest.user_id.in_(learner_ids),
+            StudentDepartmentRequest.status.in_(["approved", "pending"]),
+        )
+        .order_by(StudentDepartmentRequest.id.desc())
+    ).all()
+    for r in req_rows:
+        uid = int(r.user_id)
+        if uid not in req_dept_by_user and int(r.department_id) in dept_map:
+            req_dept_by_user[uid] = int(r.department_id)
+
+    cohort_dept_by_user: dict[int, int] = {}
+    cm_rows = db.execute(
+        select(CohortMember.user_id, Cohort.department_id)
+        .join(Cohort, Cohort.id == CohortMember.cohort_id)
+        .where(
+            CohortMember.user_id.in_(learner_ids),
+            CohortMember.status == "active",
+            Cohort.status != "completed",
+        )
+    ).all()
+    for uid, did in cm_rows:
+        if int(uid) not in cohort_dept_by_user and int(did) in dept_map:
+            cohort_dept_by_user[int(uid)] = int(did)
+
+    resolved: dict[int, tuple[int | None, str | None]] = {}
+    for lp in learner_profiles:
+        uid = int(lp["id"])
+        dept_id: int | None = None
+        raw_sel = lp.get("selected_department_id")
+        if raw_sel is not None and str(raw_sel).strip().isdigit():
+            cand = int(str(raw_sel).strip())
+            if cand in dept_map:
+                dept_id = cand
+        if dept_id is None:
+            dept_id = req_dept_by_user.get(uid) or cohort_dept_by_user.get(uid)
+        resolved[uid] = (dept_id, dept_map.get(dept_id) if dept_id is not None else None)
+    return resolved
 
 
 def _item_in_scope(
@@ -163,6 +289,13 @@ def _item_in_scope(
         if int(item_dept_id) not in allowed_dept_ids:
             return False
     return True
+
+
+def _db_now(db: Session):
+    """Use the exact DB clock on MSSQL (matching server_default=func.now()) and microsecond UTC elsewhere."""
+    if db.bind is not None and db.bind.dialect.name.lower() == "mssql":
+        return func.now()
+    return datetime.now(timezone.utc)
 
 
 def _relative_label(dt: datetime | None) -> str:
@@ -186,6 +319,12 @@ def _serialize_chapter(ch: CohortChapter, lessons: list[CohortLesson]) -> dict[s
 
 
 def _serialize_lesson(les: CohortLesson) -> dict[str, Any]:
+    has_file = bool(getattr(les, "file_storage_key", None))
+    dl_url = (
+        f"/training-api/api/v1/cohorts/workspace/lessons/{int(les.id)}/file"
+        if has_file
+        else les.download_url
+    )
     return {
         "id": str(les.id),
         "backendId": int(les.id),
@@ -196,7 +335,8 @@ def _serialize_lesson(les: CohortLesson) -> dict[str, Any]:
         "description": les.description or "",
         "videoUrl": les.video_url,
         "textNotes": les.text_notes,
-        "downloadUrl": les.download_url,
+        "downloadUrl": dl_url,
+        "hasFile": has_file,
         "fileSize": les.file_size,
         "fileName": les.file_name,
         "quizQuestionsCount": les.quiz_questions_count,
@@ -208,6 +348,7 @@ def _serialize_lesson(les: CohortLesson) -> dict[str, Any]:
         "trainer": les.trainer_name,
         "departmentId": les.department_id,
         "departmentName": les.department_name,
+        "createdAt": _relative_label(les.created_at),
     }
 
 
@@ -301,8 +442,11 @@ def _build_workspace_payload(
         for les in db.scalars(
             select(CohortLesson)
             .where(CohortLesson.chapter_id.in_(chap_ids))
-            .order_by(CohortLesson.id.asc())
+            .order_by(CohortLesson.created_at.desc(), CohortLesson.id.desc())
         ).all():
+            # Live sessions live in Schedule/Cohort Details and Assignments live in Assignments — never in Curriculum/Materials
+            if (les.lesson_type or "").lower() in {"live", "assignment", "quiz"}:
+                continue
             if _item_in_scope(
                 les.cohort_id,
                 les.department_id,
@@ -355,6 +499,12 @@ def _build_workspace_payload(
             if display_sub and display_sub.status == "graded"
             else ("Submitted — Under Review" if display_sub and display_sub.status == "submitted" else f"Due on {a.due_date or 'TBD'}")
         )
+        has_att_file = bool(getattr(a, "attachment_storage_key", None))
+        resolved_att_url = (
+            f"/training-api/api/v1/cohorts/workspace/assignments/{int(a.id)}/attachment"
+            if has_att_file
+            else a.attachment_url
+        )
         assignments_out.append(
             {
                 "id": str(a.id),
@@ -368,11 +518,15 @@ def _build_workspace_payload(
                 "dueRelative": due_rel,
                 "status": status_val,
                 "attachmentName": a.attachment_name,
-                "attachmentUrl": a.attachment_url,
+                "attachmentUrl": resolved_att_url,
                 "attachmentSize": a.attachment_size,
+                "hasAttachmentFile": has_att_file,
+                "submissionId": int(display_sub.id) if display_sub else None,
                 "submissionDate": _relative_label(display_sub.submitted_at) if display_sub else None,
                 "submissionUrl": display_sub.submission_url if display_sub else None,
                 "submissionNotes": display_sub.submission_notes if display_sub else None,
+                "submissionFileName": getattr(display_sub, "submission_file_name", None) if display_sub else None,
+                "hasSubmissionFile": bool(display_sub and getattr(display_sub, "submission_file_storage_key", None)),
                 "score": display_sub.score if display_sub else None,
                 "trainerFeedback": display_sub.trainer_feedback if display_sub else None,
                 "learnerUserId": int(display_sub.learner_user_id) if display_sub else None,
@@ -389,6 +543,8 @@ def _build_workspace_payload(
                         "status": s.status,
                         "submissionUrl": s.submission_url,
                         "submissionNotes": s.submission_notes,
+                        "submissionFileName": getattr(s, "submission_file_name", None),
+                        "hasSubmissionFile": bool(getattr(s, "submission_file_storage_key", None)),
                         "submittedAt": _relative_label(s.submitted_at),
                         "score": s.score,
                         "trainerFeedback": s.trainer_feedback,
@@ -583,22 +739,29 @@ def _build_workspace_payload(
 
     if role == Role.LEARNER.value:
         learner_profiles = _fetch_identity_learners([user_id])
-    elif cohort_id is not None:
-        member_ids = [
-            int(uid)
-            for uid in db.scalars(
-                select(CohortMember.user_id).where(
-                    CohortMember.cohort_id == int(cohort_id),
-                    CohortMember.status == "active",
-                )
-            ).all()
-        ]
-        learner_profiles = _fetch_identity_learners(member_ids)
-    else:
+        learner_dept_map = _resolve_learner_departments(db, learner_profiles)
+    elif role in {Role.SUPERADMIN.value, Role.ADMIN.value}:
+        # SuperAdmin & Admin see ALL active students across ALL departments in Attendance
         learner_profiles = _fetch_identity_learners()
+        learner_dept_map = _resolve_learner_departments(db, learner_profiles)
+    elif role == Role.TEACHER.value:
+        # Teachers strictly see ONLY students belonging to their assigned department(s)
+        all_profiles = _fetch_identity_learners()
+        learner_dept_map = _resolve_learner_departments(db, all_profiles)
+        if allowed_dept_ids:
+            learner_profiles = [
+                lp
+                for lp in all_profiles
+                if learner_dept_map.get(int(lp["id"]), (None, None))[0] in allowed_dept_ids
+            ]
+        else:
+            learner_profiles = []
+    else:
+        learner_profiles = []
+        learner_dept_map = {}
 
     att_stmt = select(CohortAttendanceEntry)
-    if cohort_id is not None:
+    if cohort_id is not None and role == Role.LEARNER.value:
         att_stmt = att_stmt.where(
             (CohortAttendanceEntry.cohort_id == int(cohort_id)) | (CohortAttendanceEntry.cohort_id.is_(None))
         )
@@ -610,6 +773,7 @@ def _build_workspace_payload(
     matrix_students: list[dict[str, Any]] = []
     for lp in learner_profiles:
         lid = int(lp["id"])
+        dept_id, dept_name = learner_dept_map.get(lid, (None, None))
         daily_status: dict[str, str] = {}
         abs_cnt = 0
         lve_cnt = 0
@@ -633,6 +797,9 @@ def _build_workspace_payload(
                 "backendUserId": lid,
                 "admissionNo": f"LRN/2026/{lid:04d}",
                 "name": lp["full_name"],
+                "email": lp.get("email") or "",
+                "departmentId": dept_id,
+                "departmentName": dept_name,
                 "absCount": abs_cnt,
                 "lveCount": lve_cnt,
                 "dailyStatus": daily_status,
@@ -679,6 +846,78 @@ def _build_workspace_payload(
         ).all()
     )
 
+    # 8. Delivered Course Resource Vault materials for active batches in caller's scope
+    delivered_materials_out: list[dict[str, Any]] = []
+    deliv_stmt = (
+        select(CohortMaterialDelivery, LearningMaterial, Cohort, Course)
+        .join(LearningMaterial, LearningMaterial.id == CohortMaterialDelivery.material_id)
+        .join(Cohort, Cohort.id == CohortMaterialDelivery.cohort_id)
+        .join(Course, Course.id == CohortMaterialDelivery.course_id)
+        .where(
+            LearningMaterial.is_active == True,  # noqa: E712
+            Cohort.status != "completed",
+        )
+        .order_by(CohortMaterialDelivery.sent_at.desc(), CohortMaterialDelivery.id.desc())
+    )
+    deliv_rows = db.execute(deliv_stmt).all()
+    if deliv_rows:
+        dept_rows = db.scalars(select(Department)).all()
+        dept_name_by_id = {int(d.id): d.name for d in dept_rows}
+
+        teacher_assigned_cohorts: set[int] = set()
+        cohorts_with_explicit_teachers: set[int] = set()
+        if role == Role.TEACHER.value:
+            all_ct = db.scalars(select(CohortTeacher)).all()
+            for ct in all_ct:
+                cohorts_with_explicit_teachers.add(int(ct.cohort_id))
+                if int(ct.user_id) == user_id:
+                    teacher_assigned_cohorts.add(int(ct.cohort_id))
+
+        sender_ids = {int(deliv.sent_by_user_id) for deliv, _, _, _ in deliv_rows}
+        sender_name_map: dict[int, str] = {}
+        if sender_ids:
+            try:
+                with IdentitySessionLocal() as id_db:
+                    for u in id_db.scalars(
+                        select(IdentityUser).where(IdentityUser.id.in_(list(sender_ids)))
+                    ).all():
+                        sender_name_map[int(u.id)] = u.full_name
+            except Exception:
+                pass
+
+        for deliv, mat, cohort_row, course_row in deliv_rows:
+            c_id = int(cohort_row.id)
+            c_dept_id = int(cohort_row.department_id)
+            if role == Role.LEARNER.value:
+                if member_cohort_ids is None or c_id not in member_cohort_ids:
+                    continue
+                if allowed_dept_ids is None or c_dept_id not in allowed_dept_ids:
+                    continue
+            elif role == Role.TEACHER.value:
+                if allowed_dept_ids is None or c_dept_id not in allowed_dept_ids:
+                    continue
+                if c_id in cohorts_with_explicit_teachers and c_id not in teacher_assigned_cohorts:
+                    continue
+
+            delivered_materials_out.append(
+                {
+                    "id": int(deliv.id),
+                    "cohort_id": c_id,
+                    "cohort_name": cohort_row.name,
+                    "course_id": int(deliv.course_id),
+                    "material_id": int(mat.id),
+                    "title": mat.title,
+                    "material_type": mat.material_type,
+                    "storage_key": mat.storage_key,
+                    "department_id": c_dept_id,
+                    "department_name": dept_name_by_id.get(c_dept_id, ""),
+                    "source_department_name": dept_name_by_id.get(int(course_row.department_id), ""),
+                    "sent_by_user_id": int(deliv.sent_by_user_id),
+                    "sent_by_name": sender_name_map.get(int(deliv.sent_by_user_id), "Instructor"),
+                    "sent_at": _relative_label(deliv.sent_at),
+                }
+            )
+
     total_chaps = len(curriculum)
     total_asgs = len(assignments_out)
     total_qzs = len(quizzes_out)
@@ -709,6 +948,7 @@ def _build_workspace_payload(
         },
         progress=progress,
         bookmarkedMaterialKeys=bookmarked_keys,
+        deliveredMaterials=delivered_materials_out,
     )
 
 
@@ -788,14 +1028,46 @@ def create_lesson(
         if dept is not None:
             dept_name = dept.name
 
-    is_live = payload.type == "live" and bool(payload.is_live_now)
-    duration = payload.duration
+    # Assignments go strictly to Assignments tab (never into Curriculum & Materials)
+    if payload.type == "assignment":
+        asg = CohortAssignment(
+            cohort_id=resolved_cohort_id,
+            department_id=resolved_dept_id,
+            department_name=dept_name,
+            title=payload.title.strip(),
+            module=ch.title,
+            description=payload.description or "Complete the practical task according to rubric.",
+            points=payload.points or 100,
+            due_date=payload.scheduled_date or (date.today() + timedelta(days=7)).isoformat(),
+            requirements_json=json.dumps(["Code implementation meeting specification", "Unit tests passing 85%+"]),
+            attachment_name=payload.file_name,
+            attachment_url=payload.download_url if payload.download_url and payload.download_url != "#" else None,
+            attachment_size=payload.file_size,
+            created_by_user_id=int(current_user.id),
+        )
+        db.add(asg)
+        db.commit()
+        db.refresh(asg)
+        return {
+            "id": str(asg.id),
+            "backendId": int(asg.id),
+            "assignmentId": int(asg.id),
+            "type": "assignment",
+            "title": asg.title,
+        }
+
+    # Live sessions live strictly in Schedule & Cohort Details (via /api/v1/live-classes)
     if payload.type == "live":
-        duration = duration or "2 Hours"
-    elif payload.type == "video":
+        return {
+            "id": f"live-routed-{ch.id}",
+            "type": "live",
+            "title": payload.title.strip(),
+            "routed_to": "schedule",
+        }
+
+    duration = payload.duration if payload.type == "video" else None
+    if payload.type == "video":
         duration = duration or "15:00"
-    else:
-        duration = None
 
     les = CohortLesson(
         chapter_id=ch.id,
@@ -816,65 +1088,120 @@ def create_lesson(
         scheduled_date=payload.scheduled_date,
         scheduled_time=payload.scheduled_time,
         meeting_url=payload.meeting_url,
-        is_live_now=is_live,
+        is_live_now=False,
         trainer_name=payload.trainer or current_user.full_name,
         created_by_user_id=int(current_user.id),
+        created_at=_db_now(db),
     )
     db.add(les)
-
-    # Also create matching Assignment or Quiz SQL rows when lesson type is assignment/quiz
-    if payload.type == "assignment":
-        asg = CohortAssignment(
-            cohort_id=resolved_cohort_id,
-            department_id=resolved_dept_id,
-            department_name=dept_name,
-            title=payload.title.strip(),
-            module=ch.title,
-            description=payload.description or "Complete the practical task according to rubric.",
-            points=payload.points or 100,
-            due_date=payload.scheduled_date or (date.today() + timedelta(days=7)).isoformat(),
-            requirements_json=json.dumps(["Code implementation meeting specification", "Unit tests passing 85%+"]),
-            attachment_name=payload.file_name,
-            attachment_url=payload.download_url if payload.download_url and payload.download_url != "#" else None,
-            attachment_size=payload.file_size,
-            created_by_user_id=int(current_user.id),
-        )
-        db.add(asg)
-    elif payload.type == "quiz":
-        qz = CohortQuiz(
-            cohort_id=resolved_cohort_id,
-            department_id=resolved_dept_id,
-            department_name=dept_name,
-            title=payload.title.strip(),
-            module=ch.title,
-            questions_count=payload.quiz_questions_count or 5,
-            duration_minutes=15,
-            due_date=payload.scheduled_date or "Upcoming Sprint",
-            passing_score=70,
-            attachment_name=payload.file_name,
-            attachment_url=payload.download_url if payload.download_url and payload.download_url != "#" else None,
-            attachment_size=payload.file_size,
-            questions_json=json.dumps([
-                {
-                    "id": 1,
-                    "text": f"Core architectural checkpoint for {payload.title.strip()}",
-                    "options": [
-                        "Option A (Recommended Pattern)",
-                        "Option B (Legacy Fallback)",
-                        "Option C (Anti-Pattern)",
-                        "Option D (Incomplete Spec)",
-                    ],
-                    "correctIndex": 0,
-                    "explanation": "Based on instructor materials and attached assets.",
-                }
-            ]),
-            created_by_user_id=int(current_user.id),
-        )
-        db.add(qz)
-
     db.commit()
     db.refresh(les)
     return _serialize_lesson(les)
+
+
+@router.post("/chapters/{chapter_id}/lessons/upload", status_code=status.HTTP_201_CREATED)
+async def upload_downloadable_lesson(
+    chapter_id: int,
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    description: str = Form(default=""),
+    cohort_id: int | None = Form(default=None),
+    department_id: int | None = Form(default=None),
+    department_name: str = Form(default=""),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Upload a teacher file strictly as a Downloadable curriculum resource."""
+    _require_staff(current_user)
+    ch = db.get(CohortChapter, chapter_id)
+    if ch is None:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    resolved_dept_id = department_id if department_id is not None else ch.department_id
+    resolved_cohort_id = cohort_id if cohort_id is not None else ch.cohort_id
+    _ensure_teacher_scope_for_item(db, current_user, resolved_dept_id, resolved_cohort_id)
+
+    dept_name_val = department_name.strip() or ch.department_name or "All / Common"
+    if resolved_dept_id is not None:
+        dept = db.get(Department, int(resolved_dept_id))
+        if dept is not None:
+            dept_name_val = dept.name
+
+    safe_key, orig_name, size_str = await _save_uploaded_file(
+        file,
+        COHORT_DOWNLOADABLES_DIR,
+        f"les_ch{chapter_id}_u{int(current_user.id)}",
+        ALLOWED_RESOURCE_EXTENSIONS,
+    )
+
+    les = CohortLesson(
+        chapter_id=ch.id,
+        cohort_id=resolved_cohort_id,
+        department_id=resolved_dept_id,
+        department_name=dept_name_val,
+        title=title.strip() or orig_name,
+        lesson_type="download",
+        duration=None,
+        description=description.strip(),
+        download_url=None,
+        file_size=size_str,
+        file_name=orig_name,
+        file_storage_key=safe_key,
+        is_published=True,
+        trainer_name=current_user.full_name,
+        created_by_user_id=int(current_user.id),
+        created_at=_db_now(db),
+    )
+    db.add(les)
+    db.commit()
+    db.refresh(les)
+    les.download_url = f"/training-api/api/v1/cohorts/workspace/lessons/{int(les.id)}/file"
+    db.commit()
+    db.refresh(les)
+    return _serialize_lesson(les)
+
+
+@router.get("/lessons/{lesson_id}/file")
+def download_lesson_file(
+    lesson_id: int,
+    inline: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    les = db.get(CohortLesson, lesson_id)
+    if les is None or not getattr(les, "file_storage_key", None):
+        raise HTTPException(status_code=404, detail="Downloadable file not found")
+    role = role_str(current_user)
+    if role == Role.TEACHER.value:
+        _ensure_teacher_scope_for_item(db, current_user, les.department_id, les.cohort_id)
+    elif role == Role.LEARNER.value:
+        allowed = get_learner_allowed_dept_ids(db, int(current_user.id))
+        if allowed is None:
+            raise HTTPException(status_code=403, detail="Department approval required to download cohort files.")
+        if les.department_id is not None and int(les.department_id) not in allowed:
+            raise HTTPException(status_code=403, detail="File belongs to another department.")
+    elif role not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    file_path = os.path.realpath(os.path.join(COHORT_DOWNLOADABLES_DIR, os.path.basename(les.file_storage_key)))
+    if not file_path.startswith(os.path.realpath(COHORT_DOWNLOADABLES_DIR) + os.sep) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File missing on server")
+    import mimetypes
+
+    display_name = les.file_name or os.path.basename(les.file_storage_key)
+    guessed_mime, _ = mimetypes.guess_type(display_name)
+    media_type = "application/pdf" if display_name.lower().endswith(".pdf") else (guessed_mime or "application/octet-stream")
+    if inline:
+        safe_disp_name = display_name.replace('"', "")
+        return FileResponse(
+            path=file_path,
+            media_type=media_type,
+            headers={"Content-Disposition": f'inline; filename="{safe_disp_name}"'},
+        )
+    return FileResponse(
+        path=file_path,
+        filename=display_name,
+        media_type=media_type,
+    )
 
 
 @router.delete("/lessons/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -943,6 +1270,115 @@ def create_assignment(
     return {"id": str(asg.id), "backendId": int(asg.id), "title": asg.title}
 
 
+@router.post("/assignments/with-file", status_code=status.HTTP_201_CREATED)
+async def create_assignment_with_file(
+    title: str = Form(...),
+    module: str = Form(default="Core Module"),
+    description: str = Form(default=""),
+    points: int = Form(default=100),
+    due_date: str = Form(default=""),
+    requirements: str = Form(default="[]"),
+    cohort_id: int | None = Form(default=None),
+    department_id: int | None = Form(default=None),
+    department_name: str = Form(default="All / Common"),
+    file: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Create a CohortAssignment with an optional teacher-uploaded downloadable PDF or reference file."""
+    _require_staff(current_user)
+    _ensure_teacher_scope_for_item(db, current_user, department_id, cohort_id)
+
+    dept_name_val = department_name.strip() or "All / Common"
+    if department_id is not None:
+        dept = db.get(Department, int(department_id))
+        if dept is not None:
+            dept_name_val = dept.name
+
+    req_list = _parse_json(requirements, None)
+    if not isinstance(req_list, list):
+        req_list = [line.strip() for line in (requirements or "").splitlines() if line.strip()]
+    if not req_list:
+        req_list = ["Implement required functionality"]
+
+    stored_key: str | None = None
+    orig_name: str | None = None
+    size_str: str | None = None
+    if file is not None and file.filename:
+        stored_key, orig_name, size_str = await _save_uploaded_file(
+            file,
+            ASSIGNMENT_ATTACHMENTS_DIR,
+            f"asg_att_u{int(current_user.id)}",
+            ALLOWED_RESOURCE_EXTENSIONS,
+        )
+
+    asg = CohortAssignment(
+        cohort_id=cohort_id,
+        department_id=department_id,
+        department_name=dept_name_val,
+        title=title.strip(),
+        module=module.strip() or "Core Module",
+        description=description.strip() or "Complete the practical task according to rubric.",
+        points=max(1, int(points or 100)),
+        due_date=due_date.strip() or (date.today() + timedelta(days=7)).isoformat(),
+        requirements_json=json.dumps(req_list),
+        attachment_name=orig_name,
+        attachment_size=size_str,
+        attachment_storage_key=stored_key,
+        created_by_user_id=int(current_user.id),
+    )
+    db.add(asg)
+    db.commit()
+    db.refresh(asg)
+    if stored_key:
+        asg.attachment_url = f"/training-api/api/v1/cohorts/workspace/assignments/{int(asg.id)}/attachment"
+        db.commit()
+        db.refresh(asg)
+
+    return {
+        "id": str(asg.id),
+        "backendId": int(asg.id),
+        "title": asg.title,
+        "attachmentName": asg.attachment_name,
+        "attachmentUrl": asg.attachment_url,
+        "attachmentSize": asg.attachment_size,
+        "hasAttachmentFile": bool(stored_key),
+    }
+
+
+@router.get("/assignments/{assignment_id}/attachment")
+def download_assignment_attachment(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    asg = db.get(CohortAssignment, assignment_id)
+    if asg is None or not getattr(asg, "attachment_storage_key", None):
+        raise HTTPException(status_code=404, detail="Assignment attachment not found")
+    role = role_str(current_user)
+    if role == Role.TEACHER.value:
+        _ensure_teacher_scope_for_item(db, current_user, asg.department_id, asg.cohort_id)
+    elif role == Role.LEARNER.value:
+        allowed = get_learner_allowed_dept_ids(db, int(current_user.id))
+        if allowed is None:
+            raise HTTPException(status_code=403, detail="Department approval required to download assignment files.")
+        if asg.department_id is not None and int(asg.department_id) not in allowed:
+            raise HTTPException(status_code=403, detail="Assignment belongs to another department.")
+    elif role not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    file_path = os.path.realpath(
+        os.path.join(ASSIGNMENT_ATTACHMENTS_DIR, os.path.basename(asg.attachment_storage_key))
+    )
+    if not file_path.startswith(os.path.realpath(ASSIGNMENT_ATTACHMENTS_DIR) + os.sep) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Attachment file missing on server")
+    return FileResponse(
+        path=file_path,
+        filename=asg.attachment_name or os.path.basename(asg.attachment_storage_key),
+        media_type="application/octet-stream",
+    )
+
+
 @router.post("/assignments/{assignment_id}/submit")
 def submit_assignment(
     assignment_id: int,
@@ -960,27 +1396,154 @@ def submit_assignment(
             CohortAssignmentSubmission.learner_user_id == int(current_user.id),
         )
     )
-    if sub is None:
-        sub = CohortAssignmentSubmission(
-            assignment_id=assignment_id,
-            learner_user_id=int(current_user.id),
-            learner_name=current_user.full_name,
-            learner_email=current_user.email,
-            status="submitted",
-            submission_url=payload.submission_url.strip(),
-            submission_notes=payload.submission_notes.strip(),
-            trainer_feedback="Submission received successfully and queued for trainer evaluation.",
+    if sub is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Assignment has already been submitted and is permanently locked. Resubmission or editing is not permitted.",
         )
-        db.add(sub)
-    else:
-        sub.submission_url = payload.submission_url.strip()
-        sub.submission_notes = payload.submission_notes.strip()
-        sub.status = "submitted"
-        sub.submitted_at = datetime.now(timezone.utc)
-        sub.trainer_feedback = "Submission received successfully and queued for trainer evaluation."
+
+    sub = CohortAssignmentSubmission(
+        assignment_id=assignment_id,
+        learner_user_id=int(current_user.id),
+        learner_name=current_user.full_name,
+        learner_email=current_user.email,
+        status="submitted",
+        submission_url=payload.submission_url.strip(),
+        submission_notes=payload.submission_notes.strip(),
+        trainer_feedback="Submission received and locked for manual trainer evaluation.",
+    )
+    db.add(sub)
     db.commit()
     db.refresh(sub)
     return {"id": int(sub.id), "status": sub.status}
+
+
+@router.post("/assignments/{assignment_id}/submit-file")
+async def submit_assignment_with_file(
+    assignment_id: int,
+    file: UploadFile | None = File(default=None),
+    submission_url: str = Form(default=""),
+    submission_notes: str = Form(default=""),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    asg = db.get(CohortAssignment, assignment_id)
+    if asg is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    existing = db.scalar(
+        select(CohortAssignmentSubmission).where(
+            CohortAssignmentSubmission.assignment_id == assignment_id,
+            CohortAssignmentSubmission.learner_user_id == int(current_user.id),
+        )
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Assignment has already been submitted and is permanently locked. Resubmission or editing is not permitted.",
+        )
+
+    clean_url = (submission_url or "").strip()
+    clean_notes = (submission_notes or "").strip()
+    stored_key: str | None = None
+    original_name: str | None = None
+
+    if file is not None and file.filename:
+        raw_name = os.path.basename(file.filename.strip())
+        _, ext = os.path.splitext(raw_name)
+        ext_lower = ext.lower()
+        if ext_lower not in ALLOWED_SUBMISSION_EXTENSIONS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unsupported file type '{ext_lower}'. Allowed: .zip, .tar.gz, .7z, .rar, .pdf, code files.",
+            )
+        content = await file.read()
+        if len(content) == 0:
+            raise HTTPException(status_code=422, detail="Uploaded archive file is empty.")
+        if len(content) > MAX_SUBMISSION_BYTES:
+            raise HTTPException(status_code=422, detail="Submission file exceeds the 25 MB limit.")
+
+        safe_key = f"asg_{assignment_id}_u{int(current_user.id)}_{uuid.uuid4().hex}{ext_lower}"
+        dest_path = os.path.realpath(os.path.join(ASSIGNMENT_SUBMISSIONS_DIR, safe_key))
+        if not dest_path.startswith(os.path.realpath(ASSIGNMENT_SUBMISSIONS_DIR) + os.sep):
+            raise HTTPException(status_code=400, detail="Invalid upload destination")
+        with open(dest_path, "wb") as fp:
+            fp.write(content)
+        stored_key = safe_key
+        original_name = raw_name
+
+    if not clean_url and not stored_key:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide a GitHub/repository link or upload a .zip submission archive.",
+        )
+
+    effective_url = (
+        clean_url
+        or f"/api/v1/cohorts/workspace/assignments/{assignment_id}/submissions/file-ByLearner/{int(current_user.id)}"
+    )
+    sub = CohortAssignmentSubmission(
+        assignment_id=assignment_id,
+        learner_user_id=int(current_user.id),
+        learner_name=current_user.full_name,
+        learner_email=current_user.email,
+        status="submitted",
+        submission_url=effective_url,
+        submission_notes=clean_notes,
+        submission_file_name=original_name,
+        submission_file_storage_key=stored_key,
+        trainer_feedback="Submission received and locked for manual trainer evaluation.",
+    )
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+    if not clean_url and stored_key:
+        sub.submission_url = f"/api/v1/cohorts/workspace/assignments/{assignment_id}/submissions/{int(sub.id)}/file"
+        db.commit()
+        db.refresh(sub)
+
+    return {
+        "id": int(sub.id),
+        "submission_id": int(sub.id),
+        "status": sub.status,
+        "submission_url": sub.submission_url,
+        "file_name": sub.submission_file_name,
+        "submission_file_name": sub.submission_file_name,
+    }
+
+
+@router.get("/assignments/{assignment_id}/submissions/{submission_id}/file")
+def download_assignment_submission_file(
+    assignment_id: int,
+    submission_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    asg = db.get(CohortAssignment, assignment_id)
+    if asg is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    sub = db.get(CohortAssignmentSubmission, submission_id)
+    if sub is None or int(sub.assignment_id) != int(assignment_id):
+        raise HTTPException(status_code=404, detail="Assignment submission not found")
+
+    role = role_str(current_user)
+    if role in _STAFF_ROLES:
+        _ensure_teacher_scope_for_item(db, current_user, asg.department_id, asg.cohort_id)
+    elif int(sub.learner_user_id) != int(current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized to download this submission")
+
+    if not sub.submission_file_storage_key:
+        raise HTTPException(status_code=404, detail="No uploaded file attached to this submission")
+
+    file_path = os.path.realpath(os.path.join(ASSIGNMENT_SUBMISSIONS_DIR, sub.submission_file_storage_key))
+    if not file_path.startswith(os.path.realpath(ASSIGNMENT_SUBMISSIONS_DIR) + os.sep) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Uploaded submission file is missing on server")
+
+    return FileResponse(
+        path=file_path,
+        filename=sub.submission_file_name or sub.submission_file_storage_key,
+        media_type="application/octet-stream",
+    )
 
 
 @router.post("/assignments/{assignment_id}/grade")

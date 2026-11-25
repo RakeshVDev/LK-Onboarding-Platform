@@ -57,7 +57,17 @@ export class LearnerAssessments implements OnInit {
       item => item.status === 'NOT_STARTED' || item.status === 'IN_PROGRESS'
     ).length
   );
+  readonly hasPriorityPreAssessment = computed(() =>
+    this.assessments().some(
+      item =>
+        item.is_priority_pre_assessment === true &&
+        (item.status === 'NOT_STARTED' || item.status === 'IN_PROGRESS')
+    )
+  );
   readonly allCompleted = computed(() => {
+    if (this.hasPriorityPreAssessment()) {
+      return false;
+    }
     const status = this.assessmentStatusService.statusState();
     if (status?.all_completed === true || status?.has_approved_department === true) {
       return true;
@@ -299,6 +309,25 @@ export class LearnerAssessments implements OnInit {
     }
   }
 
+  downloadQuestionPdf(item: StudentAssignedAssessmentItem): void {
+    this.api.downloadQuestionPdf(item.template_id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = item.question_pdf_name || `${item.name.replace(/\s+/g, '_')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        this.errorMessage.set(err?.error?.detail || 'Unable to download question paper PDF.');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   startAssessment(item: StudentAssignedAssessmentItem): void {
     if (item.status === 'COMPLETED') {
       this.errorMessage.set(`You have already completed the ${item.name}. Only one attempt is permitted.`);
@@ -332,6 +361,7 @@ export class LearnerAssessments implements OnInit {
           {
             state: {
               sessionId: session.session_id,
+              templateId: session.template_id || item.template_id,
               questions: session.questions,
               startedAt: session.started_at,
               expiresAt: session.expires_at,
@@ -339,6 +369,10 @@ export class LearnerAssessments implements OnInit {
               remainingSeconds: session.remaining_seconds,
               templateName: session.template_name || item.name,
               assessmentType: session.assessment_type || item.assessment_type,
+              assessmentMode: session.assessment_mode || item.assessment_mode || 'mcq',
+              hasQuestionPdf: Boolean(session.has_question_pdf ?? item.has_question_pdf),
+              questionPdfName: session.question_pdf_name || item.question_pdf_name || null,
+              maxMarks: session.max_marks || item.max_score || 100,
               assignedSet: session.assigned_set || undefined,
             }
           }

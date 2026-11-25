@@ -123,7 +123,7 @@ class LearningMaterial(Base):
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     material_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

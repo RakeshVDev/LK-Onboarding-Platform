@@ -37,6 +37,7 @@ from services.training.app.schemas.cohort import (
 )
 from services.training.app.services.course_sync import (
     MAX_BATCH_TEACHERS,
+    deassign_teachers_from_department_if_unused,
     ensure_course_for_department,
     ensure_teacher_has_department,
     purge_cohort_records,
@@ -491,13 +492,32 @@ def update_cohort(
             detail="A cohort with this name already exists in the department",
         )
 
+    was_completed = (cohort.status or "").lower() == "completed"
     for field, value in changes.items():
         if field == "status" and str(value).lower() == "completed":
             _require_superadmin(current_user, "Only SuperAdmin can end a batch.")
         setattr(cohort, field, value)
 
+    completed_now = not was_completed and (cohort.status or "").lower() == "completed"
+    ended_teacher_ids: list[int] = []
+    if completed_now:
+        ended_teacher_ids = [
+            int(uid)
+            for uid in db.scalars(
+                select(CohortTeacher.user_id).where(CohortTeacher.cohort_id == cohort_id)
+            ).all()
+        ]
+
     db.commit()
     db.refresh(cohort)
+
+    if completed_now and ended_teacher_ids:
+        deassign_teachers_from_department_if_unused(
+            db,
+            ended_teacher_ids,
+            int(cohort.department_id),
+            identity_session_factory=IdentitySessionLocal,
+        )
     return _build_cohort_responses(db, [cohort])[0]
 
 
@@ -520,6 +540,13 @@ def update_cohort_teachers(
             detail=f"A batch must be assigned between 1 and {MAX_BATCH_TEACHERS} teachers.",
         )
 
+    previous_teacher_ids = {
+        int(uid)
+        for uid in db.scalars(
+            select(CohortTeacher.user_id).where(CohortTeacher.cohort_id == cohort_id)
+        ).all()
+    }
+
     for tid in clean_teacher_ids:
         ensure_teacher_has_department(
             db,
@@ -540,6 +567,15 @@ def update_cohort_teachers(
         )
     db.commit()
     db.refresh(cohort)
+
+    removed_teacher_ids = previous_teacher_ids - set(clean_teacher_ids)
+    if removed_teacher_ids:
+        deassign_teachers_from_department_if_unused(
+            db,
+            removed_teacher_ids,
+            int(cohort.department_id),
+            identity_session_factory=IdentitySessionLocal,
+        )
     return _build_cohort_responses(db, [cohort])[0]
 
 
@@ -550,12 +586,17 @@ def end_cohort(
     current_user=Depends(get_current_user),
 ):
     _require_superadmin(current_user, "Only SuperAdmin can end a batch/cohort.")
-    cohort = purge_cohort_records(db, cohort_id, delete_cohort_row=True)
+    cohort = purge_cohort_records(
+        db,
+        cohort_id,
+        delete_cohort_row=True,
+        identity_session_factory=IdentitySessionLocal,
+    )
     return {
         "status": "deleted",
         "cohort_id": cohort_id,
         "name": cohort.name,
-        "message": "Batch ended and all cohort records/deliveries purged. Course Permanent Vault preserved.",
+        "message": "Batch ended, cohort records purged, and teachers de-assigned from the department if no other active batch remains. Course Permanent Vault preserved.",
     }
 
 
@@ -634,7 +675,12 @@ def delete_cohort(
     current_user=Depends(get_current_user),
 ):
     _require_superadmin(current_user, "Only SuperAdmin can delete or end a batch/cohort.")
-    purge_cohort_records(db, cohort_id, delete_cohort_row=True)
+    purge_cohort_records(
+        db,
+        cohort_id,
+        delete_cohort_row=True,
+        identity_session_factory=IdentitySessionLocal,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -1594,6 +1594,203 @@ class CourseVaultAndBatchWorkflowTests(unittest.TestCase):
         self.assertEqual({r["session_id"] for r in sa_history["results"]}, {old_sess_id, new_sess_id})
         self.assertEqual(sa_history["results"][0]["learner_name"], "Alice Included")
 
+    def test_dept_scoped_priority_pre_assessment_locks_navbar_and_pdf_manual_grading(self) -> None:
+        from services.training.app.db import session as tr_db_session
+
+        tr_sess_patch = patch.object(tr_db_session, "SessionLocal", self.TrSession)
+        tr_sess_patch.start()
+        self.addCleanup(tr_sess_patch.stop)
+
+        # Fetch or create Java department + Java-approved learner to verify strict department inclusion/exclusion
+        with self.TrSession() as tdb:
+            java_dept = tdb.scalar(select(Department).where(Department.name == "Java"))
+            if java_dept is None:
+                java_dept = Department(name="Java", is_active=True)
+                tdb.add(java_dept)
+                tdb.commit()
+                tdb.refresh(java_dept)
+            java_dept_id = java_dept.id
+
+        py_dept_id = self.py_dept.id
+        learner_in_id = self.learner_in.id
+        sa1_id = self.sa1.id
+
+        with self.IdSession() as idb:
+            pw = hash_password("StrongPass123!")
+            java_learner = IdentityUser(
+                full_name="Bob Java",
+                email="bob_java@lk.test",
+                password_hash=pw,
+                role=Role.LEARNER.value,
+                is_active=True,
+                all_assessments_completed=True,
+                is_activated_by_admin=True,
+                selected_department_id=str(java_dept_id),
+                department_approved=True,
+            )
+            py_teacher = IdentityUser(
+                full_name="Python Instructor",
+                email="py_inst@lk.test",
+                password_hash=pw,
+                role=Role.TEACHER.value,
+                is_active=True,
+                all_assessments_completed=True,
+                is_activated_by_admin=True,
+                department_approved=True,
+            )
+            idb.add_all([java_learner, py_teacher])
+            idb.commit()
+            idb.refresh(java_learner)
+            idb.refresh(py_teacher)
+            java_learner_id = int(java_learner.id)
+            py_teacher_id = int(py_teacher.id)
+            from services.identity.app.models.user import UserDepartment
+
+            idb.add(
+                UserDepartment(
+                    user_id=py_teacher_id,
+                    department_id=py_dept_id,
+                    assigned_by_user_id=sa1_id,
+                )
+            )
+            idb.commit()
+
+        with self.TrSession() as tdb:
+            tdb.add(
+                StudentDepartmentRequest(
+                    user_id=java_learner_id,
+                    department_id=java_dept_id,
+                    status="approved",
+                )
+            )
+            tdb.commit()
+
+        # Before publishing Python Pre-Assessment: Alice (Python) has unlocked sidebar
+        perms_before = self.id_client.get("/api/navigation/permissions", headers=self._hdr(learner_in_id)).json()
+        self.assertTrue(perms_before["is_unlocked"])
+        self.assertNotIn("live_classes", perms_before["nav_items"])
+
+        # Python Instructor creates a Python-specific PDF Pre-Assessment (scope="all" -> all Python learners only)
+        create_res = self.tr_client.post(
+            "/api/v1/assessments/templates",
+            headers=self._hdr(py_teacher_id),
+            json={
+                "name": "Python Architecture PDF Pre-Assessment",
+                "department_id": py_dept_id,
+                "assessment_type": "technical",
+                "assessment_tag": "Pre-Assessment",
+                "assessment_mode": "pdf_submission",
+                "max_marks": 50,
+                "question_count": 1,
+                "duration_minutes": 45,
+                "category_config": {"python": {"label": "Python", "question_count": 1}},
+                "assignment_scope": "all",
+            },
+        )
+        self.assertEqual(create_res.status_code, 201, create_res.text)
+        pdf_tpl_id = create_res.json()["id"]
+
+        # Upload Question Paper PDF
+        pdf_bytes = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF"
+        up_res = self.tr_client.post(
+            f"/api/v1/assessments/templates/{pdf_tpl_id}/question-pdf",
+            headers=self._hdr(py_teacher_id),
+            files={"file": ("python_questions.pdf", pdf_bytes, "application/pdf")},
+        )
+        self.assertEqual(up_res.status_code, 200, up_res.text)
+        self.assertTrue(up_res.json()["has_question_pdf"])
+
+        # Java learner MUST NOT see Python Pre-Assessment and keeps unlocked navbar
+        java_assigned = self.tr_client.get("/api/v1/assessments/my/assigned", headers=self._hdr(java_learner_id)).json()
+        self.assertNotIn(pdf_tpl_id, [a["template_id"] for a in java_assigned["assessments"]])
+        java_perms = self.id_client.get("/api/navigation/permissions", headers=self._hdr(java_learner_id)).json()
+        self.assertTrue(java_perms["is_unlocked"])
+
+        # Python learner (Alice) sees Python Pre-Assessment as #1 Priority AND her side navbar is locked!
+        py_assigned = self.tr_client.get("/api/v1/assessments/my/assigned", headers=self._hdr(learner_in_id)).json()
+        self.assertGreaterEqual(len(py_assigned["assessments"]), 1)
+        first_item = py_assigned["assessments"][0]
+        self.assertEqual(first_item["template_id"], pdf_tpl_id)
+        self.assertTrue(first_item["is_priority_pre_assessment"])
+        self.assertEqual(first_item["assessment_mode"], "pdf_submission")
+
+        py_status_locked = self.tr_client.get("/api/v1/assessments/my/status", headers=self._hdr(learner_in_id)).json()
+        self.assertFalse(py_status_locked["all_completed"])
+        self.assertFalse(py_status_locked["pre_assessments_completed"])
+        self.assertEqual(py_status_locked["onboarding_stage"], "assessment_pending")
+
+        py_perms_locked = self.id_client.get("/api/navigation/permissions", headers=self._hdr(learner_in_id)).json()
+        self.assertFalse(py_perms_locked["is_unlocked"])
+        self.assertEqual(py_perms_locked["onboarding_stage"], "assessment_pending")
+
+        # Alice downloads Question PDF, starts PDF assessment, and submits GitHub + ZIP archive
+        dl_pdf = self.tr_client.get(
+            f"/api/v1/assessments/templates/{pdf_tpl_id}/question-pdf",
+            headers=self._hdr(learner_in_id),
+        )
+        self.assertEqual(dl_pdf.status_code, 200)
+        self.assertEqual(dl_pdf.content, pdf_bytes)
+
+        start_res = self.tr_client.post(
+            "/api/v1/assessments/start",
+            headers=self._hdr(learner_in_id),
+            json={"template_id": pdf_tpl_id},
+        )
+        self.assertIn(start_res.status_code, (200, 201), start_res.text)
+        self.assertEqual(start_res.json()["assessment_mode"], "pdf_submission")
+        pdf_sess_id = start_res.json()["session_id"]
+
+        sub_proj = self.tr_client.post(
+            f"/api/v1/assessments/sessions/{pdf_sess_id}/submit-project",
+            headers=self._hdr(learner_in_id),
+            data={"github_url": "https://github.com/alice/py-arch", "notes": "Clean architecture solution"},
+            files={"file": ("alice_solution.zip", b"PK\x03\x04alicezip", "application/zip")},
+        )
+        self.assertEqual(sub_proj.status_code, 200, sub_proj.text)
+        self.assertEqual(sub_proj.json()["grading_status"], "pending_review")
+
+        # Immediately upon finishing the Pre-Assessment, Alice's side navbar unlocks again!
+        py_perms_unlocked = self.id_client.get("/api/navigation/permissions", headers=self._hdr(learner_in_id)).json()
+        self.assertTrue(py_perms_unlocked["is_unlocked"])
+
+        # Before manual grading: ZERO auto-score, report generation blocked with 409, status = pending_review
+        res_pending = self.tr_client.get(
+            f"/api/v1/assessments/sessions/{pdf_sess_id}/results",
+            headers=self._hdr(learner_in_id),
+        ).json()
+        self.assertEqual(res_pending["grading_status"], "pending_review")
+        self.assertEqual(res_pending["categories"], [])
+        self.assertEqual(
+            self.tr_client.post(
+                f"/api/v1/assessments/sessions/{pdf_sess_id}/report",
+                headers=self._hdr(learner_in_id),
+            ).status_code,
+            409,
+        )
+
+        # Teacher downloads Alice's submitted ZIP and grades it manually -> score & report unlock!
+        dl_zip = self.tr_client.get(
+            f"/api/v1/assessments/sessions/{pdf_sess_id}/submission-file",
+            headers=self._hdr(py_teacher_id),
+        )
+        self.assertEqual(dl_zip.status_code, 200)
+        self.assertEqual(dl_zip.content, b"PK\x03\x04alicezip")
+
+        grade_res = self.tr_client.post(
+            f"/api/v1/assessments/sessions/{pdf_sess_id}/grade-project",
+            headers=self._hdr(py_teacher_id),
+            json={"score": 46, "max_score": 50, "feedback": "Excellent modular design and tests."},
+        )
+        self.assertEqual(grade_res.status_code, 200, grade_res.text)
+        self.assertEqual(grade_res.json()["grading_status"], "manually_graded")
+        self.assertEqual(grade_res.json()["overall_percentage"], 92.0)
+
+        rep_after = self.tr_client.get(
+            f"/api/v1/assessments/sessions/{pdf_sess_id}/report",
+            headers=self._hdr(learner_in_id),
+        )
+        self.assertEqual(rep_after.status_code, 200, rep_after.text)
+
 
 if __name__ == "__main__":
     unittest.main()
