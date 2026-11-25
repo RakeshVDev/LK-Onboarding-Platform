@@ -114,6 +114,39 @@ async def lifespan(app: FastAPI):
             if "cohorts" in tables:
                 _ensure_column(conn, "cohorts", "course_id", "INT NULL")
 
+            if "learning_materials" in tables and conn.dialect.name.lower() == "mssql":
+                try:
+                    max_len = conn.execute(text("""
+                        SELECT max_length
+                        FROM sys.columns
+                        WHERE object_id = OBJECT_ID('learning_materials') AND name = 'storage_key'
+                    """)).scalar()
+                    if max_len is not None and int(max_len) != -1:
+                        conn.execute(text("ALTER TABLE learning_materials ALTER COLUMN storage_key NVARCHAR(MAX) NOT NULL"))
+                except Exception:
+                    pass
+
+            if "live_class_sessions" in tables:
+                _ensure_column(conn, "live_class_sessions", "ended_at", "DATETIME NULL")
+                if conn.dialect.name.lower() == "mssql":
+                    lc_not_null = conn.execute(text("""
+                        SELECT CASE WHEN is_nullable = 0 THEN 1 ELSE 0 END
+                        FROM sys.columns
+                        WHERE object_id = OBJECT_ID('live_class_sessions') AND name = 'instructor_user_id'
+                    """)).scalar()
+                    if lc_not_null:
+                        conn.execute(text("ALTER TABLE live_class_sessions ALTER COLUMN instructor_user_id INT NULL"))
+
+            if "cohort_lessons" in tables:
+                _ensure_column(conn, "cohort_lessons", "file_storage_key", "VARCHAR(500) NULL")
+
+            if "cohort_assignments" in tables:
+                _ensure_column(conn, "cohort_assignments", "attachment_storage_key", "VARCHAR(500) NULL")
+
+            if "cohort_assignment_submissions" in tables:
+                _ensure_column(conn, "cohort_assignment_submissions", "submission_file_name", "VARCHAR(255) NULL")
+                _ensure_column(conn, "cohort_assignment_submissions", "submission_file_storage_key", "VARCHAR(500) NULL")
+
             if "assessment_templates" in tables:
                 _ensure_column(conn, "assessment_templates", "department_id", "INT NULL")
                 _ensure_column(conn, "assessment_templates", "assessment_tag", "VARCHAR(40) NOT NULL DEFAULT 'Assessment'")
@@ -149,6 +182,14 @@ async def lifespan(app: FastAPI):
                 _ensure_column(conn, "assessment_sessions", "assessment_type_snapshot", "VARCHAR(40) NULL")
                 _ensure_column(conn, "assessment_sessions", "assessment_tag_snapshot", "VARCHAR(40) NULL")
                 _ensure_column(conn, "assessment_sessions", "department_id_snapshot", "INT NULL")
+                _ensure_column(conn, "assessment_sessions", "submission_type", "VARCHAR(30) NOT NULL DEFAULT 'mcq'")
+                _ensure_column(conn, "assessment_sessions", "grading_status", "VARCHAR(30) NOT NULL DEFAULT 'auto_graded'")
+                _ensure_column(conn, "assessment_sessions", "submission_github_url", "VARCHAR(500) NULL")
+                _ensure_column(conn, "assessment_sessions", "submission_file_storage_key", "VARCHAR(500) NULL")
+                _ensure_column(conn, "assessment_sessions", "submission_file_name", "VARCHAR(255) NULL")
+                _ensure_column(conn, "assessment_sessions", "submission_notes", "TEXT NULL")
+                _ensure_column(conn, "assessment_sessions", "graded_by_user_id", "INT NULL")
+                _ensure_column(conn, "assessment_sessions", "trainer_feedback", "TEXT NULL")
 
                 if conn.dialect.name.lower() == "mssql":
                     for tbl_name, fk_suffix in (

@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener, inject, ElementRef, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, inject, ElementRef, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -30,10 +30,16 @@ interface CommandItem {
   templateUrl: './main-layout.html',
   styleUrl: './main-layout.scss'
 })
-export class MainLayout implements OnInit {
+export class MainLayout implements OnInit, OnDestroy {
   sidebarOpen = false;
   profileMenuOpen = false;
   user: CurrentUser | null = null;
+  private learnerGateSyncTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly onWindowFocusSync = () => {
+    if (this.isLearner && typeof document !== 'undefined' && !document.hidden) {
+      void this.syncLearnerGateState();
+    }
+  };
 
   commandPaletteOpen = signal(false);
   commandQuery = signal('');
@@ -56,10 +62,47 @@ export class MainLayout implements OnInit {
       }
     }
     if (this.isLearner) {
-      await Promise.allSettled([
-        this.assessmentStatusService.getStatus(),
-        this.onboardingService.getPermissions()
-      ]);
+      await this.syncLearnerGateState();
+      if (typeof window !== 'undefined') {
+        window.addEventListener('focus', this.onWindowFocusSync);
+        this.learnerGateSyncTimer = setInterval(() => {
+          if (typeof document === 'undefined' || !document.hidden) {
+            void this.syncLearnerGateState();
+          }
+        }, 12000);
+      }
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.learnerGateSyncTimer) {
+      clearInterval(this.learnerGateSyncTimer);
+      this.learnerGateSyncTimer = null;
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', this.onWindowFocusSync);
+    }
+  }
+
+  private async syncLearnerGateState(): Promise<void> {
+    const [, permsRes] = await Promise.allSettled([
+      this.assessmentStatusService.getStatus(true),
+      this.onboardingService.getPermissions(true)
+    ]);
+    if (permsRes.status === 'fulfilled' && !permsRes.value.is_unlocked) {
+      const currentUrl = this.router.url || '';
+      const allowedWhenLocked = [
+        '/my-assessments',
+        '/my-results',
+        '/my-reports',
+        '/assessments/take/',
+        '/assessments/results/',
+        '/assessments/report/',
+        ...(permsRes.value.can_select_department ? ['/department-selection'] : []),
+      ];
+      if (!allowedWhenLocked.some(prefix => currentUrl.startsWith(prefix))) {
+        void this.router.navigateByUrl(permsRes.value.redirect_to || '/my-assessments');
+      }
     }
   }
 
@@ -245,18 +288,10 @@ export class MainLayout implements OnInit {
         {
           id: 'cohorts',
           label: 'Cohorts & Batches',
-          description: 'Manage active batches, timetables & assignments',
+          description: 'Manage active batches, live sessions, timetables & assignments',
           group: 'Academic & Learning',
           route: '/cohorts',
-          keywords: 'batches schedule timetable attendance quizzes'
-        },
-        {
-          id: 'live-classes',
-          label: 'Live Classes',
-          description: 'Department live streams & scheduled video workshops',
-          group: 'Academic & Learning',
-          route: '/live-classes',
-          keywords: 'video meeting stream session workshop'
+          keywords: 'batches schedule timetable attendance live video session'
         }
       );
 

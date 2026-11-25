@@ -40,7 +40,16 @@
     </div>
   </header>
 
-  @if (!loading() && assessments().length > 0 && !allCompleted()) {
+  @if (!loading() && hasPriorityPreAssessment()) {
+    <div class="onboarding-gate-banner gate-pending" role="status">
+      <div>
+        <strong>⚡ Priority 1: Pre-Assessment Required — Sidebar Navigation Locked</strong>
+        <p>
+          A mandatory Pre-Assessment is available below at #1 priority. Your side navigation bar and regular assessments remain locked until every pending Pre-Assessment is completed.
+        </p>
+      </div>
+    </div>
+  } @else if (!loading() && assessments().length > 0 && !allCompleted()) {
     <div class="onboarding-gate-banner gate-pending" role="status">
       <div>
         <strong>Mandatory Onboarding Evaluation: {{ completedCount() }} of {{ assessments().length }} Completed</strong>
@@ -115,9 +124,21 @@
 
           <div class="card-header">
             <div class="badge-cluster">
+              @if (item.is_priority_pre_assessment) {
+                <span class="status-badge badge-pending" style="background:#fef3c7; color:#92400e; font-weight:700;">
+                  ⚡ PRIORITY 1 · PRE-ASSESSMENT
+                </span>
+              } @else if (item.assessment_tag === 'Pre-Assessment') {
+                <span class="type-badge" [attr.data-type]="item.assessment_type">Pre-Assessment</span>
+              }
               <span class="type-badge" [attr.data-type]="item.assessment_type">
                 {{ item.category_label }}
               </span>
+              @if (item.assessment_mode === 'pdf_submission') {
+                <span class="type-badge" style="background:#eef2ff; color:#3730a3;">
+                  📄 PDF + GitHub/ZIP
+                </span>
+              }
 
               <!-- Lifecycle Status Badge (NOT_STARTED / IN_PROGRESS / COMPLETED / EXPIRED) -->
               @if (item.status === 'COMPLETED') {
@@ -150,6 +171,9 @@
           </p>
 
           <div class="assignment-meta-chips">
+            @if (item.department_name) {
+              <span class="meta-pill meta-cohort">{{ item.department_name }}</span>
+            }
             @if (item.cohort_name) {
               <span class="meta-pill meta-cohort">Cohort: {{ item.cohort_name }}</span>
             } @else if (item.assignment_scope === 'learner') {
@@ -166,20 +190,33 @@
           <!-- CASE 1: COMPLETED (One Attempt Consumed) -->
           @if (item.status === 'COMPLETED') {
             <div class="completed-summary-box">
-              <div class="summary-stat-row">
-                <div class="stat-cell">
-                  <span class="cell-label">SCORE OBTAINED</span>
-                  <strong>{{ item.total_score ?? 0 }} / {{ item.max_score ?? item.question_count }}</strong>
+              @if (item.grading_status === 'pending_review') {
+                <div class="summary-stat-row">
+                  <div class="stat-cell">
+                    <span class="cell-label">GRADING STATUS</span>
+                    <strong style="color:#b45309;">⏳ Pending Manual Teacher Grading</strong>
+                  </div>
+                  <div class="stat-cell">
+                    <span class="cell-label">MAX MARKS</span>
+                    <strong>{{ item.max_score ?? 100 }}</strong>
+                  </div>
                 </div>
-                <div class="stat-cell">
-                  <span class="cell-label">PERCENTAGE</span>
-                  <strong class="cell-pct">{{ item.overall_percentage ?? 0 }}%</strong>
+              } @else {
+                <div class="summary-stat-row">
+                  <div class="stat-cell">
+                    <span class="cell-label">SCORE OBTAINED</span>
+                    <strong>{{ item.total_score ?? 0 }} / {{ item.max_score ?? item.question_count }}</strong>
+                  </div>
+                  <div class="stat-cell">
+                    <span class="cell-label">PERCENTAGE</span>
+                    <strong class="cell-pct">{{ item.overall_percentage ?? 0 }}%</strong>
+                  </div>
+                  <div class="stat-cell">
+                    <span class="cell-label">ATTEMPT STATUS</span>
+                    <strong class="text-green">Submitted</strong>
+                  </div>
                 </div>
-                <div class="stat-cell">
-                  <span class="cell-label">ATTEMPT STATUS</span>
-                  <strong class="text-green">Submitted</strong>
-                </div>
-              </div>
+              }
 
               @if (item.completed_at) {
                 <span class="completed-timestamp">
@@ -188,13 +225,13 @@
               }
             </div>
 
-            @if (item.session_id) {
+            @if (item.session_id && item.grading_status !== 'pending_review') {
               <div class="card-actions-cluster">
                 <a [routerLink]="['/assessments/report', item.session_id]" class="btn-action btn-view-report">
                   <span>View Official Report Card &rarr;</span>
                 </a>
                 <a [routerLink]="['/assessments/results', item.session_id]" class="btn-action btn-view-breakdown">
-                  <span>Detailed Question Breakdown</span>
+                  <span>Detailed Score Breakdown</span>
                 </a>
               </div>
             }
@@ -242,10 +279,17 @@
           <!-- CASE 4: NOT_STARTED (Ready for First Official Attempt) -->
           } @else {
             <div class="assessment-details">
-              <div class="detail-item">
-                <span class="detail-icon">☷</span>
-                <span><strong>{{ item.question_count }}</strong> Questions</span>
-              </div>
+              @if (item.assessment_mode === 'pdf_submission') {
+                <div class="detail-item">
+                  <span class="detail-icon">📄</span>
+                  <span><strong>PDF</strong> Question Paper</span>
+                </div>
+              } @else {
+                <div class="detail-item">
+                  <span class="detail-icon">☷</span>
+                  <span><strong>{{ item.question_count }}</strong> Questions</span>
+                </div>
+              }
 
               <div class="detail-item">
                 <span class="detail-icon">◷</span>
@@ -254,18 +298,34 @@
 
               <div class="detail-item">
                 <span class="detail-icon">◎</span>
-                <span><strong>{{ item.question_count }}</strong> Total Marks</span>
+                <span><strong>{{ item.max_score || item.question_count }}</strong> Total Marks</span>
               </div>
             </div>
 
-            <button
-              type="button"
-              class="start-button"
-              [disabled]="startingId === item.template_id"
-              (click)="openInstructions(item)">
-              <span>{{ startingId === item.template_id ? 'Launching...' : 'Start Assessment' }}</span>
-              <span class="arrow-icon">&rarr;</span>
-            </button>
+            @if (item.assessment_mode === 'pdf_submission' && item.has_question_pdf && item.can_start) {
+              <button
+                type="button"
+                class="btn-action btn-view-breakdown"
+                style="margin-bottom: 10px; width: 100%;"
+                (click)="downloadQuestionPdf(item)">
+                ⬇ Download Question PDF ({{ item.question_pdf_name || 'question_paper.pdf' }})
+              </button>
+            }
+
+            @if (!item.can_start) {
+              <button type="button" class="start-button" disabled>
+                <span>🔒 {{ item.notification_title || 'Complete Priority Pre-Assessment First' }}</span>
+              </button>
+            } @else {
+              <button
+                type="button"
+                class="start-button"
+                [disabled]="startingId === item.template_id"
+                (click)="openInstructions(item)">
+                <span>{{ startingId === item.template_id ? 'Launching...' : (item.is_priority_pre_assessment ? 'Start Priority Pre-Assessment' : 'Start Assessment') }}</span>
+                <span class="arrow-icon">&rarr;</span>
+              </button>
+            }
           }
 
         </article>
@@ -303,11 +363,11 @@
             </div>
             <div class="meta-card">
               <span class="meta-label">Question Type</span>
-              <strong>Multiple Choice (MCQ)</strong>
+              <strong>{{ selectedInstructionItem.assessment_mode === 'pdf_submission' ? 'PDF Question + GitHub/ZIP' : 'Multiple Choice (MCQ)' }}</strong>
             </div>
             <div class="meta-card">
-              <span class="meta-label">Negative Marking</span>
-              <strong class="text-green">No (0 Marks)</strong>
+              <span class="meta-label">Grading</span>
+              <strong class="text-green">{{ selectedInstructionItem.assessment_mode === 'pdf_submission' ? 'Manual Instructor Grading' : 'Automated Server Scoring' }}</strong>
             </div>
           </div>
 

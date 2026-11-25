@@ -51,6 +51,7 @@ class CohortLesson(Base):
     download_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_size: Mapped[str | None] = mapped_column(String(60), nullable=True)
     file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    file_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     quiz_questions_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     scheduled_date: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -80,6 +81,7 @@ class CohortAssignment(Base):
     attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attachment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     attachment_size: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    attachment_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -99,6 +101,8 @@ class CohortAssignmentSubmission(Base):
     status: Mapped[str] = mapped_column(String(30), default="submitted", nullable=False)
     submission_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     submission_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submission_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    submission_file_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

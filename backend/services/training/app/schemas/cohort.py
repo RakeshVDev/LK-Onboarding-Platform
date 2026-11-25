@@ -10,12 +10,12 @@ class CohortCreate(BaseModel):
     start_date: datetime | None = None
     end_date: datetime | None = None
     status: str = Field(default="active", max_length=30)
-    teacher_ids: list[int] = Field(min_length=1, max_length=3)
+    teacher_ids: list[int] = Field(min_length=1, max_length=5)
     excluded_learner_ids: list[int] = Field(default_factory=list)
 
 
 class CohortTeachersUpdate(BaseModel):
-    teacher_ids: list[int] = Field(min_length=1, max_length=3)
+    teacher_ids: list[int] = Field(min_length=1, max_length=5)
 
 
 class CohortUpdate(BaseModel):

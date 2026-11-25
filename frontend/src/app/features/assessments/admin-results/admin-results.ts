@@ -73,8 +73,9 @@ export class AdminResults implements OnInit {
   readonly selectedJoineeStats = computed(() => {
     const rows = this.selectedJoineeResults();
     const completed = rows.filter((r) => r.status === 'completed');
-    const avg = completed.length
-      ? Math.round((completed.reduce((acc, r) => acc + Number(r.overall_percentage || 0), 0) / completed.length) * 10) / 10
+    const graded = completed.filter((r) => r.grading_status !== 'pending_review');
+    const avg = graded.length
+      ? Math.round((graded.reduce((acc, r) => acc + Number(r.overall_percentage || 0), 0) / graded.length) * 10) / 10
       : 0;
     return {
       total: rows.length,
@@ -82,6 +83,14 @@ export class AdminResults implements OnInit {
       averageScore: avg,
     };
   });
+
+  // Manual Teacher / Staff Grading Modal State (for PDF/ZIP/GitHub submissions)
+  readonly gradingModalItem = signal<AdminAssessmentResultItem | null>(null);
+  manualScoreInput = 0;
+  manualMaxScoreInput = 100;
+  manualFeedbackInput = '';
+  readonly savingManualGrade = signal(false);
+  readonly manualGradeError = signal('');
 
   templates: AssessmentTemplate[] = [];
 
@@ -251,6 +260,76 @@ export class AdminResults implements OnInit {
   viewScores(sessionId: number | null): void {
     if (!sessionId) return;
     void this.router.navigate(['/assessments/results', sessionId]);
+  }
+
+  downloadSubmissionZip(item: AdminAssessmentResultItem): void {
+    if (!item.session_id) return;
+    this.api.downloadSubmissionFile(item.session_id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = item.submission_file_name || `submission_${item.session_id}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        this.errorMessage.set(err?.error?.detail || 'Unable to download submitted archive.');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  openManualGradeModal(item: AdminAssessmentResultItem): void {
+    if (!item.session_id) return;
+    this.gradingModalItem.set(item);
+    this.manualMaxScoreInput = Number(item.max_score) > 0 ? Number(item.max_score) : 100;
+    this.manualScoreInput = item.grading_status === 'manually_graded' ? Number(item.total_score || 0) : 0;
+    this.manualFeedbackInput = item.trainer_feedback || '';
+    this.manualGradeError.set('');
+    this.cdr.detectChanges();
+  }
+
+  closeManualGradeModal(): void {
+    this.gradingModalItem.set(null);
+    this.manualGradeError.set('');
+    this.cdr.detectChanges();
+  }
+
+  submitManualGrade(): void {
+    const item = this.gradingModalItem();
+    if (!item?.session_id || this.savingManualGrade()) return;
+    if (this.manualMaxScoreInput <= 0 || this.manualScoreInput < 0 || this.manualScoreInput > this.manualMaxScoreInput) {
+      this.manualGradeError.set(`Enter a valid score between 0 and ${this.manualMaxScoreInput}.`);
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.savingManualGrade.set(true);
+    this.manualGradeError.set('');
+    this.api.gradeProjectSubmission(item.session_id, {
+      score: Number(this.manualScoreInput),
+      max_score: Number(this.manualMaxScoreInput),
+      feedback: this.manualFeedbackInput.trim() || undefined,
+    }).subscribe({
+      next: () => {
+        this.savingManualGrade.set(false);
+        this.gradingModalItem.set(null);
+        this.loadResults();
+        const activeJoinee = this.selectedJoinee();
+        if (activeJoinee) {
+          this.openJoineeResults(activeJoinee);
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.savingManualGrade.set(false);
+        this.manualGradeError.set(err?.error?.detail || 'Unable to save manual grade.');
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   statusLabel(status: string): string {

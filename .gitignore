@@ -42,3 +42,7 @@ frontend/.angular/
 
 # Local backup files
 *.backup
+
+# Runtime / test uploaded files & local diagram cache
+backend/services/training/uploads/
+.archify/

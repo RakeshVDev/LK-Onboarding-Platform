@@ -31,6 +31,11 @@ class AssessmentTemplateCreate(BaseModel):
         default="Assessment",
         pattern="^(Assessment|Pre-Assessment)$",
     )
+    assessment_mode: str = Field(
+        default="mcq",
+        pattern="^(mcq|pdf_submission)$",
+    )
+    max_marks: float | None = Field(default=100.0, gt=0, le=1000)
     custom_tags: list[str] = Field(default_factory=list)
     reading_passage: str | None = None
 
@@ -59,6 +64,10 @@ class AssessmentTemplateResponse(BaseModel):
     department_name: str | None = None
     assessment_type: str = "psychometric"
     assessment_tag: str = "Assessment"
+    assessment_mode: str = "mcq"
+    has_question_pdf: bool = False
+    question_pdf_name: str | None = None
+    max_marks: float = 100.0
     custom_tags: list[str] = Field(default_factory=list)
     reading_passage: str | None = None
     description: str | None
@@ -121,9 +130,14 @@ class AssessmentStartResponse(BaseModel):
     remaining_seconds: int | None = None
     started_at: datetime
     expires_at: datetime | None = None
+    template_id: int | None = None
     template_name: str | None = None
     assessment_type: str | None = None
     assessment_tag: str | None = "Assessment"
+    assessment_mode: str = "mcq"
+    has_question_pdf: bool = False
+    question_pdf_name: str | None = None
+    max_marks: float = 100.0
     assigned_set: str = "A"
     reading_passage: str | None = None
     questions: list[AssessmentQuestionResponse]
@@ -171,6 +185,7 @@ class AssessmentTabSwitchRequest(BaseModel):
 class AssessmentSubmitResponse(BaseModel):
     session_id: int
     status: str
+    grading_status: str | None = None
     completed_at: datetime
     message: str
 
@@ -208,6 +223,13 @@ class AssessmentScoresResponse(BaseModel):
     max_score: float = 0
     overall_percentage: float = 0
     tab_switch_count: int = 0
+    submission_type: str = "mcq"
+    grading_status: str = "auto_graded"
+    submission_github_url: str | None = None
+    submission_file_name: str | None = None
+    has_submission_file: bool = False
+    submission_notes: str | None = None
+    trainer_feedback: str | None = None
 
 
 # --------------------------------------------------
@@ -259,6 +281,13 @@ class UserAssessmentResultItem(BaseModel):
     has_report: bool = False
     categories: list[AssessmentCategoryScoreResponse] = []
     tab_switch_count: int = 0
+    submission_type: str = "mcq"
+    grading_status: str = "auto_graded"
+    submission_github_url: str | None = None
+    submission_file_name: str | None = None
+    has_submission_file: bool = False
+    submission_notes: str | None = None
+    trainer_feedback: str | None = None
 
     @field_serializer("started_at", "completed_at", mode="plain", check_fields=False)
     def serialize_dates(self, dt: datetime | None):
@@ -309,6 +338,11 @@ class AssessmentTemplateUpdate(BaseModel):
         default=None,
         pattern="^(Assessment|Pre-Assessment)$",
     )
+    assessment_mode: str | None = Field(
+        default=None,
+        pattern="^(mcq|pdf_submission)$",
+    )
+    max_marks: float | None = Field(default=None, gt=0, le=1000)
     custom_tags: list[str] | None = None
     reading_passage: str | None = None
     name: str | None = Field(default=None, min_length=3, max_length=200)
@@ -361,6 +395,7 @@ class AssignableLearnerItem(BaseModel):
     full_name: str
     email: str
     cohort_ids: list[int] = Field(default_factory=list)
+    department_ids: list[int] = Field(default_factory=list)
 
 
 class AssignableTargetsResponse(BaseModel):
@@ -379,6 +414,11 @@ class StudentAssignedAssessmentItem(BaseModel):
     description: str | None = None
     assessment_type: str
     assessment_tag: str = "Assessment"
+    assessment_mode: str = "mcq"
+    has_question_pdf: bool = False
+    question_pdf_name: str | None = None
+    grading_status: str = "auto_graded"
+    is_priority_pre_assessment: bool = False
     custom_tags: list[str] = Field(default_factory=list)
     category_label: str
     question_count: int
@@ -450,9 +490,14 @@ class AssessmentResumeResponse(BaseModel):
     remaining_seconds: int | None = None
     started_at: datetime
     expires_at: datetime | None = None
+    template_id: int | None = None
     template_name: str | None = None
     assessment_type: str | None = None
     assessment_tag: str | None = "Assessment"
+    assessment_mode: str = "mcq"
+    has_question_pdf: bool = False
+    question_pdf_name: str | None = None
+    max_marks: float = 100.0
     assigned_set: str = "A"
     reading_passage: str | None = None
     saved_answers: dict[int, str] = Field(default_factory=dict)
@@ -475,6 +520,12 @@ class AssessmentAnswerSaveResponse(BaseModel):
     question_id: int
     answer: str | None = None
     is_marked_for_review: bool = False
+
+
+class ManualProjectGradeRequest(BaseModel):
+    score: float = Field(ge=0, le=1000)
+    max_score: float = Field(default=100.0, gt=0, le=1000)
+    feedback: str | None = Field(default=None, max_length=3000)
 
 
 class AssessmentBankQuestionCreate(BaseModel):

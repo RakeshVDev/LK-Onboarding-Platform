@@ -50,7 +50,7 @@ from services.training.app.services.teacher_scope import (
 )
 
 MAX_TEACHER_DEPARTMENTS = 8
-MAX_BATCH_TEACHERS = 3
+MAX_BATCH_TEACHERS = 5
 
 COMMON_VAULT_DEFAULT_RESOURCES: tuple[tuple[str, str, str], ...] = (
     (
@@ -290,6 +290,49 @@ def ensure_teacher_has_department(
         id_db.commit()
 
 
+def deassign_teachers_from_department_if_unused(
+    db: Session,
+    teacher_ids: Iterable[int],
+    department_id: int,
+    *,
+    identity_session_factory=None,
+) -> list[int]:
+    """De-assign teachers from department_id when they have no remaining active batch in that department."""
+    clean_ids = list(dict.fromkeys(int(tid) for tid in teacher_ids if int(tid) > 0))
+    if not clean_ids or is_common_department_id(db, department_id):
+        return []
+
+    still_assigned_ids = {
+        int(uid)
+        for uid in db.scalars(
+            select(CohortTeacher.user_id)
+            .join(Cohort, Cohort.id == CohortTeacher.cohort_id)
+            .where(
+                Cohort.department_id == int(department_id),
+                Cohort.status != "completed",
+                CohortTeacher.user_id.in_(clean_ids),
+            )
+        ).all()
+    }
+    to_remove = [tid for tid in clean_ids if tid not in still_assigned_ids]
+    if not to_remove:
+        return []
+
+    session_cls = identity_session_factory or IdentitySessionLocal
+    try:
+        with session_cls() as id_db:
+            id_db.execute(
+                delete(UserDepartment).where(
+                    UserDepartment.user_id.in_(to_remove),
+                    UserDepartment.department_id == int(department_id),
+                )
+            )
+            id_db.commit()
+    except Exception:
+        pass
+    return to_remove
+
+
 def remove_department_from_identity_users(
     department_id: int,
     *,
@@ -374,6 +417,7 @@ def purge_cohort_records(
     cohort_id: int,
     *,
     delete_cohort_row: bool = True,
+    identity_session_factory=None,
 ) -> Cohort:
     """Purge all batch-level cohort deliveries, memberships, teacher links, schedules, and workspace items."""
     cohort = db.get(Cohort, cohort_id)
@@ -382,6 +426,14 @@ def purge_cohort_records(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cohort / Batch not found",
         )
+
+    dept_id = int(cohort.department_id)
+    cohort_teacher_ids = [
+        int(uid)
+        for uid in db.scalars(
+            select(CohortTeacher.user_id).where(CohortTeacher.cohort_id == cohort_id)
+        ).all()
+    ]
 
     db.execute(
         delete(CohortMaterialDelivery).where(CohortMaterialDelivery.cohort_id == cohort_id)
@@ -403,6 +455,13 @@ def purge_cohort_records(
         cohort.status = "completed"
 
     db.commit()
+
+    deassign_teachers_from_department_if_unused(
+        db,
+        cohort_teacher_ids,
+        dept_id,
+        identity_session_factory=identity_session_factory,
+    )
     return cohort
 
 

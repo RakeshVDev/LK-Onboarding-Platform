@@ -851,7 +851,7 @@ class CleanArchitectureAndFeatureTests(unittest.TestCase):
                 )
             self.assertEqual(ctx_admin_sa.exception.status_code, 403)
 
-            # Teacher creates 1 live class for Dept A (shows their own name)
+            # Schedule live class without pre-assigned instructor -> instructor_user_id is None until started!
             sess_a = create_live_class(
                 payload=LiveClassCreate(
                     title="FastAPI Deep Dive Live",
@@ -865,8 +865,8 @@ class CleanArchitectureAndFeatureTests(unittest.TestCase):
                 db=tdb,
                 current_user=self.teacher_user,
             )
-            self.assertEqual(sess_a.instructor_user_id, self.teacher_user.id)
-            self.assertEqual(sess_a.instructor_name, self.teacher_user.full_name)
+            self.assertIsNone(sess_a.instructor_user_id)
+            self.assertEqual(sess_a.instructor_name, "Department Instructors")
 
             # Admin creates a Dept A upcoming class selecting teacher_two as instructor
             sess_a_assigned = create_live_class(
@@ -959,7 +959,7 @@ class CleanArchitectureAndFeatureTests(unittest.TestCase):
             joined_other_admin = join_live_class(session_id=sess_a_assigned.id, db=tdb, current_user=admin_user)
             self.assertEqual(joined_other_admin.meeting_url, "https://meet.csm.local/python-assigned")
 
-            # Teacher starts their own sess_a, learner_a joins, cross-dept blocked
+            # Teacher starts sess_a -> stamps starter as exclusive host; teacher_two in same dept CANNOT end it!
             updated = update_live_class(
                 session_id=sess_a.id,
                 payload=LiveClassUpdate(status="live"),
@@ -967,8 +967,77 @@ class CleanArchitectureAndFeatureTests(unittest.TestCase):
                 current_user=self.teacher_user,
             )
             self.assertEqual(updated.status, "live")
+            self.assertEqual(updated.instructor_user_id, self.teacher_user.id)
+            with self.assertRaises(HTTPException) as ctx_other_teacher_end:
+                update_live_class(
+                    session_id=sess_a.id,
+                    payload=LiveClassUpdate(status="completed"),
+                    db=tdb,
+                    current_user=teacher_two,
+                )
+            self.assertEqual(ctx_other_teacher_end.exception.status_code, 403)
             joined_a = join_live_class(session_id=sess_a.id, db=tdb, current_user=self.learner_a)
             self.assertEqual(joined_a.meeting_url, "https://meet.csm.local/python-live")
+
+            # Starter ends sess_a -> status becomes 'completed' with ended_at & reopen_at (+5 min cooldown)
+            ended_a = update_live_class(
+                session_id=sess_a.id,
+                payload=LiveClassUpdate(status="completed"),
+                db=tdb,
+                current_user=self.teacher_user,
+            )
+            self.assertEqual(ended_a.status, "completed")
+            self.assertIsNotNone(ended_a.ended_at)
+            self.assertIsNotNone(ended_a.reopen_at)
+
+            # Restarting immediately before 5-minute cooldown expires is blocked (422)
+            with self.assertRaises(HTTPException) as ctx_cooldown:
+                update_live_class(
+                    session_id=sess_a.id,
+                    payload=LiveClassUpdate(status="live"),
+                    db=tdb,
+                    current_user=self.teacher_user,
+                )
+            self.assertEqual(ctx_cooldown.exception.status_code, 422)
+
+            # After 5 minutes (simulate ended_at = now - 6 min), listing re-enables Go Live (status='scheduled', host cleared)
+            orm_sess_a = tdb.get(LiveClassSession, sess_a.id)
+            orm_sess_a.ended_at = datetime.now(timezone.utc) - timedelta(minutes=6)
+            tdb.commit()
+
+            reopened_list = list_live_classes(department_id=self.dept_a.id, db=tdb, current_user=teacher_two)
+            reopened_a = next(s for s in reopened_list.sessions if s.id == sess_a.id)
+            self.assertEqual(reopened_a.status, "scheduled")
+            self.assertIsNone(reopened_a.instructor_user_id)
+            self.assertIsNone(reopened_a.ended_at)
+            self.assertIsNone(reopened_a.reopen_at)
+
+            # Another department teacher (teacher_two) can now Go Live again on the same session!
+            restarted_a = update_live_class(
+                session_id=sess_a.id,
+                payload=LiveClassUpdate(status="live"),
+                db=tdb,
+                current_user=teacher_two,
+            )
+            self.assertEqual(restarted_a.status, "live")
+            self.assertEqual(restarted_a.instructor_user_id, teacher_two.id)
+            # Original starter cannot end teacher_two's active cycle
+            with self.assertRaises(HTTPException) as ctx_prev_starter_end:
+                update_live_class(
+                    session_id=sess_a.id,
+                    payload=LiveClassUpdate(status="completed"),
+                    db=tdb,
+                    current_user=self.teacher_user,
+                )
+            self.assertEqual(ctx_prev_starter_end.exception.status_code, 403)
+            # teacher_two CAN end their own cycle
+            ended_cycle_2 = update_live_class(
+                session_id=sess_a.id,
+                payload=LiveClassUpdate(status="completed"),
+                db=tdb,
+                current_user=teacher_two,
+            )
+            self.assertEqual(ended_cycle_2.status, "completed")
 
             with self.assertRaises(HTTPException) as ctx_cross_get:
                 get_live_class(session_id=sess_b.id, db=tdb, current_user=self.learner_a)

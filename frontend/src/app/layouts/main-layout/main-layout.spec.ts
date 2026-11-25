@@ -26,9 +26,9 @@ describe('MainLayout (Strict Dynamic Sidebar Navigation)', () => {
     can_select_department: false,
     redirect_to: isUnlocked ? '/dashboard' : '/my-assessments',
     allowed_items: isUnlocked
-      ? ['dashboard', 'courses', 'cohorts', 'live_classes', 'assessment', 'result', 'report', 'profile']
+      ? ['dashboard', 'courses', 'cohorts', 'assessment', 'result', 'report', 'profile']
       : ['assessment', 'result', 'report'],
-    locked_items: isUnlocked ? [] : ['dashboard', 'courses', 'cohorts', 'live_classes', 'profile'],
+    locked_items: isUnlocked ? [] : ['dashboard', 'courses', 'cohorts', 'profile'],
     nav_items: [],
     status_message: isUnlocked ? 'Approved department: Python.' : 'Complete all assessments.'
   });
@@ -49,7 +49,10 @@ describe('MainLayout (Strict Dynamic Sidebar Navigation)', () => {
       imports: [MainLayout],
       providers: [
         provideZonelessChangeDetection(),
-        provideRouter([]),
+        provideRouter([
+          { path: 'my-assessments', children: [] },
+          { path: 'dashboard', children: [] },
+        ]),
         {
           provide: AuthService,
           useValue: {
@@ -107,7 +110,7 @@ describe('MainLayout (Strict Dynamic Sidebar Navigation)', () => {
     expect(logoImgs.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('unlocks Dashboard, Courses, Cohorts, and Live Classes once admin approves department', async () => {
+  it('unlocks Dashboard, Courses, and Cohorts once admin approves department while keeping Live Classes removed from sidebar', async () => {
     const fixture = await mountLayout(true);
     const navLinks = Array.from(
       fixture.nativeElement.querySelectorAll('.nav-groups nav.navigation a')
@@ -119,7 +122,7 @@ describe('MainLayout (Strict Dynamic Sidebar Navigation)', () => {
     expect(labels).toContain('Dashboard');
     expect(labels).toContain('Courses');
     expect(labels).toContain('Cohorts');
-    expect(labels).toContain('Live Classes');
+    expect(labels).not.toContain('Live Classes');
     expect(labels).toContain('Assessment');
     expect(labels).toContain('Result');
     expect(labels).toContain('Report');

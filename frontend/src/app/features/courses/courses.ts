@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
 import { AuthService, CurrentUser } from '../../core/services/auth.service';
+import { CohortService } from '../../core/services/cohort.service';
 import {
   BackendCohort,
   DeletionRequest,
@@ -25,6 +26,7 @@ import {
 export class Courses implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly learningService = inject(LearningService);
+  private readonly cohortService = inject(CohortService);
 
   readonly user = signal<CurrentUser | null>(null);
   readonly canManage = signal(false);
@@ -62,10 +64,11 @@ export class Courses implements OnInit {
   readonly materials = signal<LearningMaterial[]>([]);
   readonly materialsLoading = signal(false);
   materialTitle = '';
-  materialType: 'pdf' | 'link' | 'video' | 'doc' = 'pdf';
+  materialType: 'pdf' | 'link' | 'video' | 'doc' | 'notes' = 'link';
   materialUrl = '';
   selectedFile: File | null = null;
   isUploadingFile = signal(false);
+  readonly viewingVaultNotes = signal<LearningMaterial | null>(null);
 
   // ---------- Create Course State ----------
   newCourseTitle = '';
@@ -203,6 +206,10 @@ export class Courses implements OnInit {
         `Sent "${material.title}" to ${res.delivered_batch_names.join(', ')} (${res.delivered_cohort_ids.length} active batch${res.delivered_cohort_ids.length === 1 ? '' : 'es'}).`
       );
       this.closeSendDropdown();
+      void this.cohortService.loadWorkspaceFromBackend();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ase_materials_changed'));
+      }
     } catch (err) {
       this.errorMessage.set(this.learningService.getErrorMessage(err));
     } finally {
@@ -469,7 +476,9 @@ export class Courses implements OnInit {
     }
 
     if (!this.materialUrl.trim()) {
-      this.errorMessage.set('Resource URL link is required.');
+      this.errorMessage.set(
+        this.materialType === 'notes' ? 'Lecture notes content is required.' : 'Resource URL link is required.'
+      );
       return;
     }
 
@@ -486,7 +495,11 @@ export class Courses implements OnInit {
       );
 
       this.materials.update(list => [created, ...list]);
-      this.successMessage.set(`Resource link "${created.title}" added.`);
+      this.successMessage.set(
+        this.materialType === 'notes'
+          ? `Notes "${created.title}" added to Resource Vault.`
+          : `Resource "${created.title}" added to Resource Vault.`
+      );
       this.materialTitle = '';
       this.materialUrl = '';
     } catch (err) {
@@ -510,18 +523,54 @@ export class Courses implements OnInit {
     }
   }
 
-  openResource(material: LearningMaterial): void {
-    if (material.material_type === 'pdf' || material.material_type === 'doc') {
+  isUploadedFileResource(material: LearningMaterial): boolean {
+    return (
+      material.material_type === 'pdf' ||
+      (material.material_type === 'doc' && Boolean(material.storage_key) && !/^https?:\/\//i.test(material.storage_key))
+    );
+  }
+
+  async openResource(material: LearningMaterial): Promise<void> {
+    if (material.material_type === 'notes') {
+      this.viewingVaultNotes.set(material);
+      return;
+    }
+    if (this.isUploadedFileResource(material)) {
       const course = this.selectedCourse();
       if (!course) return;
-      const downloadUrl = `/training-api/api/v1/courses/${course.id}/materials/${material.id}/file`;
-      window.open(downloadUrl, '_blank');
-    } else {
-      let target = material.storage_key;
-      if (!target.startsWith('http://') && !target.startsWith('https://')) {
-        target = 'https://' + target;
+      try {
+        const blob = await this.learningService.fetchMaterialFileBlob(course.id, material.id, true);
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      } catch (err) {
+        this.errorMessage.set(this.learningService.getErrorMessage(err));
       }
-      window.open(target, '_blank');
+      return;
+    }
+    let target = material.storage_key;
+    if (!target.startsWith('http://') && !target.startsWith('https://')) {
+      target = 'https://' + target;
+    }
+    window.open(target, '_blank', 'noopener,noreferrer');
+  }
+
+  async downloadVaultFile(material: LearningMaterial): Promise<void> {
+    const course = this.selectedCourse();
+    if (!course) return;
+    try {
+      const blob = await this.learningService.fetchMaterialFileBlob(course.id, material.id, false);
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = material.material_type === 'pdf' && !material.title.toLowerCase().endsWith('.pdf')
+        ? `${material.title}.pdf`
+        : material.title;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      this.errorMessage.set(this.learningService.getErrorMessage(err));
     }
   }
 

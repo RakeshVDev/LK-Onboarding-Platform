@@ -71,8 +71,8 @@ class CourseResponse(BaseModel):
 
 class LearningMaterialCreate(BaseModel):
     title: str = Field(min_length=2, max_length=200)
-    material_type: str = Field(default="link", pattern="^(pdf|link|doc|video)$")
-    storage_key: str = Field(min_length=1, max_length=1000)
+    material_type: str = Field(default="link", pattern="^(pdf|link|doc|video|notes)$")
+    storage_key: str = Field(min_length=1, max_length=10000)
 
 
 class LearningMaterialResponse(BaseModel):

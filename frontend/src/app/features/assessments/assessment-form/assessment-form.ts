@@ -259,6 +259,12 @@ export class AssessmentForm implements OnInit {
   // Question Set Configuration for the Template ('AUTO' rotates Set A/B/C; or pin 'A'/'B'/'C')
   selectedQuestionSet: 'AUTO' | 'A' | 'B' | 'C' = 'AUTO';
 
+  // Dual Assessment Delivery Mode ('mcq' vs 'pdf_submission')
+  assessmentMode: 'mcq' | 'pdf_submission' = 'mcq';
+  maxMarks = 100;
+  questionPdfFile: File | null = null;
+  uploadingPdf = false;
+
   // Question Bank Filter by Set (All / Set A / Set B / Set C)
   activeSetFilter: 'ALL' | 'A' | 'B' | 'C' = 'ALL';
 
@@ -411,16 +417,87 @@ export class AssessmentForm implements OnInit {
     ).length;
   }
 
+  private get selectedConcreteDepartmentId(): number | null {
+    const raw = this.form.controls.department_id.value;
+    if (raw === null || raw === undefined) return null;
+    const dept = this.departments.find(d => Number(d.id) === Number(raw));
+    if (dept && ['all / common', 'all/common', 'common'].includes((dept.name || '').trim().toLowerCase())) {
+      return null;
+    }
+    return Number(raw);
+  }
+
+  get selectedDepartmentLabel(): string {
+    const deptId = this.selectedConcreteDepartmentId;
+    if (!deptId) return 'All Departments';
+    const dept = this.departments.find(d => Number(d.id) === deptId);
+    return dept?.name || 'Selected Department';
+  }
+
+  onDepartmentChange(): void {
+    const deptId = this.selectedConcreteDepartmentId;
+    if (deptId !== null) {
+      this.selectedCohortIds = this.selectedCohortIds.filter(cid =>
+        this.availableCohorts.some(c => c.id === cid && Number(c.department_id) === deptId)
+      );
+      if (this.assignmentScope === 'learner') {
+        this.selectedLearnerIds = this.filteredLearners.map(l => l.id);
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  onAssessmentModeChange(mode: 'mcq' | 'pdf_submission'): void {
+    this.assessmentMode = mode;
+    if (mode === 'pdf_submission' && this.activeTab === 'questions') {
+      this.activeTab = 'config';
+    }
+    this.cdr.detectChanges();
+  }
+
+  onQuestionPdfSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] || null;
+    this.questionPdfFile = file;
+    this.cdr.detectChanges();
+  }
+
+  async downloadCurrentQuestionPdf(): Promise<void> {
+    if (!this.templateId) return;
+    try {
+      const blob = await firstValueFrom(this.api.downloadQuestionPdf(this.templateId));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = this.template?.question_pdf_name || 'question_paper.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      this.errorMessage = this.parseErrorMessage(err, 'Unable to download question PDF.');
+      this.cdr.detectChanges();
+    }
+  }
+
   get filteredCohorts(): AssignableCohortItem[] {
+    const deptId = this.selectedConcreteDepartmentId;
+    const base = deptId !== null
+      ? this.availableCohorts.filter(c => Number(c.department_id) === deptId)
+      : this.availableCohorts;
     const q = this.targetSearchQuery.trim().toLowerCase();
-    if (!q) return this.availableCohorts;
-    return this.availableCohorts.filter(c => c.name.toLowerCase().includes(q));
+    if (!q) return base;
+    return base.filter(c => c.name.toLowerCase().includes(q));
   }
 
   get filteredLearners(): AssignableLearnerItem[] {
+    const deptId = this.selectedConcreteDepartmentId;
+    const base = deptId !== null
+      ? this.availableLearners.filter(l => Array.isArray(l.department_ids) && l.department_ids.includes(deptId))
+      : this.availableLearners;
     const q = this.targetSearchQuery.trim().toLowerCase();
-    if (!q) return this.availableLearners;
-    return this.availableLearners.filter(
+    if (!q) return base;
+    return base.filter(
       l => l.full_name.toLowerCase().includes(q) || l.email.toLowerCase().includes(q)
     );
   }
@@ -654,6 +731,9 @@ export class AssessmentForm implements OnInit {
             ? rawConfiguredSet
             : 'AUTO';
 
+        this.assessmentMode = template.assessment_mode === 'pdf_submission' ? 'pdf_submission' : 'mcq';
+        this.maxMarks = Number(template.max_marks) > 0 ? Number(template.max_marks) : 100;
+
         this.assignmentScope =
           (template.assignment_scope as 'all' | 'cohort' | 'learner') || 'all';
         this.selectedCohortIds = [...(template.assigned_cohort_ids || [])];
@@ -724,6 +804,12 @@ export class AssessmentForm implements OnInit {
       return;
     }
 
+    if (this.assessmentMode === 'pdf_submission' && !this.questionPdfFile && !this.template?.has_question_pdf) {
+      this.errorMessage = 'Please upload a Question Paper PDF for PDF Assessment mode.';
+      this.cdr.detectChanges();
+      return;
+    }
+
     const type = this.form.controls.assessment_type.value;
     const assessmentTag = this.form.controls.assessment_tag.value || 'Assessment';
     const customTags = (this.form.controls.custom_tags_input.value || '')
@@ -734,8 +820,11 @@ export class AssessmentForm implements OnInit {
     const deptId = this.form.controls.department_id.value ?? null;
     const name = this.form.controls.name.value.trim();
     const description = this.form.controls.description.value.trim() || null;
-    const questionCount = Math.max(1, Math.min(200, Math.round(Number(this.form.controls.question_count.value) || 20)));
+    const questionCount = this.assessmentMode === 'pdf_submission'
+      ? 1
+      : Math.max(1, Math.min(200, Math.round(Number(this.form.controls.question_count.value) || 20)));
     const durationMinutes = Math.max(1, Math.min(300, Math.round(Number(this.form.controls.duration_minutes.value) || 15)));
+    const safeMaxMarks = Math.max(1, Math.min(1000, Number(this.maxMarks) || 100));
     const dueIso = this.toIsoDueAt();
     const cohortIdsPayload = this.assignmentScope === 'cohort' ? this.selectedCohortIds : [];
     const learnerIdsPayload = this.assignmentScope === 'learner' ? this.selectedLearnerIds : [];
@@ -758,18 +847,22 @@ export class AssessmentForm implements OnInit {
       catConfig['question_set'] = this.selectedQuestionSet;
     }
     catConfig['duration_minutes'] = durationMinutes;
+    catConfig['assessment_mode'] = this.assessmentMode;
+    catConfig['max_marks'] = safeMaxMarks;
 
     this.saving = true;
     this.cdr.detectChanges();
 
     try {
       if (this.templateId) {
-        const updated = await firstValueFrom(
+        let updated = await firstValueFrom(
           this.api.updateTemplate(this.templateId, {
             name,
             department_id: deptId,
             assessment_type: type,
             assessment_tag: assessmentTag,
+            assessment_mode: this.assessmentMode,
+            max_marks: safeMaxMarks,
             custom_tags: customTags,
             reading_passage: readingPassage,
             description,
@@ -783,15 +876,21 @@ export class AssessmentForm implements OnInit {
             clear_due_at: !dueIso && (this.clearDueAt || Boolean(this.template?.due_at))
           })
         );
+        if (this.assessmentMode === 'pdf_submission' && this.questionPdfFile) {
+          updated = await firstValueFrom(this.api.uploadQuestionPdf(this.templateId, this.questionPdfFile));
+          this.questionPdfFile = null;
+        }
         this.template = updated;
         this.successMessage = 'Assessment settings and assignments successfully updated.';
       } else {
-        const created = await firstValueFrom(
+        let created = await firstValueFrom(
           this.api.createTemplate({
             name,
             department_id: deptId,
             assessment_type: type,
             assessment_tag: assessmentTag,
+            assessment_mode: this.assessmentMode,
+            max_marks: safeMaxMarks,
             custom_tags: customTags,
             reading_passage: readingPassage,
             description,
@@ -804,10 +903,18 @@ export class AssessmentForm implements OnInit {
             due_at: dueIso
           })
         );
+        if (this.assessmentMode === 'pdf_submission' && this.questionPdfFile) {
+          created = await firstValueFrom(this.api.uploadQuestionPdf(created.id, this.questionPdfFile));
+          this.questionPdfFile = null;
+        }
         this.templateId = created.id;
         this.template = created;
-        this.successMessage = 'Assessment created and assigned successfully! You can now add questions below.';
-        this.activeTab = 'questions';
+        if (this.assessmentMode === 'pdf_submission') {
+          this.successMessage = 'PDF Assessment created and assigned! Learners can now download the question PDF and submit via GitHub link or ZIP file.';
+        } else {
+          this.successMessage = 'Assessment created and assigned successfully! You can now add questions below.';
+          this.activeTab = 'questions';
+        }
       }
     } catch (error: any) {
       console.error('Template save error:', error);

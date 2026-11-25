@@ -51,6 +51,8 @@ export class OnboardingService {
   readonly permissionsState = signal<NavigationPermissions | null>(null);
 
   private cachedPermissions: NavigationPermissions | null = null;
+  private cachedAtMs = 0;
+  private static readonly CACHE_TTL_MS = 10000;
   private cachedToken: string | null = null;
   private pendingPromise: Promise<NavigationPermissions> | null = null;
 
@@ -78,7 +80,7 @@ export class OnboardingService {
       this.cachedToken = activeToken;
     }
 
-    if (!force && this.cachedPermissions) {
+    if (!force && this.cachedPermissions && Date.now() - this.cachedAtMs < OnboardingService.CACHE_TTL_MS) {
       this.permissionsState.set(this.cachedPermissions);
       return this.cachedPermissions;
     }
@@ -97,6 +99,7 @@ export class OnboardingService {
         );
         this.cachedToken = this.authService.getToken();
         this.cachedPermissions = res;
+        this.cachedAtMs = Date.now();
         this.permissionsState.set(res);
         return res;
       } finally {
@@ -178,6 +181,7 @@ export class OnboardingService {
 
   clearCache(): void {
     this.cachedPermissions = null;
+    this.cachedAtMs = 0;
     this.cachedToken = null;
     this.pendingPromise = null;
     this.permissionsState.set(null);
