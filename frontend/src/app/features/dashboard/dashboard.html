@@ -628,29 +628,6 @@
       }
 
       @if (myDeptRequest()?.status === 'approved') {
-      <div class="track-status-banner track-approved">
-        <div class="status-icon-box">✓</div>
-        <div class="status-content">
-          <span class="track-eyebrow">DEPARTMENT ALLOCATED &amp; VERIFIED</span>
-          <h3>You are assigned to the {{ myDeptRequest()?.department_name }} Track</h3>
-          <p>
-            Your tech stack preference has been reviewed and approved by your instructor/administrator.
-            All specialized study materials, syllabus modules, and course resources are now accessible.
-          </p>
-          <div class="approved-actions">
-            <a routerLink="/courses" class="btn-track-primary">
-              <span>View My Courses &amp; Study Materials →</span>
-            </a>
-            <a routerLink="/cohorts" class="btn-track-primary" style="margin-left: 10px;">
-              <span>Open My Cohort Workspace →</span>
-            </a>
-            <a routerLink="/live-classes" class="btn-track-primary" style="margin-left: 10px;">
-              <span>Open Department Live Classes →</span>
-            </a>
-          </div>
-        </div>
-      </div>
-
       @if (upcomingLiveClasses().length > 0) {
       <div class="live-classes-preview-strip">
         <div class="live-strip-header">
