@@ -3786,9 +3786,155 @@
   }
 
   /* Live Assessments, Notifications, Onboarding Cards & Department Allocated Section */
-  .notification-card,
+  .notifications-panel {
+    background: linear-gradient(135deg, #182230 0%, #111827 100%) !important;
+    border-color: #293548 !important;
+    border-left-color: #6366f1 !important;
+    box-shadow: 0 8px 28px -8px rgba(0, 0, 0, 0.5) !important;
+
+    .notifications-header {
+      .notif-title-group {
+        h2 { color: #f8fafc !important; }
+        p { color: #94a3b8 !important; }
+      }
+
+      .notif-sync-controls {
+        .last-sync-label { color: #94a3b8 !important; }
+        .btn-sync-now {
+          background: #1e293b !important;
+          border-color: #334155 !important;
+          color: #a5b4fc !important;
+
+          &:hover:not(:disabled) {
+            background: #334155 !important;
+            color: #ffffff !important;
+          }
+        }
+      }
+    }
+
+    .notification-card {
+      background: #111827 !important;
+      border-color: #293548 !important;
+      color: #f8fafc !important;
+
+      &[data-status="IN_PROGRESS"] {
+        background: rgba(59, 130, 246, 0.08) !important;
+        border-color: rgba(59, 130, 246, 0.3) !important;
+      }
+
+      &[data-status="NOT_STARTED"] {
+        background: rgba(245, 158, 11, 0.08) !important;
+        border-color: rgba(245, 158, 11, 0.28) !important;
+      }
+
+      &[data-status="EXPIRED"] {
+        background: rgba(239, 68, 68, 0.08) !important;
+        border-color: rgba(239, 68, 68, 0.3) !important;
+      }
+
+      .notif-left .notif-icon-box {
+        background: #1e293b !important;
+        border-color: #334155 !important;
+        color: #f8fafc !important;
+      }
+
+      .notif-content {
+        h3, h4, strong { color: #f8fafc !important; }
+        p, .notif-meta-row, span { color: #94a3b8 !important; }
+
+        .notif-category-chip {
+          background: #1e293b !important;
+          border-color: #334155 !important;
+          color: #cbd5e1 !important;
+        }
+
+        .notif-cohort-chip {
+          background: rgba(99, 102, 241, 0.18) !important;
+          border-color: rgba(99, 102, 241, 0.35) !important;
+          color: #c7d2fe !important;
+        }
+
+        .notif-status-pill {
+          background: rgba(245, 158, 11, 0.16) !important;
+          border-color: rgba(245, 158, 11, 0.35) !important;
+          color: #fcd34d !important;
+        }
+      }
+    }
+  }
+
+  .department-gate-section .track-status-banner {
+    background: #182230 !important;
+    border-color: #293548 !important;
+    color: #f8fafc !important;
+
+    .status-content {
+      .track-eyebrow {
+        background: transparent !important;
+        border: none !important;
+      }
+      h3 { color: #f8fafc !important; }
+      p { color: #cbd5e1 !important; }
+    }
+
+    &.track-approved {
+      background: rgba(16, 185, 129, 0.1) !important;
+      border-color: rgba(16, 185, 129, 0.32) !important;
+      border-left: 6px solid #10b981 !important;
+
+      .track-eyebrow { color: #6ee7b7 !important; }
+      h3 { color: #ecfdf5 !important; }
+      p { color: #a7f3d0 !important; }
+    }
+
+    &.track-pending {
+      background: rgba(245, 158, 11, 0.1) !important;
+      border-color: rgba(245, 158, 11, 0.32) !important;
+      border-left: 6px solid #f59e0b !important;
+
+      .track-eyebrow { color: #fcd34d !important; }
+      h3 { color: #fef3c7 !important; }
+      p { color: #fde68a !important; }
+    }
+
+    &.track-locked,
+    &.track-info {
+      background: #182230 !important;
+      border-color: #293548 !important;
+      border-left: 6px solid #6366f1 !important;
+
+      .track-eyebrow { color: #a5b4fc !important; }
+      h3 { color: #f8fafc !important; }
+      p { color: #cbd5e1 !important; }
+    }
+  }
+
+  .trainery-data-table {
+    .pill-type-tms {
+      background: rgba(59, 130, 246, 0.16) !important;
+      border-color: rgba(59, 130, 246, 0.35) !important;
+      color: #93c5fd !important;
+    }
+
+    .pill-status-active {
+      background: rgba(16, 185, 129, 0.16) !important;
+      border-color: rgba(16, 185, 129, 0.35) !important;
+      color: #6ee7b7 !important;
+    }
+
+    .pill-status-pending {
+      background: rgba(245, 158, 11, 0.16) !important;
+      border-color: rgba(245, 158, 11, 0.35) !important;
+      color: #fcd34d !important;
+    }
+
+    .table-progress-bar {
+      background: #1e293b !important;
+    }
+  }
+
   .empty-assigned-card,
-  .track-status-banner,
   .track-selection-banner,
   .stat-card-admin,
   .progress-ring-container {
@@ -3798,20 +3944,9 @@
 
     h2, h3, h4, strong { color: #f8fafc; }
     p, span.muted { color: #94a3b8; }
-
-    &.warning, &.pending {
-      background: rgba(245, 158, 11, 0.1);
-      border-color: rgba(245, 158, 11, 0.35);
-    }
-    &.urgent, &.expired {
-      background: rgba(239, 68, 68, 0.1);
-      border-color: rgba(239, 68, 68, 0.35);
-    }
   }
 
-  .notif-icon-box,
   .timer-tag,
-  .btn-sync-now,
   .btn-sync-subtle,
   .btn-breakdown-link,
   .btn-module-action,
@@ -3854,26 +3989,21 @@
   }
 
   .notif-pulse-badge,
-  .notif-cohort-chip,
   .module-badge,
   .shortcut-icon,
-  .status-icon-box,
   .btn-secondary-link {
     background: rgba(99, 102, 241, 0.16);
     border-color: rgba(99, 102, 241, 0.35);
     color: #c7d2fe;
   }
 
-  .notif-category-chip,
   .test-badge,
-  .course-status-pill,
-  .track-eyebrow {
+  .course-status-pill {
     background: #1e293b;
     border-color: #334155;
     color: #cbd5e1;
   }
 
-  .pill-status-active,
   .audit-badge,
   .alert-success-box,
   .btn-test-action.ready,
@@ -3883,10 +4013,8 @@
     color: #6ee7b7;
   }
 
-  .pill-status-pending,
   .pending-allocations-alert,
-  .alert-icon-wrap,
-  .track-eyebrow.pending {
+  .alert-icon-wrap {
     background: rgba(245, 158, 11, 0.14);
     border-color: rgba(245, 158, 11, 0.35);
     color: #fcd34d;
