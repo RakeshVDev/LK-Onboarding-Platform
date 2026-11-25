@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta, timezone
 import logging
 
 from sqlalchemy import func, select
@@ -152,19 +153,30 @@ class SqlAlchemyLiveClassRepository:
 
     def _to_entity(self, row: LiveClassSession, dept_map: dict[int, str] | None = None) -> LiveClassSessionEntity:
         d_map = dept_map if dept_map is not None else self.list_departments_map()
+        ended_at = getattr(row, "ended_at", None)
+        reopen_at = None
+        if row.status == "completed" and ended_at is not None:
+            ended_utc = (
+                ended_at.replace(tzinfo=timezone.utc)
+                if ended_at.tzinfo is None
+                else ended_at.astimezone(timezone.utc)
+            )
+            reopen_at = ended_utc + timedelta(seconds=300)
         return LiveClassSessionEntity(
             id=int(row.id),
             title=row.title,
             description=row.description,
             department_id=int(row.department_id),
             department_name=d_map.get(int(row.department_id), "Department"),
-            instructor_user_id=int(row.instructor_user_id),
+            instructor_user_id=int(row.instructor_user_id) if row.instructor_user_id is not None else None,
             instructor_name=row.instructor_name,
             scheduled_start=row.scheduled_start,
             duration_minutes=int(row.duration_minutes),
             meeting_url=row.meeting_url,
             platform=row.platform,
             status=row.status,
+            ended_at=ended_at,
+            reopen_at=reopen_at,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -181,6 +193,7 @@ class SqlAlchemyLiveClassRepository:
             meeting_url=session.meeting_url,
             platform=session.platform,
             status=session.status,
+            ended_at=session.ended_at,
         )
         self.db.add(row)
         self.db.commit()
@@ -259,6 +272,7 @@ class SqlAlchemyLiveClassRepository:
         row.meeting_url = session.meeting_url
         row.platform = session.platform
         row.status = session.status
+        row.ended_at = session.ended_at
         self.db.commit()
         self.db.refresh(row)
         return self._to_entity(row)

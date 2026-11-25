@@ -80,7 +80,9 @@ def complete_onboarding_assessments(
     total_assigned = int(status_info.get("total_assigned", 0))
     completed_count = int(status_info.get("completed_count", 0))
     pending_count = int(status_info.get("pending_count", 0))
-    all_done = bool(status_info.get("all_completed", False)) and total_assigned > 0
+    all_done = bool(status_info.get("all_completed", False)) and (
+        total_assigned > 0 or bool(status_info.get("pre_assessments_completed", False))
+    )
 
     if not all_done and not bool(current_user.all_assessments_completed):
         raise HTTPException(

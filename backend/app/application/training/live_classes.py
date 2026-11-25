@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from app.application.training.ports import LiveClassRepository
@@ -12,6 +12,7 @@ from app.domain.training import (
     LiveClassStatus,
 )
 
+LIVE_SESSION_REOPEN_COOLDOWN_SECONDS = 300
 STAFF_ROLES = {"superadmin", "admin", "teacher"}
 ASSIGNABLE_ROLES_BY_ACTOR: dict[str, tuple[str, ...]] = {
     "superadmin": ("superadmin", "admin", "teacher"),
@@ -48,6 +49,36 @@ class LiveClassUseCase:
 
     def __init__(self, repo: LiveClassRepository):
         self.repo = repo
+
+    @staticmethod
+    def _to_utc(dt: datetime | None) -> datetime | None:
+        if dt is None:
+            return None
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+    def _maybe_reopen_after_cooldown(
+        self,
+        session: LiveClassSessionEntity,
+        now: datetime | None = None,
+    ) -> LiveClassSessionEntity:
+        """After 5 minutes in completed (Session Ended), automatically reopen for Go Live again."""
+        if session.status != LiveClassStatus.COMPLETED.value:
+            return session
+        ended_utc = self._to_utc(session.ended_at) or self._to_utc(session.updated_at)
+        if ended_utc is None:
+            return session
+        current = now or datetime.now(timezone.utc)
+        reopen_at = ended_utc + timedelta(seconds=LIVE_SESSION_REOPEN_COOLDOWN_SECONDS)
+        if current >= reopen_at:
+            session.status = LiveClassStatus.SCHEDULED.value
+            session.instructor_user_id = None
+            session.instructor_name = "Department Instructors"
+            session.ended_at = None
+            session.reopen_at = None
+            return self.repo.update(session)
+        session.ended_at = ended_utc
+        session.reopen_at = reopen_at
+        return session
 
     def list_assignable_hosts(
         self,
@@ -180,12 +211,16 @@ class LiveClassUseCase:
             if scheduled_start.tzinfo is None
             else scheduled_start.astimezone(timezone.utc)
         )
-        target_instructor_id, target_instructor_name = self._resolve_target_instructor(
-            actor_role=actor_role,
-            actor_user_id=actor_user_id,
-            actor_name=actor_name,
-            requested_instructor_user_id=instructor_user_id,
-        )
+        if instructor_user_id is not None:
+            target_instructor_id, target_instructor_name = self._resolve_target_instructor(
+                actor_role=actor_role,
+                actor_user_id=actor_user_id,
+                actor_name=actor_name,
+                requested_instructor_user_id=instructor_user_id,
+            )
+        else:
+            target_instructor_id = None
+            target_instructor_name = "Department Instructors"
 
         entity = LiveClassSessionEntity(
             id=None,
@@ -217,6 +252,7 @@ class LiveClassUseCase:
             if isinstance(requested_department_id, (int, str)) and str(requested_department_id).isdigit()
             else None
         )
+        now = datetime.now(timezone.utc)
         if role == "teacher" and teacher_allowed_department_ids is not None:
             if not teacher_allowed_department_ids:
                 return []
@@ -226,13 +262,16 @@ class LiveClassUseCase:
             ):
                 return []
             return [
-                s
+                self._maybe_reopen_after_cooldown(s, now)
                 for s in self.repo.list_sessions(department_id=clean_req_dept_id)
                 if s.department_id in teacher_allowed_department_ids
             ]
 
         if role in STAFF_ROLES:
-            return self.repo.list_sessions(department_id=clean_req_dept_id)
+            return [
+                self._maybe_reopen_after_cooldown(s, now)
+                for s in self.repo.list_sessions(department_id=clean_req_dept_id)
+            ]
 
         # Strict learner / employee exact-department gating:
         # Pending/unapproved candidates see zero sessions.
@@ -243,7 +282,7 @@ class LiveClassUseCase:
             return []
 
         return [
-            s
+            self._maybe_reopen_after_cooldown(s, now)
             for s in self.repo.list_sessions(department_id=learner_approved_department_id)
             if s.department_id == learner_approved_department_id and s.status != LiveClassStatus.CANCELLED.value
         ]
@@ -259,6 +298,7 @@ class LiveClassUseCase:
         session = self.repo.get_by_id(session_id)
         if session is None:
             return None
+        session = self._maybe_reopen_after_cooldown(session)
 
         if actor_role.lower() == "teacher" and teacher_allowed_department_ids is not None:
             self._ensure_teacher_department_scope(
@@ -332,6 +372,7 @@ class LiveClassUseCase:
         existing = self.repo.get_by_id(session_id)
         if existing is None:
             return None
+        existing = self._maybe_reopen_after_cooldown(existing)
 
         self._ensure_teacher_department_scope(
             actor_role=actor_role,
@@ -397,18 +438,35 @@ class LiveClassUseCase:
             clean_status = status.strip().lower()
             if clean_status not in ALLOWED_STATUSES:
                 raise LiveClassValidationError(f"Unsupported live class status '{status}'.")
-            if clean_status == LiveClassStatus.LIVE.value and actor_user_id != original_instructor_id:
-                raise LiveClassAccessError(
-                    "Only the selected teacher/instructor assigned to this session can start the live class."
-                )
+            if clean_status == LiveClassStatus.LIVE.value:
+                if existing.status == LiveClassStatus.COMPLETED.value:
+                    raise LiveClassValidationError(
+                        "Session ended recently. Go Live will automatically re-enable after the 5-minute cooldown."
+                    )
+                if original_instructor_id is not None and int(actor_user_id) != int(original_instructor_id):
+                    raise LiveClassAccessError(
+                        "Only the selected teacher/instructor assigned to this session can start the live class."
+                    )
+                if original_instructor_id is None:
+                    existing.instructor_user_id = int(actor_user_id)
+                    existing.instructor_name = (actor_name or "").strip() or "Faculty Instructor"
+                existing.ended_at = None
+                existing.reopen_at = None
             if (
                 clean_status == LiveClassStatus.COMPLETED.value
                 and existing.status == LiveClassStatus.LIVE.value
-                and actor_user_id != original_instructor_id
             ):
-                raise LiveClassAccessError(
-                    "Only the assigned teacher/instructor can end the live class."
-                )
+                if original_instructor_id is None or int(actor_user_id) != int(original_instructor_id):
+                    starter_label = existing.instructor_name or "the instructor who started it"
+                    raise LiveClassAccessError(
+                        f"Only the instructor who started this live class ({starter_label}) can end it."
+                    )
+                now_end = datetime.now(timezone.utc)
+                existing.ended_at = now_end
+                existing.reopen_at = now_end + timedelta(seconds=LIVE_SESSION_REOPEN_COOLDOWN_SECONDS)
+            elif clean_status == LiveClassStatus.SCHEDULED.value:
+                existing.ended_at = None
+                existing.reopen_at = None
             existing.status = clean_status
 
         return self.repo.update(existing)

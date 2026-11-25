@@ -105,7 +105,7 @@ class LiveClassSessionEntity:
     id: int | None
     title: str
     department_id: int
-    instructor_user_id: int
+    instructor_user_id: int | None
     scheduled_start: datetime
     duration_minutes: int
     meeting_url: str
@@ -114,6 +114,8 @@ class LiveClassSessionEntity:
     department_name: str | None = None
     platform: str = "Video Call"
     status: str = LiveClassStatus.SCHEDULED.value
+    ended_at: datetime | None = None
+    reopen_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

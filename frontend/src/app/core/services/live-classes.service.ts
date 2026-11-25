@@ -10,13 +10,15 @@ export interface LiveClassSession {
   description?: string | null;
   department_id: number;
   department_name?: string | null;
-  instructor_user_id: number;
+  instructor_user_id: number | null;
   instructor_name?: string | null;
   scheduled_start: string;
   duration_minutes: number;
   meeting_url: string;
   platform: string;
   status: LiveClassStatus;
+  ended_at?: string | null;
+  reopen_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
