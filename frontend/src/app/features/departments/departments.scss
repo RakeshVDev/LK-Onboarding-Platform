@@ -1735,3 +1735,28 @@
     color: #64748b;
   }
 }
+
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .roster-info {
+    strong { color: #f8fafc; }
+    span { color: #94a3b8; }
+  }
+
+  .alert-banner {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
+
+  .status-pill {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+
+    &.inactive {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
+    }
+  }
+}

@@ -1596,4 +1596,43 @@
       color: #f8fafc;
     }
   }
+
+  .gauge-rating-pill,
+  .topic-band-pill {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+
+    &.warn, &.developing, &.moderate {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+    &.critical, &.needs-improvement, &.low {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
+    }
+  }
+
+  .side-stat-icon {
+    background: rgba(99, 102, 241, 0.16);
+    color: #a5b4fc;
+
+    &.emerald, &.green {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+  }
+
+  .ml-kpi-icon {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+
+    &.blue {
+      background: rgba(59, 130, 246, 0.16);
+      color: #93c5fd;
+    }
+    &.amber {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+  }
 }

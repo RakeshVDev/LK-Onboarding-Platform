@@ -1616,5 +1616,39 @@
       }
     }
   }
+
+  .alert-banner {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+
+    &.success {
+      background: rgba(16, 185, 129, 0.14);
+      border-color: rgba(16, 185, 129, 0.35);
+      color: #6ee7b7;
+    }
+  }
+
+  .lock-icon-box {
+    background: rgba(245, 158, 11, 0.16);
+    color: #fcd34d;
+  }
+
+  .dept-badge {
+    background: rgba(99, 102, 241, 0.16);
+    color: #a5b4fc;
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+
+  .status-pill {
+    background: #1e293b;
+    color: #cbd5e1;
+
+    &.active,
+    &.published {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+  }
 }
 

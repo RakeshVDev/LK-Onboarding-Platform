@@ -994,6 +994,54 @@
       color: #bbf7d0 !important;
     }
   }
+
+  .mode-btn {
+    background: #182230;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &.active {
+      background: #635bff;
+      border-color: #635bff;
+      color: #ffffff;
+    }
+  }
+
+  .sp-chip,
+  .badge-type {
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.35);
+    color: #c7d2fe;
+  }
+
+  .scope-switch {
+    background: #111827;
+    border-color: #293548;
+  }
+
+  .chip {
+    &.c-ans {
+      background: rgba(16, 185, 129, 0.16);
+      border-color: #10b981;
+      color: #6ee7b7;
+    }
+    &.c-unans {
+      background: rgba(245, 158, 11, 0.16);
+      border-color: #f59e0b;
+      color: #fcd34d;
+    }
+    &.c-idle {
+      background: #1e293b;
+      border-color: #475569;
+      color: #94a3b8;
+    }
+  }
+
+  .btn-review {
+    background: #1e293b;
+    border-color: #6366f1;
+    color: #c7d2fe;
+  }
 }
 
 

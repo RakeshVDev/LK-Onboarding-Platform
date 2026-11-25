@@ -1236,4 +1236,60 @@
       color: #f8fafc;
     }
   }
+
+  .stat-icon {
+    &.completed { background: rgba(16, 185, 129, 0.16); color: #6ee7b7; }
+    &.active { background: rgba(59, 130, 246, 0.16); color: #93c5fd; }
+  }
+
+  .type-pill {
+    background: #1e293b;
+    color: #cbd5e1;
+
+    &.pre { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+  }
+
+  .status-pill {
+    background: #1e293b;
+    color: #cbd5e1;
+
+    &.completed, &.passed, &.graded {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+    &.pending, &.pending_review, &.in_progress {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+    &.failed, &.expired, &.terminated {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
+    }
+  }
+
+  .proctor-dot {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+  }
+
+  .dot-clean {
+    background: rgba(245, 158, 11, 0.16);
+    color: #fcd34d;
+  }
+
+  .dot-warning {
+    background: rgba(239, 68, 68, 0.16);
+    color: #fca5a5;
+  }
+
+  .btn-action-secondary {
+    background: #1e293b;
+    border-color: #334155;
+    color: #e2e8f0;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
 }

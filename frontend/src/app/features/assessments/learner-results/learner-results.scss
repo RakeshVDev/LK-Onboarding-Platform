@@ -958,5 +958,50 @@
   .history-empty {
     color: #94a3b8;
   }
+
+  .categories-panel {
+    background: #111827;
+    border-color: #293548;
+  }
+
+  .mini-progress-track {
+    background: #1e293b;
+  }
+
+  .btn-card-secondary {
+    background: #1e293b;
+    border-color: #334155;
+    color: #e2e8f0;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+
+  .grade-text {
+    &.excellent, &.pass {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+    &.good, &.info {
+      background: rgba(99, 102, 241, 0.16);
+      color: #c7d2fe;
+    }
+    &.average, &.warn {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+    &.fail, &.needs-work {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
+    }
+  }
+
+  .error-banner {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
 }
 

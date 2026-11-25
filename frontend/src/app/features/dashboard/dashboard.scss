@@ -3784,4 +3784,143 @@
       color: #94a3b8;
     }
   }
+
+  /* Live Assessments, Notifications, Onboarding Cards & Department Allocated Section */
+  .notification-card,
+  .empty-assigned-card,
+  .track-status-banner,
+  .track-selection-banner,
+  .stat-card-admin,
+  .progress-ring-container {
+    background: #182230;
+    border-color: #293548;
+    color: #f8fafc;
+
+    h2, h3, h4, strong { color: #f8fafc; }
+    p, span.muted { color: #94a3b8; }
+
+    &.warning, &.pending {
+      background: rgba(245, 158, 11, 0.1);
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+    &.urgent, &.expired {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.35);
+    }
+  }
+
+  .notif-icon-box,
+  .timer-tag,
+  .btn-sync-now,
+  .btn-sync-subtle,
+  .btn-breakdown-link,
+  .btn-module-action,
+  .milestone-step,
+  .step-status,
+  .test-symbol,
+  .test-details-strip,
+  .track-chip-card,
+  .track-notes-group {
+    background: #111827;
+    border-color: #293548;
+    color: #e2e8f0;
+
+    &:hover {
+      border-color: #475569;
+    }
+
+    strong { color: #f8fafc; }
+    p, small, span { color: #94a3b8; }
+  }
+
+  .track-chip-card.selected {
+    background: rgba(99, 102, 241, 0.16);
+    border-color: #818cf8;
+  }
+
+  .chip-radio {
+    background: #1e293b;
+    border-color: #475569;
+
+    &.selected {
+      background: rgba(99, 102, 241, 0.24);
+      border-color: #818cf8;
+    }
+  }
+
+  .step-icon {
+    background: #1e293b;
+    color: #cbd5e1;
+  }
+
+  .notif-pulse-badge,
+  .notif-cohort-chip,
+  .module-badge,
+  .shortcut-icon,
+  .status-icon-box,
+  .btn-secondary-link {
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.35);
+    color: #c7d2fe;
+  }
+
+  .notif-category-chip,
+  .test-badge,
+  .course-status-pill,
+  .track-eyebrow {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .pill-status-active,
+  .audit-badge,
+  .alert-success-box,
+  .btn-test-action.ready,
+  .course-status-pill.completed {
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #6ee7b7;
+  }
+
+  .pill-status-pending,
+  .pending-allocations-alert,
+  .alert-icon-wrap,
+  .track-eyebrow.pending {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.35);
+    color: #fcd34d;
+  }
+
+  .expired-readonly-note,
+  .alert-error-box,
+  .btn-test-action.expired {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
+
+  .lifecycle-badge {
+    background: #1e293b;
+    color: #cbd5e1;
+
+    &.pending { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+    &.in_progress { background: rgba(59, 130, 246, 0.16); color: #93c5fd; }
+    &.completed { background: rgba(16, 185, 129, 0.16); color: #6ee7b7; }
+    &.expired { background: rgba(239, 68, 68, 0.16); color: #fca5a5; }
+  }
+
+  .stat-icon-wrap {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+
+    &.amber { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+    &.indigo { background: rgba(99, 102, 241, 0.16); color: #a5b4fc; }
+  }
+
+  .search-svg,
+  .search-icon {
+    background: transparent;
+    color: #94a3b8;
+  }
 }

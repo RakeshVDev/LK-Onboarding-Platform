@@ -56,10 +56,10 @@
 
     <div style="max-width: 820px; margin: 28px auto; padding: 0 20px; display: flex; flex-direction: column; gap: 20px;">
       <!-- Step 1: Download Question Paper PDF -->
-      <section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px;">
-        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #4f46e5;">STEP 1 · DOWNLOAD QUESTION PAPER</span>
-        <h2 style="margin: 6px 0 8px; font-size: 20px;">Official Question Paper PDF</h2>
-        <p style="color: #475569; margin-bottom: 16px;">
+      <section style="background: var(--surface-primary); border: 1px solid var(--border-primary); border-radius: 14px; padding: 24px;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--accent-primary);">STEP 1 · DOWNLOAD QUESTION PAPER</span>
+        <h2 style="margin: 6px 0 8px; font-size: 20px; color: var(--text-primary);">Official Question Paper PDF</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 16px;">
           Download the instructor's PDF question paper below, complete your solution locally, and submit either a GitHub repository link, a <code>.zip</code> archive, or both.
         </p>
         <button type="button" class="btn-primary" [disabled]="downloadingPdf || !templateId" (click)="downloadQuestionPaper()">
@@ -68,43 +68,43 @@
       </section>
 
       <!-- Step 2: Submit Solution via GitHub Link and/or ZIP Upload -->
-      <section style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 24px;">
-        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #059669;">STEP 2 · SUBMIT SOLUTION FOR MANUAL GRADING</span>
-        <h2 style="margin: 6px 0 8px; font-size: 20px;">Project Deliverable Submission</h2>
-        <p style="color: #475569; margin-bottom: 18px;">
+      <section style="background: var(--surface-primary); border: 1px solid var(--border-primary); border-radius: 14px; padding: 24px;">
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--success-color);">STEP 2 · SUBMIT SOLUTION FOR MANUAL GRADING</span>
+        <h2 style="margin: 6px 0 8px; font-size: 20px; color: var(--text-primary);">Project Deliverable Submission</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 18px;">
           Provide a GitHub repository URL and/or upload a compressed project archive (<code>.zip</code>, <code>.tar.gz</code>, <code>.pdf</code>, etc.). Your instructor will manually evaluate and score your submission out of <strong>{{ maxMarks }} marks</strong>.
         </p>
 
         <div style="display: flex; flex-direction: column; gap: 16px;">
           <div>
-            <label for="pdfGhUrl" style="display: block; font-weight: 600; margin-bottom: 6px;">GitHub Repository URL</label>
+            <label for="pdfGhUrl" style="display: block; font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">GitHub Repository URL</label>
             <input
               id="pdfGhUrl"
               type="url"
-              style="width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px;"
+              style="width: 100%; padding: 10px 14px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-primary); border-radius: 8px;"
               [(ngModel)]="projectGithubUrl"
               placeholder="https://github.com/your-username/assessment-solution" />
           </div>
 
           <div>
-            <label for="pdfZipFile" style="display: block; font-weight: 600; margin-bottom: 6px;">Upload Solution Archive (.zip, .tar.gz, .pdf, etc.)</label>
+            <label for="pdfZipFile" style="display: block; font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">Upload Solution Archive (.zip, .tar.gz, .pdf, etc.)</label>
             <input
               id="pdfZipFile"
               type="file"
-              style="width: 100%; padding: 10px; border: 1px dashed #94a3b8; border-radius: 8px; background: #f8fafc;"
+              style="width: 100%; padding: 10px; border: 1px dashed var(--input-border); border-radius: 8px; background: var(--surface-secondary); color: var(--text-primary);"
               accept=".zip,.tar,.gz,.7z,.rar,.pdf,.py,.ts,.js,.java,.cs,.php,.sql"
               (change)="onProjectFileSelected($event)" />
             @if (projectZipFile) {
-              <small style="display: block; margin-top: 6px; color: #059669; font-weight: 600;">✓ Attached: {{ projectZipFile.name }}</small>
+              <small style="display: block; margin-top: 6px; color: var(--success-color); font-weight: 600;">✓ Attached: {{ projectZipFile.name }}</small>
             }
           </div>
 
           <div>
-            <label for="pdfNotes" style="display: block; font-weight: 600; margin-bottom: 6px;">Notes / Setup Instructions (Optional)</label>
+            <label for="pdfNotes" style="display: block; font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">Notes / Setup Instructions (Optional)</label>
             <textarea
               id="pdfNotes"
               rows="3"
-              style="width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px;"
+              style="width: 100%; padding: 10px 14px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-primary); border-radius: 8px;"
               [(ngModel)]="projectNotes"
               placeholder="Add setup steps, branch name, or architecture notes for your instructor..."></textarea>
           </div>

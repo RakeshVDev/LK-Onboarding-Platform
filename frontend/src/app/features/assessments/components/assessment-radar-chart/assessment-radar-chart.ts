@@ -10,6 +10,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { ThemeService } from '../../../../core/services/theme.service';
 import {
   Chart,
   ChartConfiguration,
@@ -53,6 +54,7 @@ export interface RadarChartSeries {
 })
 export class AssessmentRadarChartComponent {
   private readonly destroyRef = inject(DestroyRef);
+  private readonly themeService = inject(ThemeService);
 
   title = input<string>('Multi-Dimensional Competency Profile');
   subtitle = input<string>('');
@@ -135,13 +137,14 @@ export class AssessmentRadarChartComponent {
       const activeSeries = this.visibleSeries();
       const mode = this.viewMode();
       const canRadar = this.hasEnoughAxes();
+      const isDark = this.themeService.currentTheme() === 'dark';
 
       if (mode !== 'radar' || !canRadar || !canvas || activeSeries.length === 0) {
         this.destroyChart();
         return;
       }
 
-      this.renderChart(canvas, axisLabels, activeSeries);
+      this.renderChart(canvas, axisLabels, activeSeries, isDark);
     });
 
     this.destroyRef.onDestroy(() => {
@@ -193,7 +196,8 @@ export class AssessmentRadarChartComponent {
   private renderChart(
     canvas: HTMLCanvasElement,
     axisLabels: string[],
-    activeSeries: RadarChartSeries[]
+    activeSeries: RadarChartSeries[],
+    isDark: boolean
   ): void {
     let ctx: CanvasRenderingContext2D | null = null;
     try {
@@ -238,7 +242,11 @@ export class AssessmentRadarChartComponent {
         plugins: {
           legend: { display: false },
           tooltip: {
-            backgroundColor: '#0f172a',
+            backgroundColor: isDark ? '#1e293b' : '#0f172a',
+            borderColor: isDark ? '#334155' : 'transparent',
+            borderWidth: isDark ? 1 : 0,
+            titleColor: '#f8fafc',
+            bodyColor: '#e2e8f0',
             titleFont: { size: 12, weight: 'bold' },
             bodyFont: { size: 12 },
             padding: 10,
@@ -255,20 +263,20 @@ export class AssessmentRadarChartComponent {
             ticks: {
               stepSize: 25,
               backdropColor: 'transparent',
-              color: '#64748b',
+              color: isDark ? '#94a3b8' : '#64748b',
               font: { size: this.compact() ? 9 : 10, weight: 600 },
               callback: (v) => `${v}%`,
             },
             grid: {
-              color: '#e2e8f0',
+              color: isDark ? 'rgba(148, 163, 184, 0.18)' : '#e2e8f0',
               lineWidth: 1,
             },
             angleLines: {
-              color: '#cbd5e1',
+              color: isDark ? 'rgba(148, 163, 184, 0.24)' : '#cbd5e1',
               lineWidth: 1,
             },
             pointLabels: {
-              color: '#1e293b',
+              color: isDark ? '#e2e8f0' : '#1e293b',
               font: {
                 size: this.compact() ? 10.5 : 12,
                 weight: 600,

@@ -80,66 +80,175 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   private lastViolationTimestamp = 0;
   private visibilityListener: (() => void) | null = null;
   private windowBlurListener: (() => void) | null = null;
+  private pageshowListener: ((event: PageTransitionEvent) => void) | null = null;
+  private popstateListener: (() => void) | null = null;
 
   remainingSeconds = 1800; // 30:00
   errorMessage = '';
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     this.sessionId = Number(this.route.snapshot.paramMap.get('sessionId'));
 
     if (!this.sessionId || !Number.isFinite(this.sessionId)) {
       this.errorMessage = 'Invalid assessment session.';
       this.loading = false;
+      this.cdr.detectChanges();
       return;
     }
 
-    const state = history.state as {
-      sessionId?: number;
-      templateId?: number;
-      questions?: AssessmentQuestion[];
-      startedAt?: string;
-      expiresAt?: string;
-      durationMinutes?: number;
-      remainingSeconds?: number;
-      templateName?: string;
-      assessmentType?: string;
-      assessmentMode?: 'mcq' | 'pdf_submission' | string;
-      hasQuestionPdf?: boolean;
-      questionPdfName?: string | null;
-      maxMarks?: number;
-      assignedSet?: string;
-    };
-
-    const isPdfFromState = state?.assessmentMode === 'pdf_submission';
-
-    if (
-      state?.sessionId === this.sessionId &&
-      state.startedAt &&
-      (isPdfFromState || (Array.isArray(state.questions) && state.questions.length > 0))
-    ) {
-      if (state.templateId) this.templateId = Number(state.templateId);
-      if (state.templateName) this.templateName = state.templateName;
-      if (state.assessmentType) this.assessmentType = state.assessmentType;
-      this.assessmentMode = isPdfFromState ? 'pdf_submission' : 'mcq';
-      this.hasQuestionPdf = Boolean(state.hasQuestionPdf);
-      this.questionPdfName = state.questionPdfName || null;
-      if (state.maxMarks) this.maxMarks = Number(state.maxMarks) || 100;
-      if (state.assignedSet) this.assignedSet = state.assignedSet;
-      this.initializeAssessment(
-        state.questions || [],
-        state.startedAt,
-        state.expiresAt,
-        state.durationMinutes,
-        state.remainingSeconds
-      );
-    } else {
-      this.resumeAssessment();
+    // 1. Fast in-memory check for sessions submitted in current SPA session
+    if (this.api.isSessionLocallySubmitted(this.sessionId)) {
+      this.isAlreadySubmitted = true;
+      this.loading = false;
+      this.cdr.detectChanges();
+      void this.router.navigate(['/assessments/report', this.sessionId], { replaceUrl: true });
+      return;
     }
+
+    // 2. Attach BFCache & popstate listeners to prevent back navigation reopening
+    this.attachNavigationListeners();
+
+    // 3. Authoritatively verify with backend before rendering questions
+    await this.verifyAndLoadSession();
   }
 
   ngOnDestroy(): void {
     this.stopTimer();
     this.detachTabSwitchListeners();
+    this.detachNavigationListeners();
+  }
+
+  private attachNavigationListeners(): void {
+    this.detachNavigationListeners();
+
+    this.pageshowListener = (event: PageTransitionEvent) => {
+      // Handles browser Back/Forward Cache restorations
+      if (event.persisted || this.api.isSessionLocallySubmitted(this.sessionId)) {
+        void this.revalidateSession();
+      }
+    };
+
+    this.popstateListener = () => {
+      void this.revalidateSession();
+    };
+
+    window.addEventListener('pageshow', this.pageshowListener);
+    window.addEventListener('popstate', this.popstateListener);
+  }
+
+  private detachNavigationListeners(): void {
+    if (this.pageshowListener) {
+      window.removeEventListener('pageshow', this.pageshowListener);
+      this.pageshowListener = null;
+    }
+    if (this.popstateListener) {
+      window.removeEventListener('popstate', this.popstateListener);
+      this.popstateListener = null;
+    }
+  }
+
+  private async revalidateSession(): Promise<void> {
+    if (!this.sessionId) return;
+    if (this.api.isSessionLocallySubmitted(this.sessionId)) {
+      this.isAlreadySubmitted = true;
+      this.loading = false;
+      this.stopTimer();
+      this.detachTabSwitchListeners();
+      this.cdr.detectChanges();
+      void this.router.navigate(['/assessments/report', this.sessionId], { replaceUrl: true });
+      return;
+    }
+
+    try {
+      const check = await firstValueFrom(this.api.checkSession(this.sessionId));
+      if (check.is_submitted || check.status === 'completed' || check.status === 'submitted') {
+        this.api.markSessionSubmitted(this.sessionId);
+        this.isAlreadySubmitted = true;
+        this.loading = false;
+        this.stopTimer();
+        this.detachTabSwitchListeners();
+        this.cdr.detectChanges();
+        const target = check.redirect_url || `/assessments/report/${this.sessionId}`;
+        void this.router.navigate([target], { replaceUrl: true });
+      }
+    } catch {
+      // Ignore network errors on passive revalidation
+    }
+  }
+
+  private async verifyAndLoadSession(): Promise<void> {
+    this.loading = true;
+    this.errorMessage = '';
+    this.cdr.detectChanges();
+
+    try {
+      const check = await firstValueFrom(this.api.checkSession(this.sessionId));
+
+      if (check.is_submitted || check.status === 'completed' || check.status === 'submitted') {
+        this.api.markSessionSubmitted(this.sessionId);
+        this.isAlreadySubmitted = true;
+        this.loading = false;
+        this.cdr.detectChanges();
+        const target = check.redirect_url || `/assessments/report/${this.sessionId}`;
+        void this.router.navigate([target], { replaceUrl: true });
+        return;
+      }
+
+      if (check.is_expired) {
+        this.isExpired = true;
+        this.errorMessage = 'This assessment session has expired and cannot be resumed.';
+        this.loading = false;
+        this.api.notifyStatusChanged();
+        this.cdr.detectChanges();
+        return;
+      }
+
+      const state = history.state as {
+        sessionId?: number;
+        templateId?: number;
+        questions?: AssessmentQuestion[];
+        startedAt?: string;
+        expiresAt?: string;
+        durationMinutes?: number;
+        remainingSeconds?: number;
+        templateName?: string;
+        assessmentType?: string;
+        assessmentMode?: 'mcq' | 'pdf_submission' | string;
+        hasQuestionPdf?: boolean;
+        questionPdfName?: string | null;
+        maxMarks?: number;
+        assignedSet?: string;
+      };
+
+      const isPdfFromState = state?.assessmentMode === 'pdf_submission';
+
+      if (
+        state?.sessionId === this.sessionId &&
+        state.startedAt &&
+        (isPdfFromState || (Array.isArray(state.questions) && state.questions.length > 0))
+      ) {
+        if (state.templateId) this.templateId = Number(state.templateId);
+        if (state.templateName) this.templateName = state.templateName;
+        if (state.assessmentType) this.assessmentType = state.assessmentType;
+        this.assessmentMode = isPdfFromState ? 'pdf_submission' : 'mcq';
+        this.hasQuestionPdf = Boolean(state.hasQuestionPdf);
+        this.questionPdfName = state.questionPdfName || null;
+        if (state.maxMarks) this.maxMarks = Number(state.maxMarks) || 100;
+        if (state.assignedSet) this.assignedSet = state.assignedSet;
+        this.initializeAssessment(
+          state.questions || [],
+          state.startedAt,
+          state.expiresAt,
+          state.durationMinutes,
+          check.remaining_seconds ?? state.remainingSeconds
+        );
+      } else {
+        await this.resumeAssessment();
+      }
+    } catch (err: any) {
+      console.warn('Initial session check error, falling back to resume:', err);
+      await this.resumeAssessment();
+    }
   }
 
   // ----------------------------------
@@ -167,9 +276,10 @@ export class AssessmentTaking implements OnInit, OnDestroy {
 
       if (session.status !== 'in_progress') {
         this.isAlreadySubmitted = true;
+        this.api.markSessionSubmitted(this.sessionId);
         this.loading = false;
         this.cdr.detectChanges();
-        void this.router.navigate(['/assessments/results', this.sessionId]);
+        void this.router.navigate(['/assessments/report', this.sessionId], { replaceUrl: true });
         return;
       }
 
@@ -216,9 +326,10 @@ export class AssessmentTaking implements OnInit, OnDestroy {
         detail.includes('already submitted')
       ) {
         this.isAlreadySubmitted = true;
+        this.api.markSessionSubmitted(this.sessionId);
         this.loading = false;
         this.cdr.detectChanges();
-        void this.router.navigate(['/assessments/results', this.sessionId]);
+        void this.router.navigate(['/assessments/report', this.sessionId], { replaceUrl: true });
         return;
       }
 
@@ -846,6 +957,14 @@ export class AssessmentTaking implements OnInit, OnDestroy {
         throw new Error('The server did not confirm assessment completion.');
       }
 
+      this.api.markSessionSubmitted(this.sessionId);
+
+      try {
+        history.replaceState(null, '', window.location.href);
+      } catch {
+        // ignore
+      }
+
       try {
         sessionStorage.removeItem(this.localKey);
         sessionStorage.removeItem(`lk_tab_switch_${this.sessionId}`);
@@ -856,6 +975,20 @@ export class AssessmentTaking implements OnInit, OnDestroy {
 
     } catch (error: any) {
       console.error('Assessment submission failed:', error);
+      const detail = String(error?.error?.detail || error?.message || '').toLowerCase();
+      if (
+        detail.includes('already submitted') ||
+        detail.includes('already been submitted') ||
+        detail.includes('no longer in progress')
+      ) {
+        this.api.markSessionSubmitted(this.sessionId);
+        this.isAlreadySubmitted = true;
+        this.submitting = false;
+        this.cdr.detectChanges();
+        await this.router.navigate(['/assessments/report', this.sessionId], { replaceUrl: true });
+        return;
+      }
+
       this.submitting = false;
 
       if (!this.isExpired && !this.isTerminatedDueToViolation && this.startedAt) {
@@ -896,21 +1029,21 @@ export class AssessmentTaking implements OnInit, OnDestroy {
       this.cdr.detectChanges();
 
       if (!allDone) {
-        await this.router.navigate(['/my-assessments']);
+        await this.router.navigate(['/my-assessments'], { replaceUrl: true });
         return;
       }
 
       if (perms.is_unlocked || statusRes.has_approved_department) {
-        await this.router.navigate(['/assessments/report', this.sessionId]);
+        await this.router.navigate(['/assessments/report', this.sessionId], { replaceUrl: true });
       } else if (perms.can_select_department) {
-        await this.router.navigate(['/department-selection']);
+        await this.router.navigate(['/department-selection'], { replaceUrl: true });
       } else {
-        await this.router.navigate(['/assessments/results', this.sessionId]);
+        await this.router.navigate(['/assessments/results', this.sessionId], { replaceUrl: true });
       }
     } catch {
       this.submitting = false;
       this.cdr.detectChanges();
-      await this.router.navigate(['/my-assessments']);
+      await this.router.navigate(['/my-assessments'], { replaceUrl: true });
     }
   }
 }

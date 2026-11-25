@@ -7562,3 +7562,372 @@
     }
   }
 }
+
+:host-context(html.dark) {
+  color-scheme: dark;
+
+  // Form Controls, Inputs, Selects, Labels & File Inputs
+  label,
+  .form-group label {
+    color: #cbd5e1;
+  }
+
+  .input-hint,
+  .field-symbol {
+    color: #94a3b8;
+  }
+
+  input[type="file"] {
+    background: #111827;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &::file-selector-button {
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 6px 12px;
+      margin-right: 10px;
+      cursor: pointer;
+
+      &:hover {
+        background: #334155;
+      }
+    }
+  }
+
+  input[type="checkbox"] {
+    accent-color: #635bff;
+  }
+
+  // Batch Specifications & Curriculum Objectives
+  .card-icon-round {
+    background: #1e293b;
+    border-color: #334155;
+    color: #f8fafc;
+  }
+
+  .spec-item {
+    border-bottom-color: #263244;
+  }
+
+  .spec-label {
+    color: #94a3b8;
+  }
+
+  .spec-value {
+    color: #f8fafc;
+
+    &.highlight-stage {
+      color: #a5b4fc;
+    }
+
+    &.link-style {
+      color: #818cf8;
+    }
+  }
+
+  .cohort-summary-text,
+  .objective-item {
+    color: #cbd5e1;
+
+    strong {
+      color: #f8fafc;
+    }
+  }
+
+  .obj-check {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+  }
+
+  // Video Duration Pill & Learner Watch Behavior
+  .lesson-dur,
+  .lesson-meta-badge {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .redirect-info-pill {
+    background: rgba(16, 185, 129, 0.14);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #6ee7b7;
+
+    .pill-dot {
+      background: #10b981;
+    }
+  }
+
+  // Form Controls, Inputs, Selects & Textareas
+  .form-input,
+  .form-select,
+  .form-textarea,
+  .picker-search-input,
+  input[type="text"],
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="number"],
+  input[type="url"],
+  textarea,
+  select {
+    background: #111827;
+    border-color: #334155;
+    color: #f8fafc;
+
+    &::placeholder {
+      color: #64748b;
+    }
+
+    &:focus {
+      border-color: #818cf8;
+      box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+    }
+
+    option {
+      background: #111827;
+      color: #f8fafc;
+    }
+  }
+
+  // Live Sessions, Schedule, Check-ins & Member Cards
+  .session-card,
+  .empty-sessions-notice,
+  .checkin-today-card,
+  .stat-box,
+  .badges-card,
+  .member-card,
+  .progress-kpi-card,
+  .not-started-card,
+  .locked-card {
+    background: #182230;
+    border-color: #293548;
+    color: #f8fafc;
+
+    h2, h3, h4, strong, .session-title, .member-name, .kpi-value {
+      color: #f8fafc;
+    }
+
+    p, span.muted, .session-meta, .member-email, .kpi-label {
+      color: #94a3b8;
+    }
+  }
+
+  .btn-join-live,
+  .btn-member-message,
+  .btn-end-meeting-sm,
+  .btn-upcoming-room-sm,
+  .btn-end-sess-btn,
+  .mentor-chip,
+  .step-content,
+  .locked-status-box,
+  .live-pulse-indicator {
+    background: #111827;
+    border-color: #334155;
+    color: #e2e8f0;
+
+    &:hover {
+      background: #1e293b;
+      color: #ffffff;
+    }
+  }
+
+  .live-toggle-banner,
+  .checkbox-group-live,
+  .btn-start-meeting-spotlight {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
+
+  // Batch Creation, Learners Picker & Choice Cards
+  .batch-learners-picker,
+  .learner-picker-row,
+  .choice-card {
+    background: #111827;
+    border-color: #293548;
+    color: #e2e8f0;
+
+    &:hover {
+      background: #1e293b;
+      border-color: #475569;
+    }
+  }
+
+  .picker-learners-list {
+    background: #0f172a;
+    border-color: #293548;
+  }
+
+  .btn-picker-action {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+
+  // Material, Curriculum, File Dropzones & Attachments
+  .add-file-tabs {
+    background: #0f172a;
+    border-color: #293548;
+
+    .source-tab-btn {
+      background: transparent;
+      color: #94a3b8;
+
+      &.active {
+        background: #1e293b;
+        color: #f8fafc;
+      }
+    }
+  }
+
+  .file-dropzone,
+  .compact-attach-dropzone,
+  .attach-file-section,
+  .asg-instructor-attachment,
+  .video-info-box {
+    background: #111827;
+    border-color: #334155;
+    color: #cbd5e1;
+
+    &:hover {
+      border-color: #6366f1;
+    }
+  }
+
+  .dropzone-icon-circle,
+  .type-icon {
+    background: rgba(99, 102, 241, 0.16);
+    color: #a5b4fc;
+  }
+
+  .file-icon-badge,
+  .file-size-pill,
+  .attached-file-preview,
+  .btn-browse-file,
+  .btn-replace-file,
+  .btn-popout-video,
+  .btn-download-attached-link {
+    background: #1e293b;
+    border-color: #334155;
+    color: #e2e8f0;
+
+    &:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+
+  .btn-remove-file {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
+
+  // Department Banners, Pending Requests & Status Badges
+  .learner-department-banner {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(14, 165, 233, 0.12) 100%);
+    border-color: #293548;
+    color: #f8fafc;
+  }
+
+  .dept-badge-pill,
+  .btn-request-dept-change {
+    background: #111827;
+    border-color: #334155;
+    color: #e2e8f0;
+
+    &:hover {
+      background: #1e293b;
+      color: #ffffff;
+    }
+  }
+
+  .pending-request-row {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #f8fafc;
+  }
+
+  .not-started-badge-icon,
+  .locked-icon-bubble,
+  .status-pill-waiting,
+  .spotlight-tag,
+  .status-badge-pending,
+  .pending-counter-badge,
+  .pending-change-indicator,
+  .btn-warning {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.35);
+    color: #fcd34d;
+  }
+
+  .btn-reject-track,
+  .btn-danger,
+  .tab-badge-warn,
+  .badge-live-now,
+  .pill-live-badge,
+  .priority-badge {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
+
+  .tab-badge-check,
+  .awarded-score-pill,
+  .file-status-pill,
+  .dept-verified-tag,
+  .badge-superadmin-created,
+  .badge-status-passed,
+  .circle-kpi {
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #6ee7b7;
+  }
+
+  .badge-status-retake {
+    background: rgba(249, 115, 22, 0.16);
+    border-color: rgba(249, 115, 22, 0.35);
+    color: #fdba74;
+  }
+
+  .section-tag-teal,
+  .lesson-type-pill,
+  .type-pill,
+  .points-badge,
+  .pill-total-sessions,
+  .video-dur-pill,
+  .sess-popover-status {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .score-badge,
+  .status-badge,
+  .sess-status-pill {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-color: #334155;
+
+    &.passed,
+    &.completed,
+    &.live {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+
+    &.failed,
+    &.missed,
+    &.ended {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
+    }
+  }
+}

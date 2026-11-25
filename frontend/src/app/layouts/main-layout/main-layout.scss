@@ -1689,3 +1689,48 @@
     color: #344054;
   }
 }
+
+:host-context([data-theme="dark"]),
+:host-context(html.dark),
+:host-context(body.dark-theme) {
+  .cmd-footer-hints {
+    background: #0f172a;
+    border-top-color: #1f2937;
+    color: #94a3b8;
+
+    kbd {
+      background: #1e293b;
+      border-color: #334155;
+      color: #e2e8f0;
+    }
+  }
+
+  .brand-badge,
+  .user-role-pill {
+    background: rgba(99, 102, 241, 0.18);
+    color: #c7d2fe;
+  }
+
+  .btn-sidebar-logout {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+
+    &:hover {
+      background: rgba(239, 68, 68, 0.24);
+    }
+  }
+
+  .dropdown-role-pill {
+    background: rgba(99, 102, 241, 0.18);
+    color: #c7d2fe;
+
+    &.admin { background: rgba(239, 68, 68, 0.16); color: #fca5a5; }
+    &.teacher { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+  }
+
+  .badge-status-footer {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+  }
+}

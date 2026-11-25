@@ -2530,6 +2530,55 @@
       }
     }
   }
+
+  .alert-banner,
+  .neg-badge,
+  .btn-delete-q {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
+
+  .type-icon,
+  .seq-pill,
+  .set-badge,
+  .inline-preview-toolbar {
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.35);
+    color: #c7d2fe;
+
+    &.grammar,
+    &.warning {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+  }
+
+  .inline-preview-box,
+  .item-open-ended-pill,
+  .item-instructions-pill {
+    background: #111827;
+    border-color: #293548;
+    color: #cbd5e1;
+  }
+
+  .ip-mode-switch {
+    background: #182230;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  .score-badge {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .diff-badge {
+    &.easy { background: rgba(16, 185, 129, 0.16); color: #6ee7b7; }
+    &.medium { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+    &.hard { background: rgba(239, 68, 68, 0.16); color: #fca5a5; }
+  }
 }
 
 .set-choice-grid {
@@ -2753,5 +2802,54 @@
         color: #ffffff;
       }
     }
+  }
+
+  .alert-banner,
+  .neg-badge,
+  .btn-delete-q {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
+
+  .type-icon,
+  .seq-pill,
+  .set-badge,
+  .inline-preview-toolbar {
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.35);
+    color: #c7d2fe;
+
+    &.grammar,
+    &.warning {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+  }
+
+  .inline-preview-box,
+  .item-open-ended-pill,
+  .item-instructions-pill {
+    background: #111827;
+    border-color: #293548;
+    color: #cbd5e1;
+  }
+
+  .ip-mode-switch {
+    background: #182230;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  .score-badge {
+    background: #1e293b;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+
+  .diff-badge {
+    &.easy { background: rgba(16, 185, 129, 0.16); color: #6ee7b7; }
+    &.medium { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+    &.hard { background: rgba(239, 68, 68, 0.16); color: #fca5a5; }
   }
 }

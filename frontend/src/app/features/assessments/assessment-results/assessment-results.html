@@ -33,7 +33,7 @@
 
   @if (!loading() && results(); as results) {
     @if (results.grading_status === 'pending_review') {
-      <section class="state-panel" style="background:#fffbeb; border:1px solid #fde68a;">
+      <section class="state-panel pending-review-panel">
         <strong>⏳ Submission Received — Pending Manual Instructor Grading</strong>
         <p>Your instructor will review your submitted repository/archive and enter your official score out of {{ results.max_score }} marks.</p>
       </section>
