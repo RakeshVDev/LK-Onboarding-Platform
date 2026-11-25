@@ -32,6 +32,12 @@
   }
 
   @if (!loading() && results(); as results) {
+    @if (results.grading_status === 'pending_review') {
+      <section class="state-panel" style="background:#fffbeb; border:1px solid #fde68a;">
+        <strong>⏳ Submission Received — Pending Manual Instructor Grading</strong>
+        <p>Your instructor will review your submitted repository/archive and enter your official score out of {{ results.max_score }} marks.</p>
+      </section>
+    } @else {
     <section class="overview-grid">
       <article class="overview-card overall-card">
         <span class="metric-label">OVERALL PERFORMANCE</span>
@@ -149,5 +155,6 @@
       This assessment provides developmental feedback. It is not a clinical
       diagnosis or a standalone employment-suitability decision.
     </p>
+    }
   }
 </div>

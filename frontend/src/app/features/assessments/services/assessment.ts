@@ -26,6 +26,10 @@ export interface AssessmentTemplate {
   department_name?: string | null;
   assessment_type: AssessmentDomainType;
   assessment_tag?: 'Assessment' | 'Pre-Assessment' | string;
+  assessment_mode?: 'mcq' | 'pdf_submission' | string;
+  has_question_pdf?: boolean;
+  question_pdf_name?: string | null;
+  max_marks?: number;
   custom_tags?: string[];
   reading_passage?: string | null;
   description: string | null;
@@ -48,6 +52,8 @@ export interface CreateAssessmentTemplate {
   department_id?: number | null;
   assessment_type?: AssessmentDomainType;
   assessment_tag?: 'Assessment' | 'Pre-Assessment' | string;
+  assessment_mode?: 'mcq' | 'pdf_submission';
+  max_marks?: number;
   custom_tags?: string[];
   reading_passage?: string | null;
   description: string | null;
@@ -65,6 +71,8 @@ export interface UpdateAssessmentTemplate {
   department_id?: number | null;
   assessment_type?: AssessmentDomainType;
   assessment_tag?: 'Assessment' | 'Pre-Assessment' | string;
+  assessment_mode?: 'mcq' | 'pdf_submission';
+  max_marks?: number;
   custom_tags?: string[];
   reading_passage?: string | null;
   description?: string | null;
@@ -114,6 +122,7 @@ export interface AssignableLearnerItem {
   full_name: string;
   email: string;
   cohort_ids: number[];
+  department_ids?: number[];
 }
 
 export interface AssignableTargetsResponse {
@@ -123,6 +132,8 @@ export interface AssignableTargetsResponse {
 
 export interface StudentAssignedAssessmentItem {
   template_id: number;
+  department_id?: number | null;
+  department_name?: string | null;
   assignment_id?: number | null;
   assignment_scope: 'all' | 'cohort' | 'learner' | string;
   cohort_name?: string | null;
@@ -131,6 +142,12 @@ export interface StudentAssignedAssessmentItem {
   assessment_type:
     | AssessmentDomainType
     | string;
+  assessment_tag?: 'Assessment' | 'Pre-Assessment' | string;
+  assessment_mode?: 'mcq' | 'pdf_submission' | string;
+  has_question_pdf?: boolean;
+  question_pdf_name?: string | null;
+  grading_status?: 'auto_graded' | 'pending_review' | 'manually_graded' | string;
+  is_priority_pre_assessment?: boolean;
   category_label: string;
   question_count: number;
   duration_minutes: number;
@@ -197,8 +214,14 @@ export interface AssessmentStartResponse {
   remaining_seconds?: number;
   started_at: string;
   expires_at?: string;
+  template_id?: number;
   template_name?: string;
   assessment_type?: string;
+  assessment_tag?: string;
+  assessment_mode?: 'mcq' | 'pdf_submission' | string;
+  has_question_pdf?: boolean;
+  question_pdf_name?: string | null;
+  max_marks?: number;
   assigned_set?: string | null;
   questions: AssessmentQuestion[];
 }
@@ -211,8 +234,14 @@ export interface AssessmentResumeResponse {
   remaining_seconds?: number;
   started_at: string;
   expires_at?: string;
+  template_id?: number;
   template_name?: string;
   assessment_type?: string;
+  assessment_tag?: string;
+  assessment_mode?: 'mcq' | 'pdf_submission' | string;
+  has_question_pdf?: boolean;
+  question_pdf_name?: string | null;
+  max_marks?: number;
   assigned_set?: string | null;
   saved_answers?: Record<number, string>;
   marked_for_review?: number[];
@@ -256,6 +285,13 @@ export interface AssessmentScoresResponse {
   max_score: number;
   overall_percentage: number;
   tab_switch_count?: number;
+  submission_type?: string;
+  grading_status?: string;
+  submission_github_url?: string | null;
+  submission_file_name?: string | null;
+  has_submission_file?: boolean;
+  submission_notes?: string | null;
+  trainer_feedback?: string | null;
 }
 
 export interface AssessmentReportData {
@@ -313,6 +349,13 @@ export interface UserAssessmentResultItem {
   has_report: boolean;
   categories: CategoryScore[];
   tab_switch_count?: number;
+  submission_type?: string;
+  grading_status?: string;
+  submission_github_url?: string | null;
+  submission_file_name?: string | null;
+  has_submission_file?: boolean;
+  submission_notes?: string | null;
+  trainer_feedback?: string | null;
 }
 
 export interface AdminAssessmentResultItem extends Omit<UserAssessmentResultItem, 'session_id' | 'started_at'> {
@@ -850,6 +893,56 @@ export class AssessmentService {
     return this.http.get<AdminAssessmentResultsResponse>(
       `${this.apiUrl}/admin/results`,
       { params: httpParams }
+    );
+  }
+
+  // ----------------------------------
+  // PDF Question Paper & Project Submission / Manual Teacher Grading
+  // ----------------------------------
+
+  uploadQuestionPdf(templateId: number, file: File): Observable<AssessmentTemplate> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<AssessmentTemplate>(
+      `${this.apiUrl}/templates/${templateId}/question-pdf`,
+      formData
+    ).pipe(
+      tap(() => this.notifyStatusChanged())
+    );
+  }
+
+  downloadQuestionPdf(templateId: number): Observable<Blob> {
+    return this.http.get(
+      `${this.apiUrl}/templates/${templateId}/question-pdf`,
+      { responseType: 'blob' }
+    );
+  }
+
+  submitProjectAssessment(sessionId: number, formData: FormData): Observable<AssessmentSubmitResponse & { grading_status?: string }> {
+    return this.http.post<AssessmentSubmitResponse & { grading_status?: string }>(
+      `${this.apiUrl}/sessions/${sessionId}/submit-project`,
+      formData
+    ).pipe(
+      tap(() => this.notifyStatusChanged())
+    );
+  }
+
+  downloadSubmissionFile(sessionId: number): Observable<Blob> {
+    return this.http.get(
+      `${this.apiUrl}/sessions/${sessionId}/submission-file`,
+      { responseType: 'blob' }
+    );
+  }
+
+  gradeProjectSubmission(
+    sessionId: number,
+    payload: { score: number; max_score: number; feedback?: string }
+  ): Observable<AssessmentScoresResponse> {
+    return this.http.post<AssessmentScoresResponse>(
+      `${this.apiUrl}/sessions/${sessionId}/grade-project`,
+      payload
+    ).pipe(
+      tap(() => this.notifyStatusChanged())
     );
   }
 }

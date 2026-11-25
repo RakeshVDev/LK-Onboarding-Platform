@@ -148,15 +148,19 @@ export class LearnerResults implements OnInit {
     return this.completedResults.length;
   }
 
+  get gradedCompletedResults(): UserAssessmentResultItem[] {
+    return this.completedResults.filter(r => r.grading_status !== 'pending_review');
+  }
+
   get averageScore(): number {
-    if (!this.completedResults.length) return 0;
-    const total = this.completedResults.reduce((acc, r) => acc + r.overall_percentage, 0);
-    return Math.round((total / this.completedResults.length) * 10) / 10;
+    if (!this.gradedCompletedResults.length) return 0;
+    const total = this.gradedCompletedResults.reduce((acc, r) => acc + r.overall_percentage, 0);
+    return Math.round((total / this.gradedCompletedResults.length) * 10) / 10;
   }
 
   get bestScore(): number {
-    if (!this.completedResults.length) return 0;
-    return Math.max(...this.completedResults.map(r => r.overall_percentage));
+    if (!this.gradedCompletedResults.length) return 0;
+    return Math.max(...this.gradedCompletedResults.map(r => r.overall_percentage));
   }
 
   viewReport(sessionId: number): void {

@@ -19,15 +19,19 @@
         <button type="button" class="tab-pill" [class.active]="activeTab === 'config'" (click)="setActiveTab('config')">
           <span>⚙</span> Settings &amp; Configuration
         </button>
+        @if (assessmentMode === 'mcq') {
         <button type="button" class="tab-pill" [class.active]="activeTab === 'questions'"
           (click)="setActiveTab('questions')">
           <span>📑</span> Question Bank ({{ assignedQuestions.length }})
         </button>
+        }
       </div>
 
+      @if (assessmentMode === 'mcq') {
       <button type="button" class="btn-preview-assessment" (click)="openAssessmentPreview()">
         <span>👁</span> Preview Assessment
       </button>
+      }
     </div>
     }
   </header>
@@ -59,6 +63,65 @@
   <div class="tab-pane">
 
     <form class="form-card" [formGroup]="form" (ngSubmit)="save()">
+
+      <!-- Assessment Delivery Format: MCQ vs PDF Question Paper + GitHub/ZIP -->
+      <div class="form-group">
+        <label class="group-label">Assessment Delivery Format <span>*</span></label>
+        <div class="tag-choice-row">
+          <label class="tag-choice-pill" [class.selected]="assessmentMode === 'mcq'">
+            <input type="radio" name="assessmentMode" value="mcq" [checked]="assessmentMode === 'mcq'"
+              (change)="onAssessmentModeChange('mcq')">
+            <div>
+              <strong>Mode 1: MCQ Examination</strong>
+              <span>Interactive multiple-choice &amp; question bank with automated grading</span>
+            </div>
+          </label>
+          <label class="tag-choice-pill" [class.selected]="assessmentMode === 'pdf_submission'">
+            <input type="radio" name="assessmentMode" value="pdf_submission" [checked]="assessmentMode === 'pdf_submission'"
+              (change)="onAssessmentModeChange('pdf_submission')">
+            <div>
+              <strong>Mode 2: PDF Question Paper (GitHub / ZIP Submission)</strong>
+              <span>Students download Question PDF, submit GitHub link or .zip file, and instructor grades manually</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      @if (assessmentMode === 'pdf_submission') {
+      <div class="assignment-card" style="margin-bottom: 18px;">
+        <div class="assignment-header">
+          <div>
+            <h4>Question Paper PDF &amp; Manual Grading Marks</h4>
+            <p>Upload the PDF question paper for students to download. Submissions will be held for manual teacher grading.</p>
+          </div>
+          <span class="sub-pill">Manual Grading</span>
+        </div>
+
+        <div class="form-row-2" style="margin-top: 12px;">
+          <div class="form-group">
+            <label for="questionPdfInput">Question Paper PDF <span>*</span></label>
+            <input id="questionPdfInput" type="file" accept=".pdf,application/pdf" (change)="onQuestionPdfSelected($event)">
+            @if (questionPdfFile) {
+            <small class="field-hint" style="color: #059669; font-weight: 600;">✓ Selected: {{ questionPdfFile.name }}</small>
+            } @else if (template?.has_question_pdf) {
+            <div style="margin-top: 6px; display: flex; align-items: center; gap: 10px;">
+              <small class="field-hint" style="color: #059669; font-weight: 600;">✓ Uploaded: {{ template?.question_pdf_name || 'question_paper.pdf' }}</small>
+              <button type="button" class="btn-picker-util" (click)="downloadCurrentQuestionPdf()">⬇ Download PDF</button>
+            </div>
+            } @else {
+            <small class="field-hint">Upload the official PDF problem statement (max 25 MB).</small>
+            }
+          </div>
+
+          <div class="form-group">
+            <label for="pdfMaxMarks">Maximum Total Marks <span>*</span></label>
+            <input id="pdfMaxMarks" type="number" min="1" max="1000" [(ngModel)]="maxMarks"
+              [ngModelOptions]="{ standalone: true }">
+            <small class="field-hint">Teachers manually grade and award scores out of {{ maxMarks }} marks after inspecting the submission.</small>
+          </div>
+        </div>
+      </div>
+      }
 
       <!-- Assessment Type Selection -->
       <div class="form-group">
@@ -150,6 +213,7 @@
       </div>
 
       <!-- Question Set Selection (3 Sets per Category: Set A, Set B, Set C, or Auto-Rotate) -->
+      @if (assessmentMode === 'mcq') {
       <div class="form-group">
         <label class="group-label">Question Set Selection (3 Distinct Sets per Category) <span>*</span></label>
         <div class="set-choice-grid" role="radiogroup" aria-label="Question Set Selection">
@@ -197,6 +261,7 @@
           Auto-Rotate enabled to prevent collusion.
         </small>
       </div>
+      }
 
       <!-- SuperAdmin Assessment Tag & Custom Tags -->
       <div class="form-group">
@@ -238,7 +303,7 @@
       <!-- Department Track Assignment -->
       <div class="form-group">
         <label for="deptSelect">Target Department / Tech Track @if (isTeacher) {<span>*</span>}</label>
-        <select id="deptSelect" formControlName="department_id" class="form-control">
+        <select id="deptSelect" formControlName="department_id" class="form-control" (change)="onDepartmentChange()">
           @if (!isTeacher) {
           <option [ngValue]="null">All Departments / Common (General Induction)</option>
           } @else if (departments.length === 0) {
@@ -254,10 +319,9 @@
         } @else {
         <small class="field-hint">
           @if (isTeacher) {
-          Restricted to departments assigned to your teacher account (up to 4 tracks).
+          Restricted to departments assigned to your teacher account. All learners in the selected department are automatically included (and only learners of that department will see this assessment or pre-assessment).
           } @else {
-          Assign this assessment to a specific track (e.g. Python, .NET, Java, PHP) or keep as Common for all new
-          joinees.
+          Selecting "All Departments / Common" shows this assessment/pre-assessment to everyone; selecting a specific department automatically includes all learners of that department only.
           }
         </small>
         }
@@ -281,6 +345,7 @@
 
       <!-- Question Count & Exam Duration -->
       <div class="form-row-2">
+        @if (assessmentMode === 'mcq') {
         <div class="form-group">
           <label for="question_count">Total Examination Questions <span>*</span></label>
           <input id="question_count" type="number" min="1" max="200" formControlName="question_count">
@@ -299,6 +364,7 @@
             categories.</small>
           }
         </div>
+        }
 
         <div class="form-group">
           <label for="duration_minutes">Examination Duration (Minutes) <span>*</span></label>
@@ -351,8 +417,8 @@
             <input type="radio" name="assignmentScope" value="all" [checked]="assignmentScope === 'all'"
               (change)="onScopeChange('all')">
             <div>
-              <strong>All Learners</strong>
-              <span>Every active learner on the platform</span>
+              <strong>All Learners ({{ selectedDepartmentLabel }})</strong>
+              <span>Every learner in {{ selectedDepartmentLabel }} is automatically included</span>
             </div>
           </label>
 

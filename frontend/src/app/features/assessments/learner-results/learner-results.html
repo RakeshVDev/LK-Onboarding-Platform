@@ -152,26 +152,41 @@
               </div>
 
               <!-- Grade Badge -->
-              <div class="grade-box" [ngClass]="getGrade(item.overall_percentage).class">
-                <span class="score-percent">{{ item.overall_percentage | number:'1.0-1' }}%</span>
-                <span class="grade-text">{{ getGrade(item.overall_percentage).label }}</span>
-              </div>
+              @if (item.grading_status === 'pending_review') {
+                <div class="grade-box" style="background:#fef3c7; color:#92400e;">
+                  <span class="score-percent" style="font-size:14px;">⏳ Pending</span>
+                  <span class="grade-text">Manual Review</span>
+                </div>
+              } @else {
+                <div class="grade-box" [ngClass]="getGrade(item.overall_percentage).class">
+                  <span class="score-percent">{{ item.overall_percentage | number:'1.0-1' }}%</span>
+                  <span class="grade-text">{{ getGrade(item.overall_percentage).label }}</span>
+                </div>
+              }
             </div>
 
             <!-- Score Bar -->
-            <div class="score-summary">
-              <div class="score-row">
-                <span class="score-caption">Total Points Earned</span>
-                <strong class="score-pts">{{ item.total_score | number:'1.0-2' }} / {{ item.max_score | number:'1.0-2' }}</strong>
+            @if (item.grading_status === 'pending_review') {
+              <div class="score-summary">
+                <p style="margin:0; color:#92400e; font-size:13px; font-weight:600;">
+                  Your submission has been received and is awaiting manual instructor grading (out of {{ item.max_score | number:'1.0-0' }} marks).
+                </p>
               </div>
-              <div class="progress-track">
-                <div
-                  class="progress-fill"
-                  [style.width.%]="item.overall_percentage"
-                  [ngClass]="getGrade(item.overall_percentage).class">
+            } @else {
+              <div class="score-summary">
+                <div class="score-row">
+                  <span class="score-caption">Total Points Earned</span>
+                  <strong class="score-pts">{{ item.total_score | number:'1.0-2' }} / {{ item.max_score | number:'1.0-2' }}</strong>
+                </div>
+                <div class="progress-track">
+                  <div
+                    class="progress-fill"
+                    [style.width.%]="item.overall_percentage"
+                    [ngClass]="getGrade(item.overall_percentage).class">
+                  </div>
                 </div>
               </div>
-            </div>
+            }
 
             <!-- Categories Breakdown -->
             @if (item.categories.length > 0) {
@@ -194,20 +209,22 @@
             }
 
             <!-- Card Actions -->
-            <div class="card-actions">
-              <button
-                class="btn-card-primary"
-                type="button"
-                (click)="viewReport(item.session_id)">
-                View Full Report Card →
-              </button>
-              <button
-                class="btn-card-secondary"
-                type="button"
-                (click)="viewScores(item.session_id)">
-                Category Scores
-              </button>
-            </div>
+            @if (item.grading_status !== 'pending_review') {
+              <div class="card-actions">
+                <button
+                  class="btn-card-primary"
+                  type="button"
+                  (click)="viewReport(item.session_id)">
+                  View Full Report Card →
+                </button>
+                <button
+                  class="btn-card-secondary"
+                  type="button"
+                  (click)="viewScores(item.session_id)">
+                  Category Scores
+                </button>
+              </div>
+            }
 
           </article>
         }

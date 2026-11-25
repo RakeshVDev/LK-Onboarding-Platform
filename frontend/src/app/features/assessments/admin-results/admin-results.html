@@ -162,25 +162,33 @@
                     </td>
                     <td>
                       @if (item.status === 'completed') {
-                        <span class="points-val">
-                          <strong>{{ item.total_score | number:'1.0-1' }}</strong> / {{ item.max_score | number:'1.0-1' }}
-                        </span>
+                        @if (item.grading_status === 'pending_review') {
+                          <span style="color:#b45309; font-weight:600; font-size:12px;">⏳ Pending Manual Grade</span>
+                        } @else {
+                          <span class="points-val">
+                            <strong>{{ item.total_score | number:'1.0-1' }}</strong> / {{ item.max_score | number:'1.0-1' }}
+                          </span>
+                        }
                       } @else {
                         <span class="text-muted">—</span>
                       }
                     </td>
                     <td>
                       @if (item.status === 'completed') {
-                        <div class="pct-cell">
-                          <span class="pct-badge" [ngClass]="getGrade(item.overall_percentage).class">
-                            {{ item.overall_percentage | number:'1.0-0' }}%
-                          </span>
-                          <div class="table-track">
-                            <div class="table-fill" [style.width.%]="item.overall_percentage"
-                              [ngClass]="getGrade(item.overall_percentage).class">
+                        @if (item.grading_status === 'pending_review') {
+                          <span style="color:#64748b; font-size:12px;">Awaiting manual review</span>
+                        } @else {
+                          <div class="pct-cell">
+                            <span class="pct-badge" [ngClass]="getGrade(item.overall_percentage).class">
+                              {{ item.overall_percentage | number:'1.0-0' }}%
+                            </span>
+                            <div class="table-track">
+                              <div class="table-fill" [style.width.%]="item.overall_percentage"
+                                [ngClass]="getGrade(item.overall_percentage).class">
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        }
                       } @else {
                         <span class="text-muted">—</span>
                       }
@@ -196,13 +204,30 @@
                     </td>
                     <td class="actions-col">
                       @if (item.status === 'completed' && item.session_id) {
-                        <div class="btn-group">
-                          <button class="btn-action-primary" type="button" (click)="viewReport(item.session_id)">
-                            Report Card
-                          </button>
-                          <button class="btn-action-secondary" type="button" (click)="viewScores(item.session_id)">
-                            Scores
-                          </button>
+                        <div class="btn-group" style="flex-wrap:wrap; gap:6px;">
+                          @if (item.submission_github_url) {
+                            <a class="btn-action-secondary" [href]="item.submission_github_url" target="_blank" rel="noopener noreferrer">
+                              GitHub ↗
+                            </a>
+                          }
+                          @if (item.has_submission_file) {
+                            <button class="btn-action-secondary" type="button" (click)="downloadSubmissionZip(item)">
+                              ⬇ ZIP
+                            </button>
+                          }
+                          @if (item.submission_type === 'pdf_submission' || item.grading_status === 'pending_review') {
+                            <button class="btn-action-primary" type="button" (click)="openManualGradeModal(item)">
+                              {{ item.grading_status === 'pending_review' ? '✎ Grade Manually' : '✎ Edit Grade' }}
+                            </button>
+                          }
+                          @if (item.grading_status !== 'pending_review') {
+                            <button class="btn-action-primary" type="button" (click)="viewReport(item.session_id)">
+                              Report Card
+                            </button>
+                            <button class="btn-action-secondary" type="button" (click)="viewScores(item.session_id)">
+                              Scores
+                            </button>
+                          }
                         </div>
                       } @else if (item.status === 'expired') {
                         <span class="expired-label">Expired</span>
@@ -402,9 +427,13 @@
           <!-- Score -->
           <td>
             @if (item.status === 'completed') {
-            <span class="points-val">
-              <strong>{{ item.total_score | number:'1.0-1' }}</strong> / {{ item.max_score | number:'1.0-1' }}
-            </span>
+              @if (item.grading_status === 'pending_review') {
+                <span style="color:#b45309; font-weight:600; font-size:12px;">⏳ Pending Manual Grade</span>
+              } @else {
+                <span class="points-val">
+                  <strong>{{ item.total_score | number:'1.0-1' }}</strong> / {{ item.max_score | number:'1.0-1' }}
+                </span>
+              }
             } @else {
             <span class="text-muted">—</span>
             }
@@ -413,16 +442,20 @@
           <!-- Performance -->
           <td>
             @if (item.status === 'completed') {
-            <div class="pct-cell">
-              <span class="pct-badge" [ngClass]="getGrade(item.overall_percentage).class">
-                {{ item.overall_percentage | number:'1.0-0' }}%
-              </span>
-              <div class="table-track">
-                <div class="table-fill" [style.width.%]="item.overall_percentage"
-                  [ngClass]="getGrade(item.overall_percentage).class">
+              @if (item.grading_status === 'pending_review') {
+                <span style="color:#64748b; font-size:12px;">Awaiting manual review</span>
+              } @else {
+                <div class="pct-cell">
+                  <span class="pct-badge" [ngClass]="getGrade(item.overall_percentage).class">
+                    {{ item.overall_percentage | number:'1.0-0' }}%
+                  </span>
+                  <div class="table-track">
+                    <div class="table-fill" [style.width.%]="item.overall_percentage"
+                      [ngClass]="getGrade(item.overall_percentage).class">
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              }
             } @else {
             <span class="text-muted">—</span>
             }
@@ -442,15 +475,32 @@
           <!-- Actions -->
           <td class="actions-col">
             @if (item.status === 'completed' && item.session_id) {
-            <div class="btn-group">
-              <button class="btn-action-primary" type="button" title="View Report Card"
-                (click)="viewReport(item.session_id)">
-                Report Card
-              </button>
-              <button class="btn-action-secondary" type="button" title="View Detailed Scores"
-                (click)="viewScores(item.session_id)">
-                Scores
-              </button>
+            <div class="btn-group" style="flex-wrap:wrap; gap:6px;">
+              @if (item.submission_github_url) {
+                <a class="btn-action-secondary" [href]="item.submission_github_url" target="_blank" rel="noopener noreferrer">
+                  GitHub ↗
+                </a>
+              }
+              @if (item.has_submission_file) {
+                <button class="btn-action-secondary" type="button" (click)="downloadSubmissionZip(item)">
+                  ⬇ ZIP
+                </button>
+              }
+              @if (item.submission_type === 'pdf_submission' || item.grading_status === 'pending_review') {
+                <button class="btn-action-primary" type="button" (click)="openManualGradeModal(item)">
+                  {{ item.grading_status === 'pending_review' ? '✎ Grade Manually' : '✎ Edit Grade' }}
+                </button>
+              }
+              @if (item.grading_status !== 'pending_review') {
+                <button class="btn-action-primary" type="button" title="View Report Card"
+                  (click)="viewReport(item.session_id)">
+                  Report Card
+                </button>
+                <button class="btn-action-secondary" type="button" title="View Detailed Scores"
+                  (click)="viewScores(item.session_id)">
+                  Scores
+                </button>
+              }
             </div>
             } @else if (item.status === 'expired') {
             <span class="expired-label">Expired (No submission)</span>
@@ -534,6 +584,80 @@
     </div>
   </div>
   }
+  }
+
+  <!-- Manual Teacher / Staff Grading Modal for PDF / ZIP / GitHub Assessments -->
+  @if (gradingModalItem(); as gm) {
+    <div class="modal-backdrop" (click)="closeManualGradeModal()">
+      <div class="history-modal-card" style="max-width: 560px;" (click)="$event.stopPropagation()">
+        <div class="history-modal-header">
+          <div>
+            <span class="eyebrow">MANUAL INSTRUCTOR EVALUATION</span>
+            <h2>{{ gm.template_name }}</h2>
+            <p class="history-subtitle">Candidate: <strong>{{ gm.learner_name || ('Learner #' + gm.learner_user_id) }}</strong></p>
+          </div>
+          <button type="button" class="btn-modal-close" (click)="closeManualGradeModal()">✕</button>
+        </div>
+
+        <div class="history-modal-body" style="display:flex; flex-direction:column; gap:14px;">
+          @if (manualGradeError()) {
+            <div class="error-banner" role="alert">{{ manualGradeError() }}</div>
+          }
+
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px;">
+            <strong style="display:block; margin-bottom:8px;">Submitted Artifacts (Inspect Before Scoring):</strong>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+              @if (gm.submission_github_url) {
+                <a class="btn-action-secondary" [href]="gm.submission_github_url" target="_blank" rel="noopener noreferrer">
+                  🔗 Open GitHub Repository ↗
+                </a>
+              }
+              @if (gm.has_submission_file) {
+                <button type="button" class="btn-action-secondary" (click)="downloadSubmissionZip(gm)">
+                  ⬇ Download {{ gm.submission_file_name || 'Submitted ZIP' }}
+                </button>
+              }
+              @if (!gm.submission_github_url && !gm.has_submission_file) {
+                <span class="text-muted">No file or link recorded</span>
+              }
+            </div>
+            @if (gm.submission_notes) {
+              <p style="margin:10px 0 0; font-size:13px; color:#334155;"><strong>Candidate Notes:</strong> {{ gm.submission_notes }}</p>
+            }
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label for="manualScoreVal" style="display:block; font-weight:600; margin-bottom:4px;">Awarded Score *</label>
+              <input id="manualScoreVal" type="number" min="0" [max]="manualMaxScoreInput" step="0.5"
+                style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;"
+                [(ngModel)]="manualScoreInput" />
+            </div>
+            <div>
+              <label for="manualMaxVal" style="display:block; font-weight:600; margin-bottom:4px;">Maximum Marks *</label>
+              <input id="manualMaxVal" type="number" min="1" max="1000"
+                style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;"
+                [(ngModel)]="manualMaxScoreInput" />
+            </div>
+          </div>
+
+          <div>
+            <label for="manualFeedbackVal" style="display:block; font-weight:600; margin-bottom:4px;">Instructor Evaluation Feedback</label>
+            <textarea id="manualFeedbackVal" rows="3"
+              style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;"
+              [(ngModel)]="manualFeedbackInput"
+              placeholder="Provide manual grading notes, code quality review, and feedback for the learner's report card..."></textarea>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:10px; padding-top:6px;">
+            <button type="button" class="btn-action-secondary" (click)="closeManualGradeModal()">Cancel</button>
+            <button type="button" class="btn-action-primary" [disabled]="savingManualGrade()" (click)="submitManualGrade()">
+              {{ savingManualGrade() ? 'Saving Grade...' : 'Save Manual Grade & Generate Report' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   }
 
 </div>

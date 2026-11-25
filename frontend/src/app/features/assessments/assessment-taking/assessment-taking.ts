@@ -6,6 +6,7 @@ import {
   inject
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
@@ -21,7 +22,7 @@ import { QuestionRenderer } from '../components/question-renderer/question-rende
 @Component({
   selector: 'app-assessment-taking',
   standalone: true,
-  imports: [CommonModule, RouterLink, QuestionRenderer],
+  imports: [CommonModule, FormsModule, RouterLink, QuestionRenderer],
   templateUrl: './assessment-taking.html',
   styleUrl: './assessment-taking.scss'
 })
@@ -39,12 +40,23 @@ export class AssessmentTaking implements OnInit, OnDestroy {
   private readonly mountedTimestamp = Date.now();
 
   sessionId = 0;
+  templateId = 0;
   templateName = 'Logical Reasoning Assessment';
   assessmentType = 'logical_reasoning';
+  assessmentMode: 'mcq' | 'pdf_submission' = 'mcq';
+  hasQuestionPdf = false;
+  questionPdfName: string | null = null;
+  maxMarks = 100;
   assignedSet = '';
   durationSeconds = 30 * 60; // 30 minutes default
   startedAt = '';
   expiresAt = '';
+
+  // PDF Question Paper + GitHub / ZIP Submission state
+  projectGithubUrl = '';
+  projectNotes = '';
+  projectZipFile: File | null = null;
+  downloadingPdf = false;
 
   questions: AssessmentQuestion[] = [];
   answers: Record<number, string> = {};
@@ -83,6 +95,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
 
     const state = history.state as {
       sessionId?: number;
+      templateId?: number;
       questions?: AssessmentQuestion[];
       startedAt?: string;
       expiresAt?: string;
@@ -90,20 +103,30 @@ export class AssessmentTaking implements OnInit, OnDestroy {
       remainingSeconds?: number;
       templateName?: string;
       assessmentType?: string;
+      assessmentMode?: 'mcq' | 'pdf_submission' | string;
+      hasQuestionPdf?: boolean;
+      questionPdfName?: string | null;
+      maxMarks?: number;
       assignedSet?: string;
     };
 
+    const isPdfFromState = state?.assessmentMode === 'pdf_submission';
+
     if (
       state?.sessionId === this.sessionId &&
-      Array.isArray(state.questions) &&
-      state.questions.length > 0 &&
-      state.startedAt
+      state.startedAt &&
+      (isPdfFromState || (Array.isArray(state.questions) && state.questions.length > 0))
     ) {
+      if (state.templateId) this.templateId = Number(state.templateId);
       if (state.templateName) this.templateName = state.templateName;
       if (state.assessmentType) this.assessmentType = state.assessmentType;
+      this.assessmentMode = isPdfFromState ? 'pdf_submission' : 'mcq';
+      this.hasQuestionPdf = Boolean(state.hasQuestionPdf);
+      this.questionPdfName = state.questionPdfName || null;
+      if (state.maxMarks) this.maxMarks = Number(state.maxMarks) || 100;
       if (state.assignedSet) this.assignedSet = state.assignedSet;
       this.initializeAssessment(
-        state.questions,
+        state.questions || [],
         state.startedAt,
         state.expiresAt,
         state.durationMinutes,
@@ -150,8 +173,13 @@ export class AssessmentTaking implements OnInit, OnDestroy {
         return;
       }
 
+      if (session.template_id) this.templateId = Number(session.template_id);
       if (session.template_name) this.templateName = session.template_name;
       if (session.assessment_type) this.assessmentType = session.assessment_type;
+      this.assessmentMode = session.assessment_mode === 'pdf_submission' ? 'pdf_submission' : 'mcq';
+      this.hasQuestionPdf = Boolean(session.has_question_pdf);
+      this.questionPdfName = session.question_pdf_name || null;
+      if (session.max_marks) this.maxMarks = Number(session.max_marks) || 100;
       if (session.assigned_set) this.assignedSet = session.assigned_set;
 
       if (session.saved_answers) {
@@ -214,7 +242,7 @@ export class AssessmentTaking implements OnInit, OnDestroy {
     durationMinutes?: number,
     remainingSec?: number
   ): void {
-    if (!questions.length) {
+    if (this.assessmentMode !== 'pdf_submission' && !questions.length) {
       this.errorMessage = 'No assessment questions were found.';
       this.loading = false;
       this.cdr.detectChanges();
@@ -230,21 +258,23 @@ export class AssessmentTaking implements OnInit, OnDestroy {
       ((this.assessmentType === 'logical_reasoning' || this.assessmentType === 'programming') ? 30 : 15);
     this.durationSeconds = minutes * 60;
 
-    // Restore local cache as fallback/supplement
-    this.restoreLocalCache();
+    if (this.assessmentMode !== 'pdf_submission') {
+      // Restore local cache as fallback/supplement
+      this.restoreLocalCache();
 
-    // Restore tab switch count from session storage if candidate previously switched
-    const cachedViolations = sessionStorage.getItem(`lk_tab_switch_${this.sessionId}`);
-    if (cachedViolations) {
-      this.tabSwitchCount = Number(cachedViolations) || 0;
-    }
+      // Restore tab switch count from session storage if candidate previously switched
+      const cachedViolations = sessionStorage.getItem(`lk_tab_switch_${this.sessionId}`);
+      if (cachedViolations) {
+        this.tabSwitchCount = Number(cachedViolations) || 0;
+      }
 
-    // Attach proctoring listeners for tab switching
-    this.attachTabSwitchListeners();
+      // Attach proctoring listeners for tab switching (MCQ mode only)
+      this.attachTabSwitchListeners();
 
-    // Mark current question as visited
-    if (this.questions[this.currentIndex]) {
-      this.visitedQuestions.add(this.questions[this.currentIndex].id);
+      // Mark current question as visited
+      if (this.questions[this.currentIndex]) {
+        this.visitedQuestions.add(this.questions[this.currentIndex].id);
+      }
     }
 
     this.loading = false;
@@ -684,7 +714,106 @@ export class AssessmentTaking implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  onProjectFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.projectZipFile = input.files?.[0] || null;
+    this.cdr.detectChanges();
+  }
+
+  async downloadQuestionPaper(): Promise<void> {
+    if (!this.templateId || this.downloadingPdf) return;
+    this.downloadingPdf = true;
+    this.errorMessage = '';
+    this.cdr.detectChanges();
+    try {
+      const blob = await firstValueFrom(this.api.downloadQuestionPdf(this.templateId));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = this.questionPdfName || `${this.templateName.replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      this.errorMessage = err?.error?.detail || 'Unable to download question paper PDF.';
+    } finally {
+      this.downloadingPdf = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async submitProjectFinal(): Promise<void> {
+    if (this.submitting) return;
+    const cleanUrl = this.projectGithubUrl.trim();
+    if (!cleanUrl && !this.projectZipFile) {
+      this.errorMessage = 'Please provide a GitHub repository URL or upload a .zip / project file before submitting.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.submitting = true;
+    this.errorMessage = '';
+    this.stopTimer();
+    this.cdr.detectChanges();
+
+    const formData = new FormData();
+    formData.append('github_url', cleanUrl);
+    formData.append('notes', this.projectNotes.trim());
+    if (this.projectZipFile) {
+      formData.append('file', this.projectZipFile);
+    }
+
+    try {
+      await firstValueFrom(this.api.submitProjectAssessment(this.sessionId, formData));
+      try {
+        sessionStorage.removeItem(`ase_timer_start_${this.sessionId}`);
+      } catch { }
+    } catch (error: any) {
+      this.submitting = false;
+      if (!this.isExpired && this.startedAt) {
+        this.startTimer(this.startedAt, this.expiresAt);
+      }
+      this.errorMessage = error?.error?.detail || 'Unable to submit project assessment. Please try again.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    try {
+      const statusRes = await this.assessmentStatusService.getStatus(true);
+      if (statusRes.status === 'completed' || statusRes.all_completed === true) {
+        try {
+          await this.onboardingService.completeAssessments();
+        } catch { }
+      }
+      const perms = await this.onboardingService.getPermissions(true);
+      this.submitting = false;
+      this.cdr.detectChanges();
+
+      if (!statusRes.all_completed) {
+        await this.router.navigate(['/my-assessments']);
+      } else if (perms.can_select_department && !perms.department_approved) {
+        await this.router.navigate(['/department-selection']);
+      } else {
+        await this.router.navigate(['/my-results']);
+      }
+    } catch {
+      this.submitting = false;
+      this.cdr.detectChanges();
+      await this.router.navigate(['/my-assessments']);
+    }
+  }
+
   async submitFinal(automatic = false): Promise<void> {
+    if (this.assessmentMode === 'pdf_submission') {
+      if (automatic && !this.projectGithubUrl.trim() && !this.projectZipFile) {
+        this.errorMessage = 'Time limit reached. Please attach your GitHub link or ZIP file and submit immediately.';
+        this.cdr.detectChanges();
+        return;
+      }
+      await this.submitProjectFinal();
+      return;
+    }
     if (this.submitting) return;
 
     this.submitting = true;

@@ -1,9 +1,13 @@
 
 import json
+import os
+import uuid
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -72,6 +76,7 @@ from services.training.app.schemas.assessment import (
     UserAssessmentResultItem,
     AdminAssessmentResultItem,
     AdminAssessmentResultsResponse,
+    ManualProjectGradeRequest,
 )
 
 from services.training.app.services.assessment_mock import (
@@ -271,7 +276,50 @@ def get_users_map(user_ids: list[int]) -> dict[int, dict[str, str]]:
         return {}
 
 
-CONFIG_METADATA_KEYS = {"question_set", "duration_minutes"}
+CONFIG_METADATA_KEYS = {
+    "question_set",
+    "duration_minutes",
+    "assessment_mode",
+    "question_pdf_storage_key",
+    "question_pdf_name",
+    "max_marks",
+}
+
+ASSESSMENT_UPLOADS_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "assessments")
+)
+ASSESSMENT_QUESTION_PDF_DIR = os.path.join(ASSESSMENT_UPLOADS_ROOT, "question_pdfs")
+ASSESSMENT_PROJECT_SUBMISSIONS_DIR = os.path.join(ASSESSMENT_UPLOADS_ROOT, "submissions")
+os.makedirs(ASSESSMENT_QUESTION_PDF_DIR, exist_ok=True)
+os.makedirs(ASSESSMENT_PROJECT_SUBMISSIONS_DIR, exist_ok=True)
+
+ALLOWED_PROJECT_SUBMISSION_EXTENSIONS = {
+    ".zip", ".tar", ".gz", ".tgz", ".7z", ".rar", ".pdf",
+    ".py", ".ipynb", ".js", ".ts", ".java", ".cs", ".sql", ".txt", ".md",
+}
+MAX_QUESTION_PDF_BYTES = 25 * 1024 * 1024
+MAX_PROJECT_SUBMISSION_BYTES = 50 * 1024 * 1024
+
+
+def _get_template_pdf_meta(template: AssessmentTemplate | None) -> tuple[str, bool, str | None, str | None, float]:
+    if template is None:
+        return "mcq", False, None, None, 100.0
+    cfg = template.category_config if isinstance(template.category_config, dict) else {}
+    raw_mode = str(cfg.get("assessment_mode") or "mcq").strip().lower()
+    mode = "pdf_submission" if raw_mode == "pdf_submission" else "mcq"
+    pdf_key = str(cfg.get("question_pdf_storage_key") or "").strip() or None
+    pdf_name = str(cfg.get("question_pdf_name") or "").strip() or None
+    has_pdf = False
+    if pdf_key:
+        candidate_path = os.path.realpath(os.path.join(ASSESSMENT_QUESTION_PDF_DIR, os.path.basename(pdf_key)))
+        has_pdf = candidate_path.startswith(os.path.realpath(ASSESSMENT_QUESTION_PDF_DIR) + os.sep) and os.path.isfile(candidate_path)
+    try:
+        max_marks = float(cfg.get("max_marks") or 100.0)
+        if max_marks <= 0:
+            max_marks = 100.0
+    except (TypeError, ValueError):
+        max_marks = 100.0
+    return mode, has_pdf, pdf_name, pdf_key, round(max_marks, 2)
 
 
 def validate_category_config(config: dict):
@@ -1048,6 +1096,10 @@ def build_template_response(
     dept_name = None
     if getattr(template, "department_id", None) and dept_map:
         dept_name = dept_map.get(template.department_id)
+    mode, has_pdf, pdf_name, _, max_marks = _get_template_pdf_meta(template)
+    assignment_summary = summary["assignment_summary"]
+    if summary["scope"] == "all" and dept_name and dept_name.strip().lower() not in {"all / common", "all/common", "common"}:
+        assignment_summary = f"All Learners ({dept_name})"
     return AssessmentTemplateResponse(
         id=template.id,
         name=template.name,
@@ -1055,6 +1107,10 @@ def build_template_response(
         department_name=dept_name,
         assessment_type=template.assessment_type,
         assessment_tag=getattr(template, "assessment_tag", None) or "Assessment",
+        assessment_mode=mode,
+        has_question_pdf=has_pdf,
+        question_pdf_name=pdf_name,
+        max_marks=max_marks,
         custom_tags=_parse_json_list(getattr(template, "custom_tags", None)),
         reading_passage=getattr(template, "reading_passage", None),
         description=template.description,
@@ -1068,7 +1124,7 @@ def build_template_response(
         assigned_cohort_ids=summary["cohort_ids"],
         assigned_learner_ids=summary["learner_ids"],
         assigned_count=summary["assigned_count"],
-        assignment_summary=summary["assignment_summary"],
+        assignment_summary=assignment_summary,
         due_at=summary["due_at"],
     )
 
@@ -1191,6 +1247,52 @@ def purge_expired_assessments(db: Session, grace_days: int = 2) -> int:
     return purged_count
 
 
+def _get_learner_department_ids(
+    db: Session,
+    user_id: int,
+    identity_flags: dict | None = None,
+    common_id: int | None = None,
+) -> tuple[set[int], set[int]]:
+    """Return (all_learner_dept_ids, cohort_dept_ids) for a learner across requests, identity, and active cohorts."""
+    dept_ids: set[int] = set()
+    cohort_dept_ids: set[int] = set()
+
+    req_dept_ids = db.scalars(
+        select(StudentDepartmentRequest.department_id).where(
+            StudentDepartmentRequest.user_id == user_id,
+            StudentDepartmentRequest.status.in_(["approved", "pending"]),
+        )
+    ).all()
+    for did in req_dept_ids:
+        if did is not None:
+            dept_ids.add(int(did))
+
+    if identity_flags and identity_flags.get("selected_department_id"):
+        try:
+            dept_ids.add(int(str(identity_flags["selected_department_id"]).strip()))
+        except ValueError:
+            pass
+
+    enrolled_dept_ids = db.scalars(
+        select(Cohort.department_id)
+        .join(CohortMember, CohortMember.cohort_id == Cohort.id)
+        .where(
+            CohortMember.user_id == user_id,
+            func.lower(CohortMember.status) == "active",
+        )
+    ).all()
+    for did in enrolled_dept_ids:
+        if did is not None:
+            cohort_dept_ids.add(int(did))
+            dept_ids.add(int(did))
+
+    if common_id is not None:
+        dept_ids.discard(int(common_id))
+        cohort_dept_ids.discard(int(common_id))
+
+    return dept_ids, cohort_dept_ids
+
+
 def _resolve_learner_gate_context(
     db: Session,
     user_id: int,
@@ -1238,6 +1340,15 @@ def _resolve_learner_gate_context(
         except ValueError:
             approved_dept_id = None
 
+    learner_dept_ids, cohort_dept_ids = _get_learner_department_ids(
+        db=db,
+        user_id=user_id,
+        identity_flags=identity_flags,
+        common_id=common_id,
+    )
+    if approved_dept_id is not None:
+        learner_dept_ids.add(int(approved_dept_id))
+
     has_chosen_department = bool(
         has_approved
         or (latest_req is not None and latest_req.status in {"pending", "approved"})
@@ -1248,11 +1359,18 @@ def _resolve_learner_gate_context(
         )
     )
 
+    now = now_utc()
     pre_template_ids: list[int] = []
+    non_expired_pre_ids: list[int] = []
     if templates is not None and active_rows_by_tid is not None and learner_cohort_set is not None:
         for tpl in templates:
             if (getattr(tpl, "assessment_tag", None) or "Assessment") != "Pre-Assessment":
                 continue
+            t_dept_id = getattr(tpl, "department_id", None)
+            is_common_dept = (t_dept_id is None) or (common_id is not None and int(t_dept_id) == int(common_id))
+            if not is_common_dept and int(t_dept_id) not in learner_dept_ids:
+                continue
+
             arows = active_rows_by_tid.get(tpl.id, [])
             is_match = any(
                 (r.target_type == "learner" and r.learner_user_id == user_id)
@@ -1262,7 +1380,12 @@ def _resolve_learner_gate_context(
             )
             if is_match:
                 pre_template_ids.append(tpl.id)
+                active_dues = [to_utc(r.due_at) for r in arows if r.due_at is not None]
+                eff_due = to_utc(getattr(tpl, "due_at", None)) or (max(active_dues) if active_dues else None)
+                if eff_due is None or now <= eff_due:
+                    non_expired_pre_ids.append(tpl.id)
 
+    completed_pre_tids: set[int] = set()
     if pre_template_ids:
         completed_pre_tids = set(
             db.scalars(
@@ -1273,8 +1396,24 @@ def _resolve_learner_gate_context(
                 )
             ).all()
         )
-        pre_assessments_completed = len(completed_pre_tids) >= len(set(pre_template_ids))
+        expired_attempt_tids = set(
+            db.scalars(
+                select(AssessmentSession.template_id).where(
+                    AssessmentSession.learner_user_id == user_id,
+                    AssessmentSession.status == "expired",
+                    AssessmentSession.template_id.in_(pre_template_ids),
+                )
+            ).all()
+        )
+        pending_pre_tids = (set(non_expired_pre_ids) - completed_pre_tids) - expired_attempt_tids
+        has_pending_pre_assessment = len(pending_pre_tids) > 0
+        pre_assessments_completed = (len(pending_pre_tids) == 0) and (
+            len(completed_pre_tids) >= len(set(pre_template_ids))
+            or bool(identity_flags and identity_flags.get("all_assessments_completed"))
+        )
     else:
+        pending_pre_tids = set()
+        has_pending_pre_assessment = False
         pre_assessments_completed = bool(identity_flags and identity_flags.get("all_assessments_completed"))
 
     return {
@@ -1282,11 +1421,17 @@ def _resolve_learner_gate_context(
         "approved_req": approved_req,
         "common_id": common_id,
         "approved_dept_id": approved_dept_id,
+        "learner_dept_ids": learner_dept_ids,
+        "cohort_dept_ids": cohort_dept_ids,
+        "completed_pre_tids": completed_pre_tids,
+        "pending_pre_tids": pending_pre_tids,
+        "has_pending_pre_assessment": has_pending_pre_assessment,
         "department_approved": has_approved,
         "has_chosen_department": has_chosen_department,
         "pre_assessments_completed": pre_assessments_completed,
         "common_unlocked": bool(
-            has_approved or (pre_assessments_completed and has_chosen_department)
+            (has_approved or (pre_assessments_completed and has_chosen_department))
+            and not has_pending_pre_assessment
         ),
         "selected_dept_id": selected_dept_id,
     }
@@ -1339,6 +1484,9 @@ def get_assigned_rows_for_learner(
     common_id = gate["common_id"]
     department_approved = gate["department_approved"]
     approved_dept_id = gate["approved_dept_id"]
+    learner_dept_ids: set[int] = gate["learner_dept_ids"]
+    cohort_dept_ids: set[int] = gate["cohort_dept_ids"]
+    completed_pre_tids: set[int] = gate["completed_pre_tids"]
     common_unlocked = gate["common_unlocked"]
 
     matched: list[dict] = []
@@ -1367,31 +1515,33 @@ def get_assigned_rows_for_learner(
 
         t_tag = getattr(template, "assessment_tag", None) or "Assessment"
         t_dept_id = getattr(template, "department_id", None)
-        is_common_dept = (t_dept_id is None) or (common_id is not None and t_dept_id == common_id)
+        is_common_dept = (t_dept_id is None) or (common_id is not None and int(t_dept_id) == int(common_id))
 
-        # Strict Pre-Assessment -> Common (on dept choice) -> Department (on approval) gating:
-        if bypass_stage_gating:
-            # Staff results view: include both Pre-Assessments and all other assessments
-            # applicable to this learner (direct, cohort, common, or their department).
-            if not direct_matches and not cohort_matches and all_matches:
-                if not is_common_dept and approved_dept_id is not None and t_dept_id != approved_dept_id:
-                    continue
-        elif department_approved:
-            # Once approved, hide Pre-Assessments from My Assessments; keep completed history in Results/Reports
-            if t_tag == "Pre-Assessment":
+        # Strict Department Scoping:
+        # - Common / All Departments -> visible to everyone (per onboarding stage)
+        # - Specific concrete department -> visible ONLY to learners belonging to that department!
+        if t_tag == "Pre-Assessment":
+            if not is_common_dept and int(t_dept_id) not in learner_dept_ids:
                 continue
-            if not direct_matches and not cohort_matches and all_matches:
-                if not is_common_dept and approved_dept_id is not None and t_dept_id != approved_dept_id:
-                    continue
-                if not is_common_dept and approved_dept_id is None:
-                    continue
-        elif common_unlocked:
-            # Completed pre-assessment + chosen department (approval pending): unlock Common assessments + keep Pre-Assessments until approved
-            if t_tag != "Pre-Assessment" and not is_common_dept:
+            if not bypass_stage_gating and department_approved and template.id in completed_pre_tids:
+                # Completed historical Pre-Assessments stay in Results/Reports once department is approved;
+                # any unfinished Common or Department Pre-Assessment remains visible at #1 priority!
                 continue
         else:
-            # Before completing pre-assessments & choosing department: ONLY Pre-Assessment is visible
-            if t_tag != "Pre-Assessment":
+            if bypass_stage_gating:
+                if not is_common_dept and int(t_dept_id) not in learner_dept_ids and not direct_matches and not cohort_matches:
+                    continue
+            elif department_approved:
+                if not is_common_dept:
+                    allowed_concrete_depts = set(cohort_dept_ids)
+                    if approved_dept_id is not None:
+                        allowed_concrete_depts.add(int(approved_dept_id))
+                    if int(t_dept_id) not in allowed_concrete_depts:
+                        continue
+            elif common_unlocked:
+                if not is_common_dept:
+                    continue
+            else:
                 continue
 
         chosen_row: AssessmentAssignment | None = None
@@ -1485,18 +1635,23 @@ def _build_learner_assigned_data(
 
     status_mutations = False
     assessment_items: list[StudentAssignedAssessmentItem] = []
+    dept_map = {int(d.id): str(d.name) for d in db.scalars(select(Department)).all()}
 
     for entry in matched_items:
         template: AssessmentTemplate = entry["template"]
         assignment: AssessmentAssignment = entry["assignment"]
         duration_minutes = get_duration_minutes_for_template(template)
-        due_utc = to_utc(assignment.due_at)
+        due_utc = to_utc(assignment.due_at) or to_utc(getattr(template, "due_at", None))
         assigned_at_utc = to_utc(assignment.assigned_at) or to_utc(template.created_at) or now
         effective_type = resolve_effective_assessment_type(template)
         category_label = ASSESSMENT_TYPE_LABELS.get(
             effective_type,
             effective_type.replace("_", " ").title(),
         )
+        t_tag = getattr(template, "assessment_tag", None) or "Assessment"
+        t_dept_id = getattr(template, "department_id", None)
+        t_dept_name = dept_map.get(int(t_dept_id)) if t_dept_id is not None else "All Departments"
+        t_mode, t_has_pdf, t_pdf_name, _, t_max_marks = _get_template_pdf_meta(template)
 
         t_sessions = sessions_by_template.get(template.id, [])
         completed_session = next(
@@ -1530,20 +1685,35 @@ def _build_learner_assigned_data(
                 status_mutations = True
 
         if completed_session is not None:
+            sess_grading_status = getattr(completed_session, "grading_status", "auto_graded") or "auto_graded"
             sess_scores = scores_by_session.get(completed_session.id, [])
-            total_score = round(sum(float(sc.score) for sc in sess_scores), 2)
-            max_score = round(sum(float(sc.max_score) for sc in sess_scores), 2)
-            overall_pct = round((total_score / max_score) * 100, 2) if max_score > 0 else 0.0
+            if sess_grading_status == "pending_review" and not sess_scores:
+                total_score = None
+                max_score = t_max_marks
+                overall_pct = None
+                notif = "Pending Manual Teacher Grading"
+            else:
+                total_score = round(sum(float(sc.score) for sc in sess_scores), 2)
+                max_score = round(sum(float(sc.max_score) for sc in sess_scores), 2)
+                overall_pct = round((total_score / max_score) * 100, 2) if max_score > 0 else 0.0
+                notif = None
             assessment_items.append(
                 StudentAssignedAssessmentItem(
                     template_id=template.id,
+                    department_id=t_dept_id,
+                    department_name=t_dept_name,
                     assignment_id=assignment.id,
                     assignment_scope=entry["assignment_scope"],
                     cohort_name=entry["cohort_name"],
                     name=template.name,
                     description=template.description,
                     assessment_type=effective_type,
-                    assessment_tag=getattr(template, "assessment_tag", None) or "Assessment",
+                    assessment_tag=t_tag,
+                    assessment_mode=t_mode,
+                    has_question_pdf=t_has_pdf,
+                    question_pdf_name=t_pdf_name,
+                    grading_status=sess_grading_status,
+                    is_priority_pre_assessment=False,
                     custom_tags=_parse_json_list(getattr(template, "custom_tags", None)),
                     category_label=category_label,
                     question_count=template.question_count,
@@ -1563,7 +1733,7 @@ def _build_learner_assigned_data(
                     tab_switch_count=getattr(completed_session, "tab_switch_count", 0) or 0,
                     can_start=False,
                     can_continue=False,
-                    notification_title=None,
+                    notification_title=notif,
                 )
             )
         elif in_progress_session is not None:
@@ -1575,13 +1745,20 @@ def _build_learner_assigned_data(
             assessment_items.append(
                 StudentAssignedAssessmentItem(
                     template_id=template.id,
+                    department_id=t_dept_id,
+                    department_name=t_dept_name,
                     assignment_id=assignment.id,
                     assignment_scope=entry["assignment_scope"],
                     cohort_name=entry["cohort_name"],
                     name=template.name,
                     description=template.description,
                     assessment_type=effective_type,
-                    assessment_tag=getattr(template, "assessment_tag", None) or "Assessment",
+                    assessment_tag=t_tag,
+                    assessment_mode=t_mode,
+                    has_question_pdf=t_has_pdf,
+                    question_pdf_name=t_pdf_name,
+                    grading_status="pending_review" if t_mode == "pdf_submission" else "auto_graded",
+                    is_priority_pre_assessment=(t_tag == "Pre-Assessment"),
                     custom_tags=_parse_json_list(getattr(template, "custom_tags", None)),
                     category_label=category_label,
                     question_count=template.question_count,
@@ -1601,20 +1778,27 @@ def _build_learner_assigned_data(
                     tab_switch_count=getattr(in_progress_session, "tab_switch_count", 0) or 0,
                     can_start=False,
                     can_continue=True,
-                    notification_title="Assessment In Progress",
+                    notification_title="Priority Pre-Assessment In Progress" if t_tag == "Pre-Assessment" else "Assessment In Progress",
                 )
             )
         elif expired_session is not None or (due_utc is not None and now > due_utc):
             assessment_items.append(
                 StudentAssignedAssessmentItem(
                     template_id=template.id,
+                    department_id=t_dept_id,
+                    department_name=t_dept_name,
                     assignment_id=assignment.id,
                     assignment_scope=entry["assignment_scope"],
                     cohort_name=entry["cohort_name"],
                     name=template.name,
                     description=template.description,
                     assessment_type=effective_type,
-                    assessment_tag=getattr(template, "assessment_tag", None) or "Assessment",
+                    assessment_tag=t_tag,
+                    assessment_mode=t_mode,
+                    has_question_pdf=t_has_pdf,
+                    question_pdf_name=t_pdf_name,
+                    grading_status="auto_graded",
+                    is_priority_pre_assessment=False,
                     custom_tags=_parse_json_list(getattr(template, "custom_tags", None)),
                     category_label=category_label,
                     question_count=template.question_count,
@@ -1641,13 +1825,20 @@ def _build_learner_assigned_data(
             assessment_items.append(
                 StudentAssignedAssessmentItem(
                     template_id=template.id,
+                    department_id=t_dept_id,
+                    department_name=t_dept_name,
                     assignment_id=assignment.id,
                     assignment_scope=entry["assignment_scope"],
                     cohort_name=entry["cohort_name"],
                     name=template.name,
                     description=template.description,
                     assessment_type=effective_type,
-                    assessment_tag=getattr(template, "assessment_tag", None) or "Assessment",
+                    assessment_tag=t_tag,
+                    assessment_mode=t_mode,
+                    has_question_pdf=t_has_pdf,
+                    question_pdf_name=t_pdf_name,
+                    grading_status="pending_review" if t_mode == "pdf_submission" else "auto_graded",
+                    is_priority_pre_assessment=(t_tag == "Pre-Assessment"),
                     custom_tags=_parse_json_list(getattr(template, "custom_tags", None)),
                     category_label=category_label,
                     question_count=template.question_count,
@@ -1667,15 +1858,31 @@ def _build_learner_assigned_data(
                     tab_switch_count=0,
                     can_start=True,
                     can_continue=False,
-                    notification_title="New Assessment Assigned",
+                    notification_title="Priority 1 · Pre-Assessment" if t_tag == "Pre-Assessment" else "New Assessment Assigned",
                 )
             )
 
     if status_mutations:
         db.commit()
 
+    has_unfinished_pre = any(
+        item.assessment_tag == "Pre-Assessment" and item.status in {"IN_PROGRESS", "NOT_STARTED"}
+        for item in assessment_items
+    )
+    if has_unfinished_pre:
+        for item in assessment_items:
+            if item.assessment_tag != "Pre-Assessment" and item.status == "NOT_STARTED":
+                item.can_start = False
+                item.notification_title = "Complete Priority Pre-Assessment First"
+
     status_priority = {"IN_PROGRESS": 0, "NOT_STARTED": 1, "COMPLETED": 2, "EXPIRED": 3}
-    assessment_items.sort(key=lambda item: (status_priority.get(item.status, 9), item.template_id))
+    assessment_items.sort(
+        key=lambda item: (
+            0 if item.is_priority_pre_assessment else 1,
+            status_priority.get(item.status, 9),
+            item.template_id,
+        )
+    )
 
     notifications = [
         item for item in assessment_items if item.status in {"IN_PROGRESS", "NOT_STARTED", "EXPIRED"}
@@ -1736,6 +1943,58 @@ def _sync_identity_assessments_completed(user_id: int) -> None:
         print(f"  [Onboarding Sync] Unable to mark identity assessments complete for user {user_id}: {exc}")
 
 
+def _sync_identity_pre_assessment_gate_locked(db: Session, template: AssessmentTemplate) -> None:
+    """When a new Common or Department Pre-Assessment is published, lock affected learners' side navbars until finished."""
+    if not template.is_active or (getattr(template, "assessment_tag", None) or "Assessment") != "Pre-Assessment":
+        return
+    try:
+        tr_dialect = getattr(getattr(db, "bind", None), "dialect", None)
+        id_bind = getattr(IdentitySessionLocal, "kw", {}).get("bind")
+        id_dialect = getattr(id_bind, "dialect", None)
+        if (
+            tr_dialect is not None
+            and id_dialect is not None
+            and getattr(tr_dialect, "name", "") == "sqlite"
+            and getattr(id_dialect, "name", "") != "sqlite"
+        ):
+            return
+        common_ids = get_common_department_ids(db)
+        t_dept_id = getattr(template, "department_id", None)
+        is_common = (t_dept_id is None) or (int(t_dept_id) in common_ids)
+        completed_uids = set(
+            db.scalars(
+                select(AssessmentSession.learner_user_id).where(
+                    AssessmentSession.template_id == template.id,
+                    AssessmentSession.status == "completed",
+                )
+            ).all()
+        )
+        target_uids: set[int] | None = None
+        if not is_common:
+            target_uids = _get_learner_ids_in_departments(db, {int(t_dept_id)})
+
+        with IdentitySessionLocal() as idb:
+            stmt = select(IdentityUser).where(
+                func.lower(IdentityUser.role) == Role.LEARNER.value,
+                IdentityUser.is_active == True,  # noqa: E712
+                IdentityUser.all_assessments_completed == True,  # noqa: E712
+            )
+            if target_uids is not None:
+                if not target_uids:
+                    return
+                stmt = stmt.where(IdentityUser.id.in_(target_uids))
+            users = idb.scalars(stmt).all()
+            changed = False
+            for u in users:
+                if int(u.id) not in completed_uids:
+                    u.all_assessments_completed = False
+                    changed = True
+            if changed:
+                idb.commit()
+    except Exception as exc:
+        print(f"  [Onboarding Sync] Unable to lock pre-assessment gate for template {template.id}: {exc}")
+
+
 def compute_learner_assessment_status(
     db: Session, user_id: int
 ) -> LearnerAssessmentStatusResponse:
@@ -1746,15 +2005,22 @@ def compute_learner_assessment_status(
         .order_by(AssessmentTemplate.id.asc())
     ).all()
     active_tids = [t.id for t in active_templates]
+    all_rows_by_tid: dict[int, list[AssessmentAssignment]] = defaultdict(list)
     active_rows_by_tid: dict[int, list[AssessmentAssignment]] = defaultdict(list)
     if active_tids:
         for row in db.scalars(
             select(AssessmentAssignment).where(
                 AssessmentAssignment.template_id.in_(active_tids),
-                AssessmentAssignment.is_active == True,
             )
         ).all():
-            active_rows_by_tid[row.template_id].append(row)
+            all_rows_by_tid[row.template_id].append(row)
+            if row.is_active:
+                active_rows_by_tid[row.template_id].append(row)
+    for tpl in active_templates:
+        if not all_rows_by_tid.get(tpl.id):
+            seeded = ensure_default_assignment_if_empty(db, tpl, existing_rows=[])
+            all_rows_by_tid[tpl.id] = seeded
+            active_rows_by_tid[tpl.id] = [r for r in seeded if r.is_active]
 
     gate = _resolve_learner_gate_context(
         db=db,
@@ -1767,6 +2033,7 @@ def compute_learner_assessment_status(
     has_approved_department = gate["department_approved"]
     has_chosen_department = gate["has_chosen_department"]
     pre_assessments_completed = gate["pre_assessments_completed"]
+    has_pending_pre_assessment = gate["has_pending_pre_assessment"]
 
     assigned_data = _build_learner_assigned_data(db, user_id)
     stats = assigned_data.stats
@@ -1801,16 +2068,23 @@ def compute_learner_assessment_status(
         None,
     )
 
-    # New joinees must finish mandatory Pre-Assessments before department selection;
-    # unlocking Common assessments upon submitting department choice does not re-lock onboarding.
-    if has_approved_department:
+    # Whenever ANY applicable Common or Department Pre-Assessment is pending,
+    # lock the learner into assessment_pending until all Pre-Assessments are finished!
+    if has_pending_pre_assessment:
+        all_completed = False
+        effective_all_completed = False
+    elif has_approved_department:
         all_completed = True
+        effective_all_completed = True
     elif pre_assessments_completed and has_chosen_department:
         all_completed = True
+        effective_all_completed = True
     elif total_assigned == 0:
         all_completed = bool(identity_flags["all_assessments_completed"]) if identity_flags else False
+        effective_all_completed = all_completed
     else:
         all_completed = pending_count == 0 and completed_count > 0
+        effective_all_completed = all_completed or (bool(identity_flags["all_assessments_completed"]) if identity_flags else False)
 
     if all_completed:
         status_str = "completed"
@@ -1824,7 +2098,6 @@ def compute_learner_assessment_status(
 
     is_activated = bool(identity_flags["is_activated_by_admin"]) if identity_flags else False
     selected_dept_id = gate["selected_dept_id"]
-    effective_all_completed = all_completed or (bool(identity_flags["all_assessments_completed"]) if identity_flags else False)
 
     if not effective_all_completed:
         stage = "assessment_pending"
@@ -2004,6 +2277,18 @@ def get_assignable_targets(
             ).all()
         ) | set(learner_cohorts.keys())
 
+    cohort_dept_by_id = {int(c.id): int(c.department_id) for c in cohorts if c.department_id is not None}
+    req_depts_by_user: dict[int, set[int]] = defaultdict(set)
+    for uid, did in db.query(StudentDepartmentRequest.user_id, StudentDepartmentRequest.department_id).filter(
+        StudentDepartmentRequest.status.in_(["approved", "pending"])
+    ).all():
+        if uid is not None and did is not None:
+            req_depts_by_user[int(uid)].add(int(did))
+    for uid, cids in learner_cohorts.items():
+        for cid in cids:
+            if cid in cohort_dept_by_id:
+                req_depts_by_user[int(uid)].add(cohort_dept_by_id[cid])
+
     learner_items: list[AssignableLearnerItem] = []
     try:
         with IdentitySessionLocal() as id_db:
@@ -2016,16 +2301,24 @@ def get_assignable_targets(
                 .order_by(IdentityUser.full_name.asc(), IdentityUser.id.asc())
             )
             users = id_db.scalars(user_stmt).all()
-            learner_items = [
-                AssignableLearnerItem(
-                    id=u.id,
-                    full_name=u.full_name,
-                    email=u.email,
-                    cohort_ids=sorted(learner_cohorts.get(u.id, [])),
+            for u in users:
+                if dept_learner_ids is not None and u.id not in dept_learner_ids:
+                    continue
+                u_depts = set(req_depts_by_user.get(int(u.id), set()))
+                if getattr(u, "selected_department_id", None):
+                    try:
+                        u_depts.add(int(str(u.selected_department_id).strip()))
+                    except ValueError:
+                        pass
+                learner_items.append(
+                    AssignableLearnerItem(
+                        id=u.id,
+                        full_name=u.full_name,
+                        email=u.email,
+                        cohort_ids=sorted(learner_cohorts.get(u.id, [])),
+                        department_ids=sorted(u_depts),
+                    )
                 )
-                for u in users
-                if dept_learner_ids is None or u.id in dept_learner_ids
-            ]
     except Exception:
         learner_items = []
 
@@ -2186,6 +2479,9 @@ def create_template(
     cat_cfg = dict(payload.category_config or {})
     if payload.duration_minutes is not None:
         cat_cfg["duration_minutes"] = int(payload.duration_minutes)
+    cat_cfg["assessment_mode"] = "pdf_submission" if payload.assessment_mode == "pdf_submission" else "mcq"
+    if payload.max_marks is not None:
+        cat_cfg["max_marks"] = float(payload.max_marks)
 
     validate_template_settings(
         payload.question_count,
@@ -2235,6 +2531,7 @@ def create_template(
         )
         db.commit()
         db.refresh(template)
+        _sync_identity_pre_assessment_gate_locked(db, template)
         dept_map = {
             d.id: d.name for d in db.scalars(select(Department)).all()
         }
@@ -2289,6 +2586,8 @@ def update_template(
     cohort_ids = changes.pop("cohort_ids", None)
     learner_ids = changes.pop("learner_ids", None)
     duration_override = changes.pop("duration_minutes", None)
+    mode_override = changes.pop("assessment_mode", None)
+    max_marks_override = changes.pop("max_marks", None)
     due_at_provided = "due_at" in changes or bool(changes.get("clear_due_at"))
     due_at_val = None if changes.pop("clear_due_at", False) else changes.pop("due_at", None)
 
@@ -2299,12 +2598,16 @@ def update_template(
 
     existing_cfg = template.category_config if isinstance(template.category_config, dict) else {}
     category_config = dict(changes.get("category_config", existing_cfg) or {})
+    for preserved_key in ("assessment_mode", "question_pdf_storage_key", "question_pdf_name", "max_marks", "duration_minutes"):
+        if preserved_key in existing_cfg and preserved_key not in category_config:
+            category_config[preserved_key] = existing_cfg[preserved_key]
     if duration_override is not None:
         category_config["duration_minutes"] = int(duration_override)
-        changes["category_config"] = category_config
-    elif "category_config" in changes and "duration_minutes" not in category_config and "duration_minutes" in existing_cfg:
-        category_config["duration_minutes"] = existing_cfg["duration_minutes"]
-        changes["category_config"] = category_config
+    if mode_override is not None:
+        category_config["assessment_mode"] = "pdf_submission" if mode_override == "pdf_submission" else "mcq"
+    if max_marks_override is not None:
+        category_config["max_marks"] = float(max_marks_override)
+    changes["category_config"] = category_config
 
     validate_template_settings(question_count, category_config, changes.get("assessment_type", template.assessment_type))
 
@@ -2355,6 +2658,7 @@ def update_template(
 
         db.commit()
         db.refresh(template)
+        _sync_identity_pre_assessment_gate_locked(db, template)
         dept_map = {
             d.id: d.name for d in db.scalars(select(Department)).all()
         }
@@ -2518,7 +2822,14 @@ def start_assessment(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This assessment has not been assigned to your account or cohort.",
             )
-        due_utc = to_utc(matched_entry["assignment"].due_at)
+        due_utc = to_utc(matched_entry["assignment"].due_at) or to_utc(getattr(template, "due_at", None))
+        if (getattr(template, "assessment_tag", None) or "Assessment") != "Pre-Assessment":
+            pre_status = compute_learner_assessment_status(db, current_user.id)
+            if not pre_status.pre_assessments_completed:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Please complete all pending Priority Pre-Assessments before starting other assessments.",
+                )
 
     # 1. STRICT SERVER-SIDE ENFORCEMENT: A learner can attempt each assigned assessment only ONE TIME.
     completed_session = db.scalar(
@@ -2598,6 +2909,10 @@ def start_assessment(
             ]
 
             assigned_s = normalize_question_set(getattr(existing_session, "assigned_set", "A"))
+            effective_type = resolve_effective_assessment_type(template)
+            t_mode, t_has_pdf, t_pdf_name, _, t_max_marks = _get_template_pdf_meta(template)
+            if getattr(existing_session, "submission_type", None) == "pdf_submission":
+                t_mode = "pdf_submission"
             resolved_passage = next((pq.passage_text for pq in public_questions if pq.passage_text), None) or getattr(template, "reading_passage", None)
             if effective_type == "comprehension" and not resolved_passage:
                 resolved_passage = BUILTIN_COMPREHENSION_PASSAGES.get(assigned_s, {}).get("passage")
@@ -2610,9 +2925,14 @@ def start_assessment(
                 remaining_seconds=rem_sec,
                 started_at=to_utc(existing_session.started_at),
                 expires_at=deadline_utc,
+                template_id=template.id,
                 template_name=template.name,
-                assessment_type=resolve_effective_assessment_type(template),
+                assessment_type=effective_type,
                 assessment_tag=getattr(template, "assessment_tag", None) or "Assessment",
+                assessment_mode=t_mode,
+                has_question_pdf=t_has_pdf,
+                question_pdf_name=t_pdf_name,
+                max_marks=t_max_marks,
                 assigned_set=assigned_s,
                 reading_passage=resolved_passage,
                 questions=public_questions,
@@ -2624,8 +2944,9 @@ def start_assessment(
             detail=f"The assignment deadline for '{template.name}' has passed and the assessment is expired.",
         )
 
-    # 2. Strict Category Validation & Sequence-Aware Question Sourcing
+    # 2. Strict Category Validation & Sequence-Aware Question Sourcing (or PDF Mode)
     effective_type = resolve_effective_assessment_type(template)
+    t_mode, t_has_pdf, t_pdf_name, _, t_max_marks = _get_template_pdf_meta(template)
 
     # Synchronize template.assessment_type in DB if it had diverged
     if template.assessment_type != effective_type:
@@ -2648,19 +2969,24 @@ def start_assessment(
         existing_session_count=existing_sess_count,
     )
 
-    questions, _, _ = _assemble_template_questions(
-        db=db,
-        template=template,
-        include_solutions=False,
-        custom_only=False,
-        question_set=assigned_set,
-    )
-
-    if not questions:
-        raise HTTPException(
-            status_code=422,
-            detail="No valid questions are configured for this assessment template.",
+    if t_mode == "pdf_submission":
+        questions = []
+        session_q_count = 1
+    else:
+        questions, _, _ = _assemble_template_questions(
+            db=db,
+            template=template,
+            include_solutions=False,
+            custom_only=False,
+            question_set=assigned_set,
         )
+
+        if not questions:
+            raise HTTPException(
+                status_code=422,
+                detail="No valid questions are configured for this assessment template.",
+            )
+        session_q_count = len(questions)
 
     duration_minutes = get_duration_minutes_for_template(template)
     started_at = datetime.now(timezone.utc)
@@ -2675,9 +3001,11 @@ def start_assessment(
         learner_user_id=current_user.id,
         status="in_progress",
         assigned_set=assigned_set,
-        question_count=len(questions),
+        question_count=session_q_count,
         started_at=started_at,
         expires_at=expires_at,
+        submission_type=t_mode,
+        grading_status="pending_review" if t_mode == "pdf_submission" else "auto_graded",
         ai_model="mock-v1",
         prompt_version="mock-v1",
         rubric_version="mock-rubric-v1",
@@ -2752,9 +3080,14 @@ def start_assessment(
         remaining_seconds=int(duration_minutes * 60),
         started_at=to_utc(session.started_at),
         expires_at=to_utc(session.expires_at),
+        template_id=template.id,
         template_name=template.name,
         assessment_type=template.assessment_type,
         assessment_tag=getattr(template, "assessment_tag", None) or "Assessment",
+        assessment_mode=t_mode,
+        has_question_pdf=t_has_pdf,
+        question_pdf_name=t_pdf_name,
+        max_marks=t_max_marks,
         assigned_set=assigned_set,
         reading_passage=resolved_passage,
         questions=public_questions,
@@ -2852,7 +3185,11 @@ def resume_assessment(
         .order_by(AssessmentQuestion.display_order)
     ).all()
 
-    if len(questions) != assessment_session.question_count:
+    t_mode, t_has_pdf, t_pdf_name, _, t_max_marks = _get_template_pdf_meta(template)
+    if getattr(assessment_session, "submission_type", None) == "pdf_submission":
+        t_mode = "pdf_submission"
+
+    if t_mode != "pdf_submission" and len(questions) != assessment_session.question_count:
         raise HTTPException(
             status_code=409,
             detail="Assessment questions are incomplete",
@@ -2887,9 +3224,14 @@ def resume_assessment(
         remaining_seconds=remaining_sec,
         started_at=started_utc,
         expires_at=expires_utc,
-        template_name=template.name if template else "Assessment",
+        template_id=template.id if template else assessment_session.template_id,
+        template_name=template.name if template else (getattr(assessment_session, "template_name_snapshot", None) or "Assessment"),
         assessment_type=template.assessment_type if template else "psychometric",
         assessment_tag=getattr(template, "assessment_tag", None) or "Assessment" if template else "Assessment",
+        assessment_mode=t_mode,
+        has_question_pdf=t_has_pdf,
+        question_pdf_name=t_pdf_name,
+        max_marks=t_max_marks,
         assigned_set=assigned_s,
         reading_passage=resolved_passage,
         saved_answers=saved_answers,
@@ -3236,7 +3578,7 @@ def submit_assessment(
         db.refresh(assessment_session)
 
         post_status = compute_learner_assessment_status(db, assessment_session.learner_user_id)
-        if post_status.all_completed and post_status.total_assigned > 0:
+        if post_status.all_completed and (post_status.total_assigned > 0 or post_status.pre_assessments_completed):
             _sync_identity_assessments_completed(assessment_session.learner_user_id)
 
         try:
@@ -3308,6 +3650,12 @@ def record_tab_switch(
             detail="Cannot update proctoring metrics after session completion",
         )
 
+    if getattr(session, "submission_type", "mcq") == "pdf_submission":
+        return {
+            "status": "ignored_pdf_mode",
+            "session_id": session.id,
+            "tab_switch_count": 0,
+        }
     current_val = getattr(session, "tab_switch_count", 0) or 0
     new_val = max(current_val, payload.tab_switch_count)
     session.tab_switch_count = new_val
@@ -3471,14 +3819,17 @@ def get_assessment_results(
             )
     user_info = get_users_map([assessment_session.learner_user_id]).get(assessment_session.learner_user_id, {})
 
-    # Retrieve saved scores from MySQL.
     scores = db.scalars(
         select(AssessmentScore)
         .where(AssessmentScore.session_id == session_id)
         .order_by(AssessmentScore.category)
     ).all()
 
-    if not scores:
+    sess_sub_type = getattr(assessment_session, "submission_type", "mcq") or "mcq"
+    sess_grading_status = getattr(assessment_session, "grading_status", "auto_graded") or "auto_graded"
+    _, _, _, _, tpl_max_marks = _get_template_pdf_meta(template)
+
+    if not scores and sess_grading_status != "pending_review":
         raise HTTPException(status_code=404, detail="Assessment results are not available")
 
     answered_count = db.scalar(
@@ -3487,10 +3838,10 @@ def get_assessment_results(
         )
     ) or 0
 
-    total_score = sum(float(score.score) for score in scores)
-    max_score = sum(float(score.max_score) for score in scores)
+    total_score = sum(float(score.score) for score in scores) if scores else 0.0
+    max_score = sum(float(score.max_score) for score in scores) if scores else (tpl_max_marks if sess_sub_type == "pdf_submission" else 0.0)
     overall_percentage = (
-        total_score / max_score * 100 if max_score > 0 else 0
+        total_score / max_score * 100 if (scores and max_score > 0) else 0.0
     )
 
     return AssessmentScoresResponse(
@@ -3513,12 +3864,19 @@ def get_assessment_results(
             for score in scores
         ],
         total_questions=assessment_session.question_count,
-        answered_count=answered_count,
-        unanswered_count=max(0, assessment_session.question_count - answered_count),
+        answered_count=1 if sess_sub_type == "pdf_submission" else answered_count,
+        unanswered_count=0 if sess_sub_type == "pdf_submission" else max(0, assessment_session.question_count - answered_count),
         total_score=round(total_score, 2),
         max_score=round(max_score, 2),
         overall_percentage=round(overall_percentage, 2),
         tab_switch_count=getattr(assessment_session, "tab_switch_count", 0) or 0,
+        submission_type=sess_sub_type,
+        grading_status=sess_grading_status,
+        submission_github_url=getattr(assessment_session, "submission_github_url", None),
+        submission_file_name=getattr(assessment_session, "submission_file_name", None),
+        has_submission_file=bool(getattr(assessment_session, "submission_file_storage_key", None)),
+        submission_notes=getattr(assessment_session, "submission_notes", None),
+        trainer_feedback=getattr(assessment_session, "trainer_feedback", None),
     )
 
 
@@ -3573,6 +3931,11 @@ def create_assessment_report(
         raise HTTPException(
             status_code=409,
             detail="Complete the assessment before generating a report",
+        )
+    if (getattr(assessment_session, "grading_status", "auto_graded") or "auto_graded") == "pending_review":
+        raise HTTPException(
+            status_code=409,
+            detail="This submission is awaiting manual teacher grading. Report card unlocks once graded.",
         )
 
     template = (
@@ -3859,6 +4222,11 @@ def get_assessment_report(
     )
 
     if report is None:
+        if (getattr(assessment_session, "grading_status", "auto_graded") or "auto_graded") == "pending_review":
+            raise HTTPException(
+                status_code=409,
+                detail="This submission is awaiting manual teacher grading. Report card unlocks once graded.",
+            )
         # Auto-generate report on the fly for completed assessment session
         scores = db.scalars(
             select(AssessmentScore).where(
@@ -4074,9 +4442,12 @@ def get_my_assessment_results(
     result_items = []
     for session, template in sessions:
         session_scores = scores_by_session.get(session.id, [])
-        total_score = sum(float(s.score) for s in session_scores)
-        max_score = sum(float(s.max_score) for s in session_scores)
-        pct = round(total_score / max_score * 100, 2) if max_score > 0 else 0.0
+        sess_sub_type = getattr(session, "submission_type", "mcq") or "mcq"
+        sess_grading_status = getattr(session, "grading_status", "auto_graded") or "auto_graded"
+        _, _, _, _, tpl_max_marks = _get_template_pdf_meta(template)
+        total_score = sum(float(s.score) for s in session_scores) if session_scores else 0.0
+        max_score = sum(float(s.max_score) for s in session_scores) if session_scores else (tpl_max_marks if sess_sub_type == "pdf_submission" else 0.0)
+        pct = round(total_score / max_score * 100, 2) if (session_scores and max_score > 0) else 0.0
 
         cat_list = [
             AssessmentCategoryScoreResponse(
@@ -4105,9 +4476,16 @@ def get_my_assessment_results(
                 overall_percentage=round(pct, 2),
                 started_at=session.started_at,
                 completed_at=session.completed_at,
-                has_report=session.id in sessions_with_report,
+                has_report=(session.id in sessions_with_report) and sess_grading_status != "pending_review",
                 categories=cat_list,
                 tab_switch_count=getattr(session, "tab_switch_count", 0) or 0,
+                submission_type=sess_sub_type,
+                grading_status=sess_grading_status,
+                submission_github_url=getattr(session, "submission_github_url", None),
+                submission_file_name=getattr(session, "submission_file_name", None),
+                has_submission_file=bool(getattr(session, "submission_file_storage_key", None)),
+                submission_notes=getattr(session, "submission_notes", None),
+                trainer_feedback=getattr(session, "trainer_feedback", None),
             )
         )
     return result_items
@@ -4254,11 +4632,14 @@ def get_admin_assessment_results(
             continue
 
         session_scores = scores_by_session.get(session.id, [])
-        total_score = sum(float(s.score) for s in session_scores)
-        max_score = sum(float(s.max_score) for s in session_scores)
-        pct = round(total_score / max_score * 100, 2) if max_score > 0 else 0.0
+        sess_sub_type = getattr(session, "submission_type", "mcq") or "mcq"
+        sess_grading_status = getattr(session, "grading_status", "auto_graded") or "auto_graded"
+        _, _, _, _, tpl_max_marks = _get_template_pdf_meta(template)
+        total_score = sum(float(s.score) for s in session_scores) if session_scores else 0.0
+        max_score = sum(float(s.max_score) for s in session_scores) if session_scores else (tpl_max_marks if sess_sub_type == "pdf_submission" else 0.0)
+        pct = round(total_score / max_score * 100, 2) if (session_scores and max_score > 0) else 0.0
 
-        if effective_status == "completed" and max_score > 0:
+        if effective_status == "completed" and session_scores and max_score > 0 and sess_grading_status != "pending_review":
             completed_scores.append(pct)
 
         cat_list = [
@@ -4287,9 +4668,16 @@ def get_admin_assessment_results(
                 overall_percentage=round(pct, 2),
                 started_at=session.started_at,
                 completed_at=session.completed_at,
-                has_report=session.id in sessions_with_report,
+                has_report=(session.id in sessions_with_report) and sess_grading_status != "pending_review",
                 categories=cat_list,
                 tab_switch_count=getattr(session, "tab_switch_count", 0) or 0,
+                submission_type=sess_sub_type,
+                grading_status=sess_grading_status,
+                submission_github_url=getattr(session, "submission_github_url", None),
+                submission_file_name=getattr(session, "submission_file_name", None),
+                has_submission_file=bool(getattr(session, "submission_file_storage_key", None)),
+                submission_notes=getattr(session, "submission_notes", None),
+                trainer_feedback=getattr(session, "trainer_feedback", None),
             )
         )
 
@@ -4975,4 +5363,362 @@ def populate_default_questions(
             detail=f"Failed to populate questions: {str(exc)}",
         )
     return list_bank_questions(template_id=template_id, include_unassigned=True, db=db, current_user=current_user)
+
+
+# --------------------------------------------------
+# Dual Assessment Mode: PDF Question Paper + GitHub / ZIP Project Submission + Manual Teacher Grading
+# --------------------------------------------------
+
+
+@router.post(
+    "/templates/{template_id}/question-pdf",
+    response_model=AssessmentTemplateResponse,
+)
+async def upload_template_question_pdf(
+    template_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+    require_teacher_department_access(
+        db, current_user, getattr(template, "department_id", None), allow_common_read=False
+    )
+
+    raw_name = os.path.basename((file.filename or "questions.pdf").strip())
+    _, ext = os.path.splitext(raw_name)
+    if ext.lower() != ".pdf":
+        raise HTTPException(status_code=422, detail="Question paper must be a valid .pdf document.")
+
+    content = await file.read()
+    if len(content) < 5 or not content.startswith(b"%PDF"):
+        raise HTTPException(status_code=422, detail="Uploaded file is not a valid PDF document.")
+    if len(content) > MAX_QUESTION_PDF_BYTES:
+        raise HTTPException(status_code=422, detail="Question PDF exceeds the 25 MB maximum size.")
+
+    safe_key = f"tpl_{template_id}_{uuid.uuid4().hex}.pdf"
+    dest_path = os.path.realpath(os.path.join(ASSESSMENT_QUESTION_PDF_DIR, safe_key))
+    if not dest_path.startswith(os.path.realpath(ASSESSMENT_QUESTION_PDF_DIR) + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid PDF upload path")
+
+    with open(dest_path, "wb") as fp:
+        fp.write(content)
+
+    cfg = dict(template.category_config or {})
+    old_key = cfg.get("question_pdf_storage_key")
+    cfg["assessment_mode"] = "pdf_submission"
+    cfg["question_pdf_storage_key"] = safe_key
+    cfg["question_pdf_name"] = raw_name
+    cfg.setdefault("max_marks", 100.0)
+    template.category_config = cfg
+    db.commit()
+    db.refresh(template)
+
+    if old_key and old_key != safe_key:
+        old_path = os.path.realpath(os.path.join(ASSESSMENT_QUESTION_PDF_DIR, os.path.basename(str(old_key))))
+        if old_path.startswith(os.path.realpath(ASSESSMENT_QUESTION_PDF_DIR) + os.sep) and os.path.isfile(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
+
+    rows = db.scalars(
+        select(AssessmentAssignment).where(AssessmentAssignment.template_id == template_id)
+    ).all()
+    if not rows:
+        rows = ensure_default_assignment_if_empty(db, template, existing_rows=[])
+    dept_map = {d.id: d.name for d in db.scalars(select(Department)).all()}
+    return build_template_response(template, rows, dept_map)
+
+
+@router.get("/templates/{template_id}/question-pdf")
+def download_template_question_pdf(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    template = db.get(AssessmentTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Assessment template not found")
+
+    role = role_of(current_user)
+    if role == Role.LEARNER.value:
+        matched_items, _ = get_assigned_rows_for_learner(
+            db, current_user.id, only_active_templates=True
+        )
+        has_session = db.scalar(
+            select(AssessmentSession.id).where(
+                AssessmentSession.template_id == template_id,
+                AssessmentSession.learner_user_id == int(current_user.id),
+            )
+        )
+        if not any(item["template"].id == template_id for item in matched_items) and has_session is None:
+            raise HTTPException(status_code=403, detail="This assessment is not assigned to you.")
+    elif role == Role.TEACHER.value:
+        require_teacher_department_access(
+            db, current_user, getattr(template, "department_id", None), allow_common_read=True
+        )
+    elif role not in {Role.ADMIN.value, Role.SUPERADMIN.value}:
+        raise HTTPException(status_code=403, detail="Not authorized to download question PDF")
+
+    _, has_pdf, pdf_name, pdf_key, _ = _get_template_pdf_meta(template)
+    if not has_pdf or not pdf_key:
+        raise HTTPException(status_code=404, detail="No question PDF has been uploaded for this assessment.")
+
+    file_path = os.path.realpath(os.path.join(ASSESSMENT_QUESTION_PDF_DIR, os.path.basename(pdf_key)))
+    if not file_path.startswith(os.path.realpath(ASSESSMENT_QUESTION_PDF_DIR) + os.sep) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Question PDF file not found on server.")
+
+    return FileResponse(
+        path=file_path,
+        filename=pdf_name or f"assessment_{template_id}_questions.pdf",
+        media_type="application/pdf",
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/submit-project",
+    response_model=AssessmentSubmitResponse,
+)
+async def submit_project_assessment(
+    session_id: int,
+    github_url: str = Form(default=""),
+    notes: str = Form(default=""),
+    file: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if role_of(current_user) not in {
+        Role.LEARNER.value,
+        Role.ADMIN.value,
+        Role.SUPERADMIN.value,
+        Role.TEACHER.value,
+    }:
+        raise HTTPException(status_code=403, detail="Not authorized to submit assessment")
+
+    assessment_session = db.scalar(
+        select(AssessmentSession).where(
+            AssessmentSession.id == session_id,
+            AssessmentSession.learner_user_id == int(current_user.id),
+        )
+    )
+    if assessment_session is None:
+        raise HTTPException(status_code=404, detail="Assessment session not found")
+    if assessment_session.status != "in_progress":
+        raise HTTPException(
+            status_code=409,
+            detail="This assessment has already been submitted and cannot be modified.",
+        )
+
+    clean_github = (github_url or "").strip()
+    if clean_github:
+        parsed = urlparse(clean_github)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+            raise HTTPException(
+                status_code=422,
+                detail="Please enter a valid http(s) GitHub or repository link.",
+            )
+
+    stored_key: str | None = None
+    original_filename: str | None = None
+    if file is not None and file.filename:
+        raw_name = os.path.basename(file.filename.strip())
+        _, ext = os.path.splitext(raw_name)
+        ext_lower = ext.lower()
+        if ext_lower not in ALLOWED_PROJECT_SUBMISSION_EXTENSIONS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unsupported submission file format '{ext_lower}'. Upload a .zip archive or project file.",
+            )
+        content = await file.read()
+        if len(content) == 0:
+            raise HTTPException(status_code=422, detail="Uploaded submission file is empty.")
+        if len(content) > MAX_PROJECT_SUBMISSION_BYTES:
+            raise HTTPException(status_code=422, detail="Submission archive exceeds the 50 MB size limit.")
+
+        safe_key = f"sess_{session_id}_u{int(current_user.id)}_{uuid.uuid4().hex}{ext_lower}"
+        dest_path = os.path.realpath(os.path.join(ASSESSMENT_PROJECT_SUBMISSIONS_DIR, safe_key))
+        if not dest_path.startswith(os.path.realpath(ASSESSMENT_PROJECT_SUBMISSIONS_DIR) + os.sep):
+            raise HTTPException(status_code=400, detail="Invalid submission storage path")
+        with open(dest_path, "wb") as fp:
+            fp.write(content)
+        stored_key = safe_key
+        original_filename = raw_name
+
+    if not clean_github and not stored_key:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide a GitHub repository URL and/or upload a .zip project archive to submit.",
+        )
+
+    # Strictly Manual Grading: mark completed + pending_review with ZERO auto-generated scores!
+    db.query(AssessmentScore).filter(AssessmentScore.session_id == session_id).delete()
+    db.query(AssessmentReport).filter(AssessmentReport.session_id == session_id).delete()
+
+    assessment_session.submission_type = "pdf_submission"
+    assessment_session.grading_status = "pending_review"
+    assessment_session.submission_github_url = clean_github or None
+    assessment_session.submission_file_storage_key = stored_key
+    assessment_session.submission_file_name = original_filename
+    assessment_session.submission_notes = (notes or "").strip() or None
+    assessment_session.status = "completed"
+    assessment_session.completed_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(assessment_session)
+
+    post_status = compute_learner_assessment_status(db, assessment_session.learner_user_id)
+    if post_status.all_completed and (post_status.total_assigned > 0 or post_status.pre_assessments_completed):
+        _sync_identity_assessments_completed(assessment_session.learner_user_id)
+
+    return AssessmentSubmitResponse(
+        session_id=assessment_session.id,
+        status=assessment_session.status,
+        grading_status=assessment_session.grading_status,
+        completed_at=assessment_session.completed_at,
+        message="Submission uploaded successfully and queued for manual teacher grading.",
+    )
+
+
+@router.get("/sessions/{session_id}/submission-file")
+def download_project_submission_file(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    assessment_session = db.get(AssessmentSession, session_id)
+    if assessment_session is None:
+        raise HTTPException(status_code=404, detail="Assessment session not found")
+
+    role = role_of(current_user)
+    template = db.get(AssessmentTemplate, assessment_session.template_id) if assessment_session.template_id else None
+    _, _, _, _, resolved_dept_id = _session_template_meta(assessment_session, template)
+
+    if role == Role.LEARNER.value:
+        if int(assessment_session.learner_user_id) != int(current_user.id):
+            raise HTTPException(status_code=403, detail="Not authorized to download another learner's submission")
+    elif role == Role.TEACHER.value:
+        require_teacher_department_access(db, current_user, resolved_dept_id, allow_common_read=True)
+        teacher_depts = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if int(assessment_session.learner_user_id) not in _get_learner_ids_in_departments(db, teacher_depts):
+            raise HTTPException(status_code=403, detail="Teachers can only download submissions from learners in their assigned department")
+    elif role not in {Role.ADMIN.value, Role.SUPERADMIN.value}:
+        raise HTTPException(status_code=403, detail="Not authorized to download submission")
+
+    key = getattr(assessment_session, "submission_file_storage_key", None)
+    if not key:
+        raise HTTPException(status_code=404, detail="No archive file was uploaded for this submission")
+
+    file_path = os.path.realpath(os.path.join(ASSESSMENT_PROJECT_SUBMISSIONS_DIR, os.path.basename(key)))
+    if not file_path.startswith(os.path.realpath(ASSESSMENT_PROJECT_SUBMISSIONS_DIR) + os.sep) or not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Submitted file not found on server")
+
+    return FileResponse(
+        path=file_path,
+        filename=getattr(assessment_session, "submission_file_name", None) or os.path.basename(key),
+        media_type="application/octet-stream",
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/grade-project",
+    response_model=AssessmentScoresResponse,
+)
+def grade_project_submission(
+    session_id: int,
+    payload: ManualProjectGradeRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    require_assessment_manager(current_user)
+    assessment_session = db.get(AssessmentSession, session_id)
+    if assessment_session is None:
+        raise HTTPException(status_code=404, detail="Assessment session not found")
+    if assessment_session.status != "completed":
+        raise HTTPException(status_code=409, detail="Cannot grade an unsubmitted assessment session")
+    if (getattr(assessment_session, "submission_type", "mcq") or "mcq") != "pdf_submission":
+        raise HTTPException(status_code=422, detail="Manual project grading applies only to PDF / ZIP submission assessments")
+
+    template = db.get(AssessmentTemplate, assessment_session.template_id) if assessment_session.template_id else None
+    resolved_tid, resolved_name, resolved_type, _, resolved_dept_id = _session_template_meta(
+        assessment_session, template
+    )
+
+    if role_of(current_user) == Role.TEACHER.value:
+        require_teacher_department_access(db, current_user, resolved_dept_id, allow_common_read=True)
+        teacher_depts = get_teacher_assigned_dept_ids(db, int(current_user.id))
+        if int(assessment_session.learner_user_id) not in _get_learner_ids_in_departments(db, teacher_depts):
+            raise HTTPException(
+                status_code=403,
+                detail="Teachers can only grade submissions for learners in their assigned department",
+            )
+
+    if payload.score > payload.max_score:
+        raise HTTPException(status_code=422, detail="Awarded score cannot exceed max_score")
+
+    pct = round((float(payload.score) / float(payload.max_score)) * 100.0, 2)
+    clean_feedback = (payload.feedback or "").strip() or None
+
+    db.query(AssessmentScore).filter(AssessmentScore.session_id == session_id).delete()
+    db.query(AssessmentReport).filter(AssessmentReport.session_id == session_id).delete()
+    db.flush()
+
+    score_row = AssessmentScore(
+        session_id=session_id,
+        category=resolved_type or "technical",
+        score=round(float(payload.score), 2),
+        max_score=round(float(payload.max_score), 2),
+        percentage=pct,
+    )
+    db.add(score_row)
+
+    assessment_session.grading_status = "manually_graded"
+    assessment_session.graded_by_user_id = int(current_user.id)
+    assessment_session.trainer_feedback = clean_feedback
+    db.flush()
+
+    generated = generate_assessment_report(
+        category_scores=[
+            {
+                "category": score_row.category,
+                "score": score_row.score,
+                "max_score": score_row.max_score,
+                "percentage": score_row.percentage,
+            }
+        ],
+        assessment_type=resolved_type or "technical",
+        template_name=resolved_name,
+        total_questions=1,
+        correct_count=1 if pct >= 50.0 else 0,
+        incorrect_count=0 if pct >= 50.0 else 1,
+        unattempted_count=0,
+        time_taken_seconds=None,
+        tab_switch_count=0,
+        session_id=session_id,
+        learner_user_id=assessment_session.learner_user_id,
+        prior_report_texts=[],
+    )
+    rep_data = dict(generated["report_data"] or {})
+    if clean_feedback:
+        rep_data["trainer_feedback"] = clean_feedback
+        rep_data["summary"] = f"{rep_data.get('summary', '')} Instructor Review: {clean_feedback}".strip()
+    report_text = generated["report_text"]
+    if clean_feedback:
+        report_text = f"{report_text}\n\nInstructor Evaluation Feedback:\n{clean_feedback}"
+
+    db.add(
+        AssessmentReport(
+            session_id=session_id,
+            report_data=rep_data,
+            report_text=report_text,
+            ai_model="instructor-manual-review-v1",
+        )
+    )
+    db.commit()
+
+    return get_assessment_results(session_id=session_id, db=db, current_user=current_user)
+
 
