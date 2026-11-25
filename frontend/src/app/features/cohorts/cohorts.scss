@@ -7601,45 +7601,47 @@
     accent-color: #635bff;
   }
 
-  // Batch Specifications & Curriculum Objectives
-  .card-icon-round {
-    background: #1e293b;
-    border-color: #334155;
-    color: #f8fafc;
-  }
-
-  .spec-item {
-    border-bottom-color: #263244;
-  }
-
-  .spec-label {
-    color: #94a3b8;
-  }
-
-  .spec-value {
-    color: #f8fafc;
-
-    &.highlight-stage {
-      color: #a5b4fc;
+  // Batch Specifications & Curriculum Objectives (match .overview-card nesting specificity)
+  .overview-card {
+    .card-title-bar .card-icon-round {
+      background: #1e293b !important;
+      border-color: #334155 !important;
+      color: #f8fafc !important;
     }
 
-    &.link-style {
-      color: #818cf8;
+    .spec-list .spec-item {
+      border-bottom-color: #263244 !important;
+
+      .spec-label {
+        color: #94a3b8 !important;
+      }
+
+      .spec-value {
+        color: #f8fafc !important;
+
+        &.highlight-stage {
+          color: #a5b4fc !important;
+        }
+
+        &.link-style {
+          color: #818cf8 !important;
+        }
+      }
     }
-  }
 
-  .cohort-summary-text,
-  .objective-item {
-    color: #cbd5e1;
+    .cohort-summary-text,
+    .objectives-list .objective-item {
+      color: #cbd5e1 !important;
 
-    strong {
-      color: #f8fafc;
+      strong {
+        color: #f8fafc !important;
+      }
     }
-  }
 
-  .obj-check {
-    background: rgba(16, 185, 129, 0.16);
-    color: #6ee7b7;
+    .obj-check {
+      background: rgba(16, 185, 129, 0.16) !important;
+      color: #6ee7b7 !important;
+    }
   }
 
   // Video Duration Pill & Learner Watch Behavior
