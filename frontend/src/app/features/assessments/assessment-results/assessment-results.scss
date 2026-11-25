@@ -543,6 +543,18 @@
     p {
       color: #94a3b8;
     }
+
+    &.pending-review-panel {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+
+      strong {
+        color: #fcd34d;
+      }
+      p {
+        color: #fde68a;
+      }
+    }
   }
 }
 

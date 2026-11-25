@@ -628,6 +628,34 @@
       color: #bbf7d0;
     }
   }
+
+  .difficulty-badge {
+    &.easy {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+    &.medium {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+    &.hard {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
+    }
+  }
+
+  .neg-pill,
+  .btn-clear {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
+
+  .admin-correct-badge {
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #6ee7b7;
+  }
 }
 
 

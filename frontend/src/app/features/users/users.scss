@@ -1177,5 +1177,34 @@ td {
     border: 1px solid #1f2937;
     color: #f8fafc;
   }
+
+  .search-icon-svg {
+    background: transparent;
+    color: #94a3b8;
+  }
+
+  .stage-pill {
+    background: #1e293b;
+    color: #cbd5e1;
+
+    &.pending { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+    &.in-progress { background: rgba(59, 130, 246, 0.16); color: #93c5fd; }
+  }
+
+  .unlocked-pill {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+  }
+
+  .dept-counter {
+    background: rgba(99, 102, 241, 0.16);
+    color: #c7d2fe;
+  }
+
+  .error {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
 }
 

@@ -1369,5 +1369,80 @@
       border-top-color: #1f2937;
     }
   }
+
+  /* Confirm Dialog, Rule Bullets, Gate Banners & Cards */
+  .confirm-dialog,
+  .state-card {
+    background: #182230;
+    border-color: #293548;
+    color: #f8fafc;
+
+    h2, h3, strong { color: #f8fafc; }
+    p { color: #94a3b8; }
+  }
+
+  .confirm-icon,
+  .rule-bullet,
+  .card-icon {
+    background: rgba(99, 102, 241, 0.16);
+    color: #a5b4fc;
+
+    &.grammar,
+    &.warning {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+  }
+
+  .type-badge {
+    background: #1e293b;
+    color: #cbd5e1;
+
+    &[data-type="english_grammar"] {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+  }
+
+  .available-badge,
+  .status-badge {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+  }
+
+  .btn-action {
+    background: #1e293b;
+    border-color: #334155;
+    color: #e2e8f0;
+
+    &:hover:not(:disabled) {
+      background: #334155;
+      color: #ffffff;
+    }
+  }
+
+  .btn-expired {
+    background: rgba(239, 68, 68, 0.16) !important;
+    border-color: rgba(239, 68, 68, 0.35) !important;
+    color: #fca5a5 !important;
+  }
+
+  .onboarding-gate-banner {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.35);
+    color: #fde68a;
+
+    &.unlocked {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.35);
+      color: #6ee7b7;
+    }
+  }
+
+  .error-banner {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+  }
 }
 

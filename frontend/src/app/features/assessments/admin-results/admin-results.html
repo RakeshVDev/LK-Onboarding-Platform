@@ -604,8 +604,8 @@
             <div class="error-banner" role="alert">{{ manualGradeError() }}</div>
           }
 
-          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px;">
-            <strong style="display:block; margin-bottom:8px;">Submitted Artifacts (Inspect Before Scoring):</strong>
+          <div style="background: var(--surface-secondary); border:1px solid var(--border-primary); border-radius:10px; padding:14px;">
+            <strong style="display:block; margin-bottom:8px; color: var(--text-primary);">Submitted Artifacts (Inspect Before Scoring):</strong>
             <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
               @if (gm.submission_github_url) {
                 <a class="btn-action-secondary" [href]="gm.submission_github_url" target="_blank" rel="noopener noreferrer">
@@ -622,29 +622,29 @@
               }
             </div>
             @if (gm.submission_notes) {
-              <p style="margin:10px 0 0; font-size:13px; color:#334155;"><strong>Candidate Notes:</strong> {{ gm.submission_notes }}</p>
+              <p style="margin:10px 0 0; font-size:13px; color: var(--text-secondary);"><strong>Candidate Notes:</strong> {{ gm.submission_notes }}</p>
             }
           </div>
 
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
             <div>
-              <label for="manualScoreVal" style="display:block; font-weight:600; margin-bottom:4px;">Awarded Score *</label>
+              <label for="manualScoreVal" style="display:block; font-weight:600; margin-bottom:4px; color: var(--text-primary);">Awarded Score *</label>
               <input id="manualScoreVal" type="number" min="0" [max]="manualMaxScoreInput" step="0.5"
-                style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;"
+                style="width:100%; padding:9px 12px; border:1px solid var(--input-border); background: var(--input-bg); color: var(--text-primary); border-radius:8px;"
                 [(ngModel)]="manualScoreInput" />
             </div>
             <div>
-              <label for="manualMaxVal" style="display:block; font-weight:600; margin-bottom:4px;">Maximum Marks *</label>
+              <label for="manualMaxVal" style="display:block; font-weight:600; margin-bottom:4px; color: var(--text-primary);">Maximum Marks *</label>
               <input id="manualMaxVal" type="number" min="1" max="1000"
-                style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;"
+                style="width:100%; padding:9px 12px; border:1px solid var(--input-border); background: var(--input-bg); color: var(--text-primary); border-radius:8px;"
                 [(ngModel)]="manualMaxScoreInput" />
             </div>
           </div>
 
           <div>
-            <label for="manualFeedbackVal" style="display:block; font-weight:600; margin-bottom:4px;">Instructor Evaluation Feedback</label>
+            <label for="manualFeedbackVal" style="display:block; font-weight:600; margin-bottom:4px; color: var(--text-primary);">Instructor Evaluation Feedback</label>
             <textarea id="manualFeedbackVal" rows="3"
-              style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px;"
+              style="width:100%; padding:9px 12px; border:1px solid var(--input-border); background: var(--input-bg); color: var(--text-primary); border-radius:8px;"
               [(ngModel)]="manualFeedbackInput"
               placeholder="Provide manual grading notes, code quality review, and feedback for the learner's report card..."></textarea>
           </div>
