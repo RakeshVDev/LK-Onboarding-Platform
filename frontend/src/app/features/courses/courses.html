@@ -5,7 +5,8 @@
     <div class="header-left">
       <span class="eyebrow">ACADEMIC &amp; PERMANENT RESOURCE VAULT</span>
       <h1>Course Vaults ({{ courses().length }})</h1>
-      <p>1:1 synced with active Departments (including All / Common with HTML, CSS, JS, TS, Angular &amp; React). Teachers can archive resources here and send them to active batches.</p>
+      <p>1:1 synced with active Departments (including All / Common with HTML, CSS, JS, TS, Angular &amp; React).
+        Teachers can archive resources here and send them to active batches.</p>
     </div>
 
     <div class="header-actions">
@@ -15,7 +16,8 @@
 
   @if (!loading() && isTeacher && !hasAssignedDepartments) {
   <div class="alert-banner alert-error">
-    <span>⚠</span> No departments have been assigned to your teacher account yet. A SuperAdmin must assign 1–8 departments (or add you to a batch) before you can manage courses or study materials.
+    <span>⚠</span> No departments have been assigned to your teacher account yet. A SuperAdmin must assign 1–8
+    departments (or add you to a batch) before you can manage courses or study materials.
   </div>
   }
 
@@ -40,22 +42,16 @@
           <span class="consensus-names">
             Approved: {{ delReq.approved_by_names.join(', ') || 'None' }}
             @if (delReq.pending_superadmin_names.length > 0) {
-              · Waiting on: {{ delReq.pending_superadmin_names.join(', ') }}
+            · Waiting on: {{ delReq.pending_superadmin_names.join(', ') }}
             }
           </span>
         </div>
         <div class="consensus-actions">
-          <button
-            type="button"
-            class="btn-approve"
-            (click)="approveDeletion(delReq)"
+          <button type="button" class="btn-approve" (click)="approveDeletion(delReq)"
             [disabled]="hasCurrentUserApprovedDeletion(delReq) || processingDeletionId() === delReq.id">
             {{ hasCurrentUserApprovedDeletion(delReq) ? '✓ Approved by You' : '✓ Approve Delete' }}
           </button>
-          <button
-            type="button"
-            class="btn-reject"
-            (click)="rejectDeletion(delReq)"
+          <button type="button" class="btn-reject" (click)="rejectDeletion(delReq)"
             [disabled]="processingDeletionId() === delReq.id">
             ✕ Reject
           </button>
@@ -88,36 +84,37 @@
 
   <!-- Learner Department Track Allocation Notice -->
   @if (!loading() && isLearner) {
-    @if (!isApprovedForDepartment) {
-      <div class="locked-department-banner">
-        <div class="lock-icon-box">🔒</div>
-        <div class="lock-content">
-          @if (departmentStatus === 'pending') {
-            <h3>Track Allocation Pending Approval (Showing All / Common)</h3>
-            <p>
-              You have requested to join the <strong>{{ requestedDepartmentName }}</strong> department track.
-              While your instructor or superadmin reviews your request, only <strong>All / Common</strong> courses are available below.
-              Specialized {{ requestedDepartmentName }} courses and materials will unlock automatically once approved.
-            </p>
-          } @else {
-            <h3>Choose Your Department Track (Showing All / Common)</h3>
-            <p>
-              Only <strong>All / Common</strong> foundational courses are shown until your chosen department is approved.
-              Submit your preferred engineering specialization on the Dashboard (Python, .NET, Java, PHP, Database Engineer).
-            </p>
-            <a routerLink="/dashboard" class="btn-goto-assessments">
-              <span>Choose Department on Dashboard →</span>
-            </a>
-          }
-        </div>
-      </div>
-    } @else {
-      <div class="approved-track-pill-banner">
-        <span class="track-check">✓</span>
-        <span>Allocated Department Track: <strong>{{ requestedDepartmentName }}</strong></span>
-        <span class="track-subtitle">· Showing courses and study materials approved for your technical specialization</span>
-      </div>
-    }
+  @if (!isApprovedForDepartment) {
+  <div class="locked-department-banner">
+    <div class="lock-icon-box">🔒</div>
+    <div class="lock-content">
+      @if (departmentStatus === 'pending') {
+      <h3>Track Allocation Pending Approval (Showing All / Common)</h3>
+      <p>
+        You have requested to join the <strong>{{ requestedDepartmentName }}</strong> department track.
+        While your instructor or superadmin reviews your request, only <strong>All / Common</strong> courses are
+        available below.
+        Specialized {{ requestedDepartmentName }} courses and materials will unlock automatically once approved.
+      </p>
+      } @else {
+      <h3>Choose Your Department Track (Showing All / Common)</h3>
+      <p>
+        Only <strong>All / Common</strong> foundational courses are shown until your chosen department is approved.
+        Submit your preferred engineering specialization on the Dashboard (Python, .NET, Java, PHP, Database Engineer).
+      </p>
+      <a routerLink="/dashboard" class="btn-goto-assessments">
+        <span>Choose Department on Dashboard →</span>
+      </a>
+      }
+    </div>
+  </div>
+  } @else {
+  <div class="approved-track-pill-banner">
+    <span class="track-check">✓</span>
+    <span>Allocated Department Track: <strong>{{ requestedDepartmentName }}</strong></span>
+    <span class="track-subtitle">· Showing courses and study materials approved for your technical specialization</span>
+  </div>
+  }
   }
 
   <!-- Courses Grid -->
@@ -138,13 +135,15 @@
 
       <h2 class="course-title">{{ course.title }}</h2>
       <p class="course-description">
-        {{ course.description || 'Comprehensive curriculum covering core principles, hands-on modules, and industry best practices.' }}
+        {{ course.description || 'Comprehensive curriculum covering core principles, hands-on modules, and industry best
+        practices.' }}
       </p>
 
       <div class="course-actions">
         <!-- Syllabus Action -->
         <button type="button" class="btn-action btn-syllabus" (click)="openSyllabus(course)">
-          <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
           </svg>
@@ -153,19 +152,16 @@
 
         <!-- Learning Materials / Permanent Resource Vault Action -->
         <button type="button" class="btn-action btn-materials" (click)="openMaterials(course)">
-          <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
           </svg>
           <span>{{ canManage() ? 'Resource Vault' : 'Batch Resources' }}</span>
         </button>
 
         @if (isSuperAdmin) {
-        <button
-          type="button"
-          class="btn-action btn-delete-course"
-          (click)="deleteCourse(course)"
-          [disabled]="deletingCourseId() === course.id"
-          title="Delete Course & Department (SuperAdmin Consensus)">
+        <button type="button" class="btn-action btn-delete-course" (click)="deleteCourse(course)"
+          [disabled]="deletingCourseId() === course.id" title="Delete Course & Department (SuperAdmin Consensus)">
           <span>{{ deletingCourseId() === course.id ? '...' : '🗑' }}</span>
         </button>
         }
@@ -198,13 +194,8 @@
       <form (ngSubmit)="createCourse()" class="modal-form">
         <div class="form-group">
           <label for="cTitle">Course Title *</label>
-          <input
-            id="cTitle"
-            type="text"
-            [(ngModel)]="newCourseTitle"
-            name="newCourseTitle"
-            placeholder="e.g. Full-Stack Cloud Architecture 2026"
-            required />
+          <input id="cTitle" type="text" [(ngModel)]="newCourseTitle" name="newCourseTitle"
+            placeholder="e.g. Full-Stack Cloud Architecture 2026" required />
         </div>
 
         <div class="form-group">
@@ -218,11 +209,7 @@
 
         <div class="form-group">
           <label for="cDesc">Course Overview &amp; Learning Objectives</label>
-          <textarea
-            id="cDesc"
-            rows="3"
-            [(ngModel)]="newCourseDesc"
-            name="newCourseDesc"
+          <textarea id="cDesc" rows="3" [(ngModel)]="newCourseDesc" name="newCourseDesc"
             placeholder="Describe what learners will achieve upon completing this curriculum..."></textarea>
         </div>
 
@@ -263,22 +250,14 @@
       <div class="curriculum-add-box">
         <h3>+ Add New Module / Lesson</h3>
         <div class="add-grid">
-          <input
-            type="text"
-            [(ngModel)]="syllabusTitle"
+          <input type="text" [(ngModel)]="syllabusTitle"
             placeholder="Lesson Title (e.g. Introduction to Microservices)" />
-          <input
-            type="number"
-            [(ngModel)]="syllabusOrder"
-            class="order-input"
-            placeholder="Order #" />
+          <input type="number" [(ngModel)]="syllabusOrder" class="order-input" placeholder="Order #" />
           <button type="button" class="btn-add-item" (click)="addSyllabusItem()" [disabled]="saving()">
             <span>Add Module</span>
           </button>
         </div>
-        <textarea
-          rows="2"
-          [(ngModel)]="syllabusDesc"
+        <textarea rows="2" [(ngModel)]="syllabusDesc"
           placeholder="Brief summary of topics covered in this lesson..."></textarea>
       </div>
       }
@@ -350,24 +329,15 @@
           </div>
 
           <div class="upload-controls">
-            <input
-              type="text"
-              [(ngModel)]="materialTitle"
-              placeholder="Document Title (e.g. Architecture Guide PDF)" />
+            <input type="text" [(ngModel)]="materialTitle" placeholder="Document Title (e.g. Architecture Guide PDF)" />
 
             <div class="file-picker-row">
               <label class="btn-file-select">
                 <span>📎 Choose PDF File</span>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  (change)="onFileSelected($event)" />
+                <input type="file" accept=".pdf,.doc,.docx" (change)="onFileSelected($event)" />
               </label>
               <span class="chosen-filename">{{ selectedFile?.name || 'No file selected' }}</span>
-              <button
-                type="button"
-                class="btn-upload-file"
-                (click)="uploadPdfResource()"
+              <button type="button" class="btn-upload-file" (click)="uploadPdfResource()"
                 [disabled]="!selectedFile || isUploadingFile()">
                 <span>{{ isUploadingFile() ? 'Uploading...' : 'Upload PDF' }}</span>
               </button>
@@ -387,28 +357,26 @@
 
           <div class="link-controls">
             <div class="link-inputs-row">
-              <input
-                type="text"
-                [(ngModel)]="materialTitle"
+              <input type="text" [(ngModel)]="materialTitle"
                 placeholder="Resource Title (e.g. Official Documentation)" />
               <select [(ngModel)]="materialType">
                 <option value="link">Web Link</option>
                 <option value="video">Video Tutorial</option>
+                <option value="notes">Lecture Notes</option>
                 <option value="doc">Online Doc</option>
               </select>
             </div>
 
             <div class="link-submit-row">
-              <input
-                type="url"
-                [(ngModel)]="materialUrl"
-                placeholder="https://example.com/guide" />
-              <button
-                type="button"
-                class="btn-add-link"
-                (click)="addLinkResource()"
-                [disabled]="saving()">
-                <span>Attach Link</span>
+              @if (materialType === 'notes') {
+              <textarea rows="3" [(ngModel)]="materialUrl"
+                placeholder="# Lecture Notes&#10;Write notes or Markdown content to share with batches..."
+                style="flex: 1;"></textarea>
+              } @else {
+              <input type="url" [(ngModel)]="materialUrl" placeholder="https://example.com/guide" />
+              }
+              <button type="button" class="btn-add-link" (click)="addLinkResource()" [disabled]="saving()">
+                <span>{{ materialType === 'notes' ? 'Add Notes' : 'Attach Link' }}</span>
               </button>
             </div>
           </div>
@@ -448,10 +416,7 @@
             <div class="mat-actions-col">
               @if (canManage()) {
               <div class="send-batch-wrapper">
-                <button
-                  type="button"
-                  class="btn-send-res"
-                  (click)="toggleSendDropdown(item)"
+                <button type="button" class="btn-send-res" (click)="toggleSendDropdown(item)"
                   [disabled]="sendingMaterialId() === item.id">
                   <span>📤 Send ▾</span>
                 </button>
@@ -463,27 +428,25 @@
                   </div>
                   @if (availableBatchesForSend(selectedCourse()!).length === 0) {
                   <p class="send-empty-hint">
-                    No active batches assigned for {{ isCommonCourse(selectedCourse()!) ? 'your departments' : getDepartmentName(selectedCourse()!.department_id) }} yet.
+                    No active batches assigned for {{ isCommonCourse(selectedCourse()!) ? 'your departments' :
+                    getDepartmentName(selectedCourse()!.department_id) }} yet.
                   </p>
                   } @else {
                   <div class="send-batch-options">
                     @for (b of availableBatchesForSend(selectedCourse()!); track b.id) {
                     <label class="send-batch-checkbox">
-                      <input
-                        type="checkbox"
-                        [checked]="isBatchSelectedForSend(b.id)"
+                      <input type="checkbox" [checked]="isBatchSelectedForSend(b.id)"
                         (change)="toggleBatchSelectionForSend(b.id)" />
                       <span class="batch-label">{{ b.name }}</span>
                       <span class="batch-dept-tag">{{ b.department_name }}</span>
                     </label>
                     }
                   </div>
-                  <button
-                    type="button"
-                    class="btn-confirm-send"
+                  <button type="button" class="btn-confirm-send"
                     [disabled]="selectedBatchIdsForSend().size === 0 || sendingMaterialId() === item.id"
                     (click)="confirmSendToBatches(selectedCourse()!, item)">
-                    {{ sendingMaterialId() === item.id ? 'Sending...' : 'Deliver to ' + selectedBatchIdsForSend().size + ' Batch(es)' }}
+                    {{ sendingMaterialId() === item.id ? 'Sending...' : 'Deliver to ' + selectedBatchIdsForSend().size +
+                    ' Batch(es)' }}
                   </button>
                   }
                 </div>
@@ -491,15 +454,29 @@
               </div>
               }
 
-              <button type="button" class="btn-open-res" (click)="openResource(item)">
-                <span>{{ item.material_type === 'pdf' ? 'Download / View PDF' : 'Open Link ↗' }}</span>
+              @if (isUploadedFileResource(item)) {
+              <button type="button" class="btn-open-res" (click)="downloadVaultFile(item)">
+                <span>⬇ Download</span>
               </button>
+              <button type="button" class="btn-open-res" (click)="openResource(item)">
+                <span>👁 Read / View</span>
+              </button>
+              } @else if (item.material_type === 'video') {
+              <button type="button" class="btn-open-res" (click)="openResource(item)">
+                <span>▶ Watch Video</span>
+              </button>
+              } @else if (item.material_type === 'notes') {
+              <button type="button" class="btn-open-res" (click)="openResource(item)">
+                <span>👁 View Notes</span>
+              </button>
+              } @else {
+              <button type="button" class="btn-open-res" (click)="openResource(item)">
+                <span>Open Link ↗</span>
+              </button>
+              }
 
               @if (isSuperAdmin) {
-              <button
-                type="button"
-                class="btn-del-res"
-                (click)="deleteMaterial(item)"
+              <button type="button" class="btn-del-res" (click)="deleteMaterial(item)"
                 title="Permanently Delete from Vault (SuperAdmin Only)">
                 ✕
               </button>
@@ -517,6 +494,26 @@
 
       <div class="modal-actions">
         <button type="button" class="btn-secondary" (click)="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+  }
+
+  @if (viewingVaultNotes(); as note) {
+  <div class="modal-backdrop" (click)="viewingVaultNotes.set(null)">
+    <div class="modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span class="modal-tag">LECTURE NOTES</span>
+          <h2>{{ note.title }}</h2>
+        </div>
+        <button type="button" class="btn-close" (click)="viewingVaultNotes.set(null)">×</button>
+      </div>
+      <div
+        style="padding: 16px 24px; white-space: pre-wrap; line-height: 1.65; color: #1e293b; max-height: 60vh; overflow-y: auto;">
+        {{ note.storage_key }}</div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" (click)="viewingVaultNotes.set(null)">Close</button>
       </div>
     </div>
   </div>

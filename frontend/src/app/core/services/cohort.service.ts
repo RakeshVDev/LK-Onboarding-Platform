@@ -69,6 +69,7 @@ export type LessonContentType = 'video' | 'text' | 'download' | 'quiz' | 'live' 
 
 export interface CurriculumLesson {
   id: string;
+  backendId?: number;
   title: string;
   type: LessonContentType;
   duration?: string; // e.g. "05:21", "2 Hours"
@@ -78,6 +79,7 @@ export interface CurriculumLesson {
   downloadUrl?: string;
   fileSize?: string;
   fileName?: string;
+  hasFile?: boolean;
   quizQuestionsCount?: number;
   isPublished?: boolean;
   scheduledDate?: string;
@@ -87,6 +89,7 @@ export interface CurriculumLesson {
   trainer?: string;
   departmentName?: string;
   departmentId?: number;
+  createdAt?: string;
 }
 
 export interface CurriculumChapter {
@@ -101,6 +104,12 @@ export interface CurriculumChapter {
 
 export interface TrainingSession {
   id: string;
+  backendLiveId?: number;
+  liveRawStatus?: 'scheduled' | 'live' | 'completed' | 'cancelled';
+  platform?: string;
+  scheduledStartIso?: string;
+  endedAtIso?: string | null;
+  reopenAtIso?: string | null;
   title: string;
   module: string;
   trainer: string;
@@ -122,7 +131,10 @@ export interface TrainingSession {
 export interface LearningMaterialItem {
   id: string;
   backendCohortId?: number;
+  backendCourseId?: number;
   backendMaterialId?: number;
+  backendDeliveryId?: number;
+  backendLessonId?: number;
   batchId?: string;
   title: string;
   module: string;
@@ -133,14 +145,19 @@ export interface LearningMaterialItem {
   downloadUrl: string;
   videoUrl?: string;
   fileName?: string;
+  hasFile?: boolean;
+  isDownloadable?: boolean;
+  textNotes?: string;
   description: string;
   isBookmarked?: boolean;
   departmentName?: string;
   departmentId?: number;
+  createdAtMs?: number;
 }
 
 export interface CohortAssignment {
   id: string;
+  backendId?: number;
   title: string;
   module: string;
   description: string;
@@ -151,8 +168,12 @@ export interface CohortAssignment {
   attachmentName?: string;
   attachmentUrl?: string;
   attachmentSize?: string;
+  hasAttachmentFile?: boolean;
+  submissionId?: number;
   submissionDate?: string;
   submissionUrl?: string;
+  submissionFileName?: string;
+  hasSubmissionFile?: boolean;
   submissionNotes?: string;
   score?: number;
   trainerFeedback?: string;
@@ -184,8 +205,12 @@ export interface AttendanceSummary {
 
 export interface AttendanceStudentRow {
   studentId: string | number;
+  backendUserId?: number;
   admissionNo: string;
   name: string;
+  email?: string;
+  departmentId?: number | null;
+  departmentName?: string | null;
   absCount: number;
   lveCount: number;
   dailyStatus: Record<string, 'P' | 'A' | 'L' | 'H'>;
@@ -409,6 +434,100 @@ export class CohortService {
       .catch(err => console.warn('Cohort workspace sync failed:', err));
   }
 
+  private parseTimestampMs(raw?: string | null): number {
+    if (!raw || raw === 'Just now') return 0;
+    const normalized = raw.trim().replace(' ', 'T');
+    const parsed = Date.parse(normalized);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  private mapDeliveredVaultItem(
+    d: {
+      id?: number;
+      cohort_id: number;
+      course_id: number;
+      material_id: number;
+      title: string;
+      material_type: string;
+      storage_key: string;
+      department_id?: number | null;
+      department_name?: string | null;
+      source_department_name?: string | null;
+      sent_by_name?: string | null;
+      sent_at?: string | null;
+    },
+    fallbackDeptId?: number,
+    fallbackDeptName?: string,
+    bookmarkedSet?: Set<string>
+  ): LearningMaterialItem {
+    const rawType = (d.material_type || '').toLowerCase();
+    const isVaultFile =
+      rawType === 'pdf' ||
+      (rawType === 'doc' && Boolean(d.storage_key) && !/^https?:\/\//i.test(d.storage_key));
+    const isVideo = rawType === 'video';
+    const isNotes = rawType === 'notes';
+    const downloadUrl = isVaultFile
+      ? `/training-api/api/v1/courses/${d.course_id}/materials/${d.material_id}/file`
+      : isNotes
+        ? ''
+        : d.storage_key;
+    let extractedFileName: string | undefined = undefined;
+    if (isVaultFile) {
+      const base = (d.storage_key || '').split(/[\\/]/).pop() || '';
+      const clean = base.includes('_') ? base.split('_').slice(1).join('_') : base;
+      extractedFileName =
+        clean || (rawType === 'pdf' && !d.title.toLowerCase().endsWith('.pdf') ? `${d.title}.pdf` : d.title);
+    }
+    const matId = `deliv-${d.cohort_id}-${d.material_id}`;
+    const deptId = d.department_id ?? fallbackDeptId;
+    const deptName = (d.department_name || fallbackDeptName || '').trim() || undefined;
+    const parsedSentMs = this.parseTimestampMs(d.sent_at);
+    return {
+      id: matId,
+      backendCohortId: d.cohort_id,
+      backendCourseId: d.course_id,
+      backendMaterialId: d.material_id,
+      backendDeliveryId: d.id,
+      batchId: `backend-batch-${d.cohort_id}`,
+      title: d.title,
+      module: d.source_department_name || deptName || 'Course Vault',
+      type: isVideo ? 'video' : isVaultFile ? (rawType === 'pdf' ? 'pdf' : 'code') : isNotes ? 'pdf' : 'slides',
+      size: isNotes ? 'NOTES' : rawType.toUpperCase(),
+      uploadedAt: parsedSentMs > 0 ? new Date(parsedSentMs).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Delivered',
+      author: d.sent_by_name || 'Instructor',
+      downloadUrl,
+      videoUrl: isVideo ? d.storage_key : undefined,
+      fileName: extractedFileName,
+      hasFile: isVaultFile,
+      isDownloadable: isVaultFile,
+      textNotes: isNotes ? d.storage_key : '',
+      description: isVaultFile
+        ? `Downloadable ${rawType.toUpperCase()} delivered from ${d.source_department_name || 'Course'} Resource Vault`
+        : isNotes
+          ? `Lecture notes delivered from ${d.source_department_name || 'Course'} Resource Vault`
+          : `Delivered from ${d.source_department_name || 'Course'} Resource Vault`,
+      isBookmarked: bookmarkedSet ? bookmarkedSet.has(matId) : false,
+      departmentId: deptId,
+      departmentName: deptName,
+      createdAtMs: parsedSentMs
+    };
+  }
+
+  private sortMaterialsNewestFirst(items: LearningMaterialItem[]): LearningMaterialItem[] {
+    return items
+      .map((item, idx) => ({ item, idx }))
+      .sort((a, b) => {
+        const tA = a.item.createdAtMs ?? 0;
+        const tB = b.item.createdAtMs ?? 0;
+        if (tB !== tA) return tB - tA;
+        const idA = a.item.backendDeliveryId ?? a.item.backendLessonId ?? a.item.backendMaterialId ?? 0;
+        const idB = b.item.backendDeliveryId ?? b.item.backendLessonId ?? b.item.backendMaterialId ?? 0;
+        if (idB !== idA) return idB - idA;
+        return a.idx - b.idx;
+      })
+      .map(entry => entry.item);
+  }
+
   async loadWorkspaceFromBackend(cohortId?: number): Promise<void> {
     if (!this.hasLiveBackend()) return;
     try {
@@ -420,13 +539,68 @@ export class CohortService {
       if (!res) return;
       const current = this.getCohortData();
       const bookmarkedSet = new Set<string>(res.bookmarkedMaterialKeys || []);
-      const updatedMaterials = (current.materials || []).map(m => ({
-        ...m,
-        isBookmarked: bookmarkedSet.has(m.id)
+      const allowedLessonTypes = new Set<string>(['video', 'text', 'download']);
+      const sanitizedCurriculum: CurriculumChapter[] = (res.curriculum || []).map((ch: any) => ({
+        ...ch,
+        lessons: (ch.lessons || [])
+          .filter((les: any) => allowedLessonTypes.has(String(les.type || '').toLowerCase()))
+          .sort((a: any, b: any) => {
+            const tA = this.parseTimestampMs(a.createdAt);
+            const tB = this.parseTimestampMs(b.createdAt);
+            if (tB !== tA) return tB - tA;
+            return (Number(b.backendId ?? b.id) || 0) - (Number(a.backendId ?? a.id) || 0);
+          })
       }));
+
+      const lessonDerivedMaterials: LearningMaterialItem[] = [];
+      for (const ch of sanitizedCurriculum) {
+        for (const les of ch.lessons) {
+          const matId = `mat-${les.id}`;
+          const isDownloadable = les.type === 'download';
+          const matType: LearningMaterialItem['type'] =
+            les.type === 'video' ? 'video' : isDownloadable ? 'code' : 'pdf';
+          const resolvedUrl =
+            les.type === 'video'
+              ? (les.videoUrl || les.downloadUrl || '')
+              : isDownloadable
+                ? (les.downloadUrl || '')
+                : '';
+          const parsedCreatedMs = this.parseTimestampMs(les.createdAt);
+          lessonDerivedMaterials.push({
+            id: matId,
+            backendLessonId: les.backendId ?? this.resolveNumericId(les.id) ?? undefined,
+            title: les.title,
+            module: ch.title,
+            type: matType,
+            size: les.type === 'video' ? (les.duration || 'Video') : (les.fileSize || (les.type === 'text' ? 'Notes' : 'File')),
+            uploadedAt: parsedCreatedMs > 0 ? new Date(parsedCreatedMs).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Curriculum',
+            author: les.trainer || 'Instructor',
+            downloadUrl: resolvedUrl,
+            videoUrl: les.type === 'video' ? resolvedUrl : undefined,
+            fileName: les.fileName,
+            hasFile: Boolean(les.hasFile),
+            isDownloadable,
+            textNotes: les.textNotes || '',
+            description: les.description || (les.type === 'text' ? '' : 'Curriculum resource provided by instructor.'),
+            isBookmarked: bookmarkedSet.has(matId),
+            departmentName: les.departmentName || ch.departmentName || 'All / Common',
+            departmentId: les.departmentId ?? ch.departmentId,
+            createdAtMs: parsedCreatedMs > 0 ? parsedCreatedMs : (les.backendId ?? 0)
+          });
+        }
+      }
+
+      const deliveredMaterials: LearningMaterialItem[] = Array.isArray(res.deliveredMaterials)
+        ? res.deliveredMaterials.map((d: any) =>
+            this.mapDeliveredVaultItem(d, d.department_id, d.department_name, bookmarkedSet)
+          )
+        : (current.materials || [])
+            .filter(m => m.id.startsWith('deliv-'))
+            .map(m => ({ ...m, isBookmarked: bookmarkedSet.has(m.id) }));
+
       this.saveState({
         ...current,
-        curriculum: res.curriculum || [],
+        curriculum: sanitizedCurriculum,
         assignments: res.assignments || [],
         quizzes: res.quizzes || [],
         announcements: res.announcements || [],
@@ -434,7 +608,7 @@ export class CohortService {
         attendance: res.attendance || current.attendance,
         attendanceMatrix: res.attendanceMatrix || current.attendanceMatrix,
         progress: res.progress || current.progress,
-        materials: updatedMaterials
+        materials: this.sortMaterialsNewestFirst([...lessonDerivedMaterials, ...deliveredMaterials])
       });
     } catch (err) {
       console.warn('Could not load cohort workspace from backend:', err);
@@ -1106,27 +1280,9 @@ export class CohortService {
     for (const bc of backendBatches) {
       const deliveries = deliveredByCohort[bc.id] || [];
       for (const d of deliveries) {
-        const isFile = d.material_type === 'pdf' || (d.material_type === 'doc' && !d.storage_key.startsWith('http'));
-        const downloadUrl = isFile
-          ? `/training-api/api/v1/courses/${d.course_id}/materials/${d.material_id}/file`
-          : d.storage_key;
-        deliveredItems.push({
-          id: `deliv-${bc.id}-${d.material_id}`,
-          backendCohortId: bc.id,
-          backendMaterialId: d.material_id,
-          batchId: `backend-batch-${bc.id}`,
-          title: d.title,
-          module: d.source_department_name || bc.department_name || 'Course Vault',
-          type: d.material_type === 'video' ? 'video' : d.material_type === 'pdf' ? 'pdf' : 'slides',
-          size: d.material_type.toUpperCase(),
-          uploadedAt: d.sent_at ? new Date(d.sent_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Delivered',
-          author: d.sent_by_name || 'Instructor',
-          downloadUrl,
-          videoUrl: d.material_type === 'video' ? downloadUrl : undefined,
-          description: `Delivered from ${d.source_department_name || 'Course'} Resource Vault`,
-          departmentId: bc.department_id,
-          departmentName: bc.department_name || undefined
-        });
+        deliveredItems.push(
+          this.mapDeliveredVaultItem(d, bc.department_id, bc.department_name || undefined)
+        );
       }
     }
 
@@ -1139,7 +1295,7 @@ export class CohortService {
       ...current,
       batches: mappedBatches,
       activeBatchId: activeBatch ? activeBatch.id : '',
-      materials: [...deliveredItems, ...preservedNonDelivered],
+      materials: this.sortMaterialsNewestFirst([...deliveredItems, ...preservedNonDelivered]),
       details: activeBatch
         ? {
             ...current.details,
@@ -1294,58 +1450,50 @@ export class CohortService {
       isPublished: true,
       trainer: resolvedTrainer,
       departmentName: (lesson as any).departmentName || targetChap.departmentName || 'All / Common',
-      departmentId: (lesson as any).departmentId || targetChap.departmentId
+      departmentId: (lesson as any).departmentId || targetChap.departmentId,
+      createdAt: new Date().toISOString()
     };
 
-    const updatedChap = {
-      ...current.curriculum[cIdx],
-      lessons: [...current.curriculum[cIdx].lessons, newLesson]
-    };
+    // Strict 5-option routing: live & assignment lessons NEVER belong inside Curriculum or Materials
+    const includeInCurriculum =
+      lesson.type === 'video' || lesson.type === 'text' || lesson.type === 'download';
 
     const updatedCurriculum = [...current.curriculum];
-    updatedCurriculum[cIdx] = updatedChap;
+    if (includeInCurriculum) {
+      const updatedChap = {
+        ...current.curriculum[cIdx],
+        lessons: [newLesson, ...current.curriculum[cIdx].lessons]
+      };
+      updatedCurriculum[cIdx] = updatedChap;
+    }
 
-    // Synchronize to materials simultaneously
+    // Synchronize ONLY video, text/notes, and downloadable resources to materials
     let updatedMaterials = [...current.materials];
-    if (lesson.type === 'download' || lesson.type === 'text' || lesson.type === 'video' || lesson.type === 'live' || ((lesson.type === 'quiz' || lesson.type === 'assignment') && lesson.fileName)) {
-      let matType: 'pdf' | 'video' | 'code' | 'slides' | 'cheatsheet' = 'code';
-      if (lesson.type === 'video') {
-        matType = 'video';
-      } else if (lesson.type === 'text') {
-        matType = 'pdf';
-      } else if (lesson.type === 'live') {
-        matType = 'slides';
-      } else {
-        const ext = (lesson.fileName || '').split('.').pop()?.toLowerCase();
-        if (ext === 'pdf') matType = 'pdf';
-        else if (ext === 'pptx' || ext === 'ppt') matType = 'slides';
-        else if (ext === 'zip' || ext === 'tar' || ext === 'gz' || ext === 'py' || ext === 'ts' || ext === 'js' || ext === 'json' || ext === 'sql') matType = 'code';
-        else matType = 'code';
-      }
+    if (includeInCurriculum) {
+      const isDownloadable = lesson.type === 'download';
+      const matType: 'pdf' | 'video' | 'code' | 'slides' | 'cheatsheet' =
+        lesson.type === 'video' ? 'video' : isDownloadable ? 'code' : 'pdf';
 
       const resUrl = lesson.type === 'video'
-        ? (newLesson.videoUrl || lesson.videoUrl || 'https://storage.googleapis.com/ase-recordings/demo-lecture.mp4')
-        : (newLesson.downloadUrl && newLesson.downloadUrl !== '#' ? newLesson.downloadUrl : meetingUrl);
+        ? (newLesson.videoUrl || lesson.videoUrl || '')
+        : isDownloadable
+          ? (newLesson.downloadUrl && newLesson.downloadUrl !== '#' ? newLesson.downloadUrl : '')
+          : '';
 
       const displaySize = lesson.type === 'video'
         ? (newLesson.duration || '15 mins')
-        : (newLesson.fileSize || '2.5 MB');
+        : isDownloadable
+          ? (newLesson.fileSize || 'File')
+          : 'Notes';
 
-      const titleSuffix = lesson.type === 'live'
-        ? ' (Session Handout & Notes)'
-        : lesson.type === 'quiz'
-          ? ' (Quiz Reference Assets)'
-          : lesson.type === 'assignment'
-            ? ' (Assignment Starter Kit)'
-            : '';
+      const deptName = newLesson.departmentName || targetChap.departmentName || 'All / Common';
+      const deptId = newLesson.departmentId || targetChap.departmentId;
 
-      const deptName = newLesson.departmentName || updatedChap.departmentName || 'All / Common';
-      const deptId = newLesson.departmentId || updatedChap.departmentId;
-
+      const maxExistingMs = updatedMaterials.reduce((mx, m) => Math.max(mx, m.createdAtMs ?? 0), 0);
       updatedMaterials.unshift({
         id: `mat-${newLesson.id}`,
-        title: newLesson.title + titleSuffix,
-        module: updatedChap.title,
+        title: newLesson.title,
+        module: targetChap.title,
         type: matType,
         size: displaySize,
         uploadedAt: 'Just now',
@@ -1353,10 +1501,14 @@ export class CohortService {
         downloadUrl: resUrl,
         videoUrl: lesson.type === 'video' ? resUrl : undefined,
         fileName: lesson.fileName,
-        description: newLesson.description || newLesson.textNotes || 'Curriculum resource provided by instructor.',
+        hasFile: Boolean(isDownloadable && lesson.fileName),
+        isDownloadable,
+        textNotes: lesson.textNotes || '',
+        description: newLesson.description || '',
         isBookmarked: false,
         departmentName: deptName,
-        departmentId: deptId
+        departmentId: deptId,
+        createdAtMs: Math.max(Date.now(), maxExistingMs + 1)
       });
     }
 
@@ -1364,12 +1516,12 @@ export class CohortService {
     let updatedSessions = [...current.sessions];
     if (lesson.type === 'live') {
       const liveTrainer = (lesson as any).trainer || this.getCurrentUser().full_name;
-      const deptName = newLesson.departmentName || updatedChap.departmentName || 'All / Common';
-      const deptId = newLesson.departmentId || updatedChap.departmentId;
+      const deptName = newLesson.departmentName || targetChap.departmentName || 'All / Common';
+      const deptId = newLesson.departmentId || targetChap.departmentId;
       updatedSessions.unshift({
         id: `sess-${newLesson.id}`,
         title: newLesson.title,
-        module: updatedChap.title,
+        module: targetChap.title,
         trainer: liveTrainer,
         date: isLive ? 'Today (Live Session)' : scheduledDate,
         time: scheduledTime,
@@ -1385,12 +1537,12 @@ export class CohortService {
 
     let updatedAssignments = [...current.assignments];
     if (lesson.type === 'assignment') {
-      const deptName = newLesson.departmentName || updatedChap.departmentName || 'Python';
-      const deptId = newLesson.departmentId || updatedChap.departmentId;
+      const deptName = newLesson.departmentName || targetChap.departmentName || 'All / Common';
+      const deptId = newLesson.departmentId || targetChap.departmentId;
       updatedAssignments.unshift({
         id: `asg-${newLesson.id}`,
         title: newLesson.title,
-        module: updatedChap.title,
+        module: targetChap.title,
         description: newLesson.description || 'Complete the practical task according to rubric.',
         points: lesson.points || 100,
         dueDate: lesson.scheduledDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
@@ -1407,12 +1559,12 @@ export class CohortService {
 
     let updatedQuizzes = [...current.quizzes];
     if (lesson.type === 'quiz') {
-      const deptName = newLesson.departmentName || updatedChap.departmentName || 'Python';
-      const deptId = newLesson.departmentId || updatedChap.departmentId;
+      const deptName = newLesson.departmentName || targetChap.departmentName || 'All / Common';
+      const deptId = newLesson.departmentId || targetChap.departmentId;
       updatedQuizzes.unshift({
         id: `quiz-${newLesson.id}`,
         title: newLesson.title,
-        module: updatedChap.title,
+        module: targetChap.title,
         questionsCount: lesson.quizQuestionsCount || 5,
         durationMinutes: 15,
         dueDate: lesson.scheduledDate || 'Upcoming Sprint',
@@ -1952,8 +2104,29 @@ export class CohortService {
 
   setSessions(sessions: TrainingSession[]): void {
     const current = this.getCohortData();
+    const activeLive = sessions.find(s => s.status === 'today');
+    const updatedDetails = { ...current.details };
+    if (activeLive) {
+      updatedDetails.isLiveActive = true;
+      updatedDetails.activeLiveSessionTitle = activeLive.title;
+      updatedDetails.activeLiveStartTime = activeLive.time;
+      updatedDetails.activeLiveDuration = activeLive.duration;
+      updatedDetails.activeLiveTrainer = activeLive.trainer;
+      updatedDetails.meetingLink = activeLive.meetingUrl || updatedDetails.meetingLink;
+    } else {
+      updatedDetails.isLiveActive = false;
+      const nextUp = sessions.find(s => s.status === 'upcoming');
+      if (nextUp) {
+        updatedDetails.activeLiveSessionTitle = nextUp.title;
+        updatedDetails.activeLiveStartTime = nextUp.time;
+        updatedDetails.activeLiveDuration = nextUp.duration;
+        updatedDetails.activeLiveTrainer = nextUp.trainer;
+        updatedDetails.meetingLink = nextUp.meetingUrl || updatedDetails.meetingLink;
+      }
+    }
     this.saveState({
       ...current,
+      details: updatedDetails,
       sessions
     });
   }
@@ -2272,7 +2445,9 @@ export class CohortService {
     if (asgIndex === -1) return false;
 
     const target = current.assignments[asgIndex];
-    const isFirstSubmission = target.status === 'pending';
+    if (target.status !== 'pending') {
+      return false; // Strict one-time assignment submission lock
+    }
 
     const updatedAssignment: CohortAssignment = {
       ...target,
@@ -2280,23 +2455,19 @@ export class CohortService {
       submissionDate: new Date().toISOString(),
       submissionUrl,
       submissionNotes: notes,
-      dueRelative: 'Submitted — Under Review',
-      trainerFeedback: 'Submission received successfully and queued for trainer evaluation.'
+      dueRelative: 'Submitted — Locked',
+      trainerFeedback: 'Submission received and locked for manual trainer evaluation.'
     };
 
     const newAssignments = [...current.assignments];
     newAssignments[asgIndex] = updatedAssignment;
-
-    const newSubmittedCount = isFirstSubmission
-      ? current.progress.assignmentsSubmitted + 1
-      : current.progress.assignmentsSubmitted;
 
     const updated: CohortFullData = {
       ...current,
       assignments: newAssignments,
       progress: {
         ...current.progress,
-        assignmentsSubmitted: newSubmittedCount
+        assignmentsSubmitted: current.progress.assignmentsSubmitted + 1
       }
     };
 
@@ -2316,6 +2487,249 @@ export class CohortService {
       }
     });
     return true;
+  }
+
+  async submitAssignmentWithFile(
+    assignmentId: string,
+    file: File | null,
+    submissionUrl: string,
+    notes: string
+  ): Promise<boolean> {
+    if (!this.http) {
+      return this.submitAssignment(assignmentId, submissionUrl, notes);
+    }
+    const current = this.getCohortData();
+    const asgIndex = current.assignments.findIndex(a => a.id === assignmentId);
+    if (asgIndex === -1) return false;
+    const target = current.assignments[asgIndex];
+    if (target.status !== 'pending') {
+      return false; // Strict one-time assignment submission lock
+    }
+
+    const numId = this.resolveNumericId(assignmentId) ?? target.backendId;
+    if (!numId) {
+      return this.submitAssignment(assignmentId, submissionUrl, notes);
+    }
+
+    const formData = new FormData();
+    formData.append('submission_url', submissionUrl || '');
+    formData.append('submission_notes', notes || '');
+    if (file) {
+      formData.append('file', file);
+    }
+
+    const res: any = await firstValueFrom(
+      this.http.post(`${this.workspaceApiUrl}/assignments/${numId}/submit-file`, formData, {
+        headers: this.getHeaders()
+      })
+    );
+
+    const updatedAssignment: CohortAssignment = {
+      ...target,
+      status: 'submitted',
+      submissionId: res?.submission_id ? Number(res.submission_id) : target.submissionId,
+      submissionDate: new Date().toISOString(),
+      submissionUrl: submissionUrl || target.submissionUrl,
+      submissionFileName: file?.name || res?.file_name || target.submissionFileName,
+      hasSubmissionFile: Boolean(file || res?.file_name),
+      submissionNotes: notes,
+      dueRelative: 'Submitted — Locked',
+      trainerFeedback: 'Submission received and locked for manual trainer evaluation.'
+    };
+    const newAssignments = [...current.assignments];
+    newAssignments[asgIndex] = updatedAssignment;
+    this.saveState({
+      ...current,
+      assignments: newAssignments,
+      progress: {
+        ...current.progress,
+        assignmentsSubmitted: current.progress.assignmentsSubmitted + 1
+      }
+    });
+
+    await this.loadWorkspaceFromBackend();
+    return true;
+  }
+
+  async downloadAssignmentSubmissionFile(
+    assignmentId: string | number,
+    submissionId: number,
+    fallbackName: string = 'submission.zip'
+  ): Promise<void> {
+    if (!this.http) return;
+    const numId = typeof assignmentId === 'number' ? assignmentId : this.resolveNumericId(assignmentId);
+    if (!numId || !submissionId) return;
+    const blob = await firstValueFrom(
+      this.http.get(`${this.workspaceApiUrl}/assignments/${numId}/submissions/${submissionId}/file`, {
+        headers: this.getHeaders(),
+        responseType: 'blob'
+      })
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fallbackName || 'submission.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async uploadDownloadableLesson(
+    chapterId: string,
+    file: File,
+    payload: {
+      title: string;
+      description?: string;
+      departmentId?: number;
+      departmentName?: string;
+    }
+  ): Promise<boolean> {
+    if (!this.hasLiveBackend()) {
+      const sizeStr = file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+        : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+      this.addLessonToChapter(chapterId, {
+        title: payload.title,
+        type: 'download',
+        description: payload.description || '',
+        fileName: file.name,
+        fileSize: sizeStr,
+        departmentId: payload.departmentId,
+        departmentName: payload.departmentName
+      });
+      return true;
+    }
+
+    const numChapId = this.resolveNumericId(chapterId);
+    if (!numChapId) {
+      await this.loadWorkspaceFromBackend();
+    }
+    const resolvedChapId = this.resolveNumericId(chapterId);
+    if (!resolvedChapId) return false;
+
+    const cohortId = this.getActiveBackendCohortId();
+    const formData = new FormData();
+    if (cohortId != null) formData.append('cohort_id', String(cohortId));
+    if (payload.departmentId != null) formData.append('department_id', String(payload.departmentId));
+    formData.append('department_name', payload.departmentName || 'All / Common');
+    formData.append('title', payload.title);
+    formData.append('description', payload.description || '');
+    formData.append('file', file);
+
+    await firstValueFrom(
+      this.http.post(`${this.workspaceApiUrl}/chapters/${resolvedChapId}/lessons/upload`, formData, {
+        headers: this.getHeaders()
+      })
+    );
+    await this.loadWorkspaceFromBackend(cohortId ?? undefined);
+    return true;
+  }
+
+  async downloadLessonFile(lessonId: string | number, fallbackName: string = 'resource'): Promise<void> {
+    if (!this.http) return;
+    const numId = typeof lessonId === 'number' ? lessonId : this.resolveNumericId(lessonId);
+    if (!numId) return;
+    await this.downloadAuthenticatedUrl(`${this.workspaceApiUrl}/lessons/${numId}/file`, fallbackName);
+  }
+
+  async fetchAuthenticatedFileBlob(url: string, inline: boolean = false): Promise<Blob> {
+    if (!this.http) {
+      throw new Error('HTTP client unavailable');
+    }
+    const targetUrl = inline
+      ? `${url}${url.includes('?') ? '&' : '?'}inline=true`
+      : url;
+    return firstValueFrom(
+      this.http.get(targetUrl, {
+        headers: this.getHeaders(),
+        responseType: 'blob'
+      })
+    );
+  }
+
+  async downloadAuthenticatedUrl(url: string, fallbackName: string = 'resource'): Promise<void> {
+    const blob = await this.fetchAuthenticatedFileBlob(url, false);
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl;
+    a.download = fallbackName || 'resource';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objUrl);
+  }
+
+  async createAssignmentWithFile(payload: {
+    title: string;
+    module: string;
+    description: string;
+    points: number;
+    dueDate: string;
+    requirements: string[];
+    departmentId?: number;
+    departmentName?: string;
+    file: File | null;
+  }): Promise<boolean> {
+    if (!this.hasLiveBackend()) {
+      this.addAssignment({
+        title: payload.title,
+        module: payload.module,
+        description: payload.description,
+        points: payload.points,
+        dueDate: payload.dueDate,
+        requirements: payload.requirements,
+        departmentId: payload.departmentId,
+        departmentName: payload.departmentName
+      });
+      return true;
+    }
+
+    const cohortId = this.getActiveBackendCohortId();
+    const formData = new FormData();
+    if (cohortId != null) formData.append('cohort_id', String(cohortId));
+    if (payload.departmentId != null) formData.append('department_id', String(payload.departmentId));
+    formData.append('department_name', payload.departmentName || 'All / Common');
+    formData.append('title', payload.title);
+    formData.append('module', payload.module || 'General');
+    formData.append('description', payload.description || '');
+    formData.append('points', String(payload.points || 100));
+    formData.append('due_date', payload.dueDate || '');
+    formData.append('requirements_json', JSON.stringify(payload.requirements || []));
+    if (payload.file) {
+      formData.append('file', payload.file);
+    }
+
+    await firstValueFrom(
+      this.http.post(`${this.workspaceApiUrl}/assignments/with-file`, formData, {
+        headers: this.getHeaders()
+      })
+    );
+    await this.loadWorkspaceFromBackend(cohortId ?? undefined);
+    return true;
+  }
+
+  async downloadAssignmentAttachment(
+    assignmentId: string | number,
+    fallbackName: string = 'assignment-file.pdf'
+  ): Promise<void> {
+    if (!this.http) return;
+    const numId = typeof assignmentId === 'number' ? assignmentId : this.resolveNumericId(assignmentId);
+    if (!numId) return;
+    const blob = await firstValueFrom(
+      this.http.get(`${this.workspaceApiUrl}/assignments/${numId}/attachment`, {
+        headers: this.getHeaders(),
+        responseType: 'blob'
+      })
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fallbackName || 'assignment-file.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   submitQuiz(quizId: string, answers: Record<number, number>): { score: number; passed: boolean } {

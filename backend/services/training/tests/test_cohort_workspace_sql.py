@@ -161,6 +161,49 @@ class CohortWorkspaceSqlPersistenceTests(unittest.TestCase):
             )
             self.assertEqual(les_res.status_code, 201, les_res.text)
 
+            # Live lesson from curriculum must NOT appear in curriculum lessons
+            live_les_res = self.client.post(
+                f"/api/v1/cohorts/workspace/chapters/{chap_id}/lessons",
+                json={
+                    "cohort_id": self.py_cohort.id,
+                    "department_id": self.py_dept.id,
+                    "title": "Live Architecture Q&A",
+                    "type": "live",
+                    "description": "Routed strictly to Schedule & Cohort Details",
+                },
+            )
+            self.assertEqual(live_les_res.status_code, 201, live_les_res.text)
+
+            # Downloadable lesson via file-only upload endpoint
+            dl_les_res = self.client.post(
+                f"/api/v1/cohorts/workspace/chapters/{chap_id}/lessons/upload",
+                data={
+                    "cohort_id": str(self.py_cohort.id),
+                    "department_id": str(self.py_dept.id),
+                    "department_name": "Python",
+                    "title": "SQL Cheat Sheet PDF",
+                    "description": "Downloadable PDF reference",
+                },
+                files={"file": ("sql-cheatsheet.pdf", b"%PDF-1.4\ncheatsheet-bytes", "application/pdf")},
+            )
+            self.assertEqual(dl_les_res.status_code, 201, dl_les_res.text)
+            dl_lesson_id = dl_les_res.json()["backendId"]
+
+            # Add a newer Text/Notes lesson after the downloadable lesson -> must appear FIRST (top)
+            notes_les_res = self.client.post(
+                f"/api/v1/cohorts/workspace/chapters/{chap_id}/lessons",
+                json={
+                    "cohort_id": self.py_cohort.id,
+                    "department_id": self.py_dept.id,
+                    "department_name": "Python",
+                    "title": "Latest SQL Indexing Notes",
+                    "type": "text",
+                    "description": "Clustered vs non-clustered indexes",
+                    "text_notes": "# Indexing\nUse composite indexes carefully.",
+                },
+            )
+            self.assertEqual(notes_les_res.status_code, 201, notes_les_res.text)
+
             quiz_res = self.client.post(
                 "/api/v1/cohorts/workspace/quizzes",
                 json={
@@ -209,11 +252,24 @@ class CohortWorkspaceSqlPersistenceTests(unittest.TestCase):
             self.assertEqual(ws_res.status_code, 200, ws_res.text)
             payload = ws_res.json()
             self.assertEqual(len(payload["curriculum"]), 1)
-            self.assertEqual(payload["curriculum"][0]["lessons"][0]["title"], "Build SQL CRUD API")
+            # Assignment and live lessons are excluded from Curriculum; newest material appears at the top
+            lesson_titles = [l["title"] for l in payload["curriculum"][0]["lessons"]]
+            self.assertEqual(lesson_titles, ["Latest SQL Indexing Notes", "SQL Cheat Sheet PDF"])
+            self.assertEqual(payload["curriculum"][0]["lessons"][0]["type"], "text")
+            self.assertEqual(payload["curriculum"][0]["lessons"][1]["type"], "download")
+            self.assertTrue(payload["curriculum"][0]["lessons"][1]["hasFile"])
+            # Learner downloads exact bytes from downloadable lesson endpoint (attachment + inline PDF reader)
+            dl_lesson_res = self.client.get(f"/api/v1/cohorts/workspace/lessons/{dl_lesson_id}/file")
+            self.assertEqual(dl_lesson_res.status_code, 200)
+            self.assertEqual(dl_lesson_res.content, b"%PDF-1.4\ncheatsheet-bytes")
+            self.assertIn("application/pdf", dl_lesson_res.headers.get("content-type", ""))
+            inline_res = self.client.get(f"/api/v1/cohorts/workspace/lessons/{dl_lesson_id}/file?inline=true")
+            self.assertEqual(inline_res.status_code, 200)
+            self.assertIn("inline", inline_res.headers.get("content-disposition", "").lower())
             self.assertEqual(len(payload["assignments"]), 1)
             asg_id = payload["assignments"][0]["backendId"]
 
-            # Learner submits Assignment + Quiz + Check-in + Discussion
+            # Learner submits Assignment + one-time lock rejects duplicate resubmit with 409
             self.assertEqual(
                 self.client.post(
                     f"/api/v1/cohorts/workspace/assignments/{asg_id}/submit",
@@ -221,6 +277,110 @@ class CohortWorkspaceSqlPersistenceTests(unittest.TestCase):
                 ).status_code,
                 200,
             )
+            self.assertEqual(
+                self.client.post(
+                    f"/api/v1/cohorts/workspace/assignments/{asg_id}/submit",
+                    json={"submission_url": "https://github.com/lk/resubmit-blocked", "submission_notes": "Retry"},
+                ).status_code,
+                409,
+            )
+            self.assertEqual(
+                self.client.post(
+                    f"/api/v1/cohorts/workspace/assignments/{asg_id}/submit-file",
+                    data={"submission_url": "", "submission_notes": "ZIP retry blocked"},
+                    files={"file": ("solution.zip", b"PK\x03\x04testzip", "application/zip")},
+                ).status_code,
+                409,
+            )
+
+            # Create a second assignment to test multipart .zip submission + download + one-time lock
+            self.active_user = self.teacher
+            asg2_res = self.client.post(
+                "/api/v1/cohorts/workspace/assignments",
+                json={
+                    "cohort_id": self.py_cohort.id,
+                    "department_id": self.py_dept.id,
+                    "department_name": "Python",
+                    "title": "FastAPI ZIP Deliverable",
+                    "module": "Week 1",
+                    "description": "Submit ZIP archive",
+                    "points": 100,
+                    "due_date": "2026-12-30",
+                    "requirements": ["Include tests"],
+                },
+            )
+            self.assertEqual(asg2_res.status_code, 201, asg2_res.text)
+            asg2_id = asg2_res.json()["backendId"]
+
+            self.active_user = self.learner
+            zip_sub_res = self.client.post(
+                f"/api/v1/cohorts/workspace/assignments/{asg2_id}/submit-file",
+                data={"submission_url": "https://github.com/lk/zip-repo", "submission_notes": "ZIP uploaded"},
+                files={"file": ("project.zip", b"PK\x03\x04zippayload", "application/zip")},
+            )
+            self.assertEqual(zip_sub_res.status_code, 200, zip_sub_res.text)
+            sub_id = zip_sub_res.json()["submission_id"]
+            self.assertEqual(zip_sub_res.json()["file_name"], "project.zip")
+
+            # Repeat submit on ZIP assignment is strictly blocked (409)
+            self.assertEqual(
+                self.client.post(
+                    f"/api/v1/cohorts/workspace/assignments/{asg2_id}/submit-file",
+                    data={"submission_url": "", "submission_notes": "2nd try"},
+                    files={"file": ("project2.zip", b"PK\x03\x04zippayload2", "application/zip")},
+                ).status_code,
+                409,
+            )
+
+            # Teacher can download the submitted ZIP archive
+            self.active_user = self.teacher
+            dl_res = self.client.get(f"/api/v1/cohorts/workspace/assignments/{asg2_id}/submissions/{sub_id}/file")
+            self.assertEqual(dl_res.status_code, 200)
+            self.assertEqual(dl_res.content, b"PK\x03\x04zippayload")
+
+            # Teacher creates assignment with downloadable PDF brief; learner downloads brief & submits PDF answer
+            asg3_res = self.client.post(
+                "/api/v1/cohorts/workspace/assignments/with-file",
+                data={
+                    "cohort_id": str(self.py_cohort.id),
+                    "department_id": str(self.py_dept.id),
+                    "department_name": "Python",
+                    "title": "System Design Brief",
+                    "module": "Week 2",
+                    "description": "Download the PDF brief and upload your PDF solution",
+                    "points": "100",
+                    "due_date": "2026-12-31",
+                    "requirements_json": '["Architecture diagram", "API spec"]',
+                },
+                files={"file": ("design-brief.pdf", b"%PDF-1.4\nassignment-brief", "application/pdf")},
+            )
+            self.assertEqual(asg3_res.status_code, 201, asg3_res.text)
+            asg3_id = asg3_res.json()["backendId"]
+            self.assertTrue(asg3_res.json()["hasAttachmentFile"])
+
+            self.active_user = self.learner
+            brief_dl = self.client.get(f"/api/v1/cohorts/workspace/assignments/{asg3_id}/attachment")
+            self.assertEqual(brief_dl.status_code, 200)
+            self.assertEqual(brief_dl.content, b"%PDF-1.4\nassignment-brief")
+
+            pdf_sub_res = self.client.post(
+                f"/api/v1/cohorts/workspace/assignments/{asg3_id}/submit-file",
+                data={"submission_url": "", "submission_notes": "Submitted PDF solution"},
+                files={"file": ("my-solution.pdf", b"%PDF-1.4\nlearner-answer", "application/pdf")},
+            )
+            self.assertEqual(pdf_sub_res.status_code, 200, pdf_sub_res.text)
+            self.assertEqual(pdf_sub_res.json()["file_name"], "my-solution.pdf")
+            # Repeat PDF submit blocked (409)
+            self.assertEqual(
+                self.client.post(
+                    f"/api/v1/cohorts/workspace/assignments/{asg3_id}/submit-file",
+                    data={"submission_url": "", "submission_notes": "Blocked retry"},
+                    files={"file": ("retry.pdf", b"%PDF-1.4\nretry", "application/pdf")},
+                ).status_code,
+                409,
+            )
+
+            self.active_user = self.learner
             qsub = self.client.post(
                 f"/api/v1/cohorts/workspace/quizzes/{quiz_id}/submit",
                 json={"answers": {"1": 0}},
@@ -247,6 +407,53 @@ class CohortWorkspaceSqlPersistenceTests(unittest.TestCase):
                 },
             )
             self.assertEqual(disc_res.status_code, 201)
+
+            # Resource Vault -> Active Batch delivery shows up directly in /cohorts/workspace deliveredMaterials
+            # without creating any duplicate entry in the Course Resource Vault!
+            from services.training.app.models.entities import LearningMaterial
+            from services.training.app.routers import courses as courses_router
+
+            with patch.object(courses_router, "SessionLocal", self.TrSession), patch.object(
+                courses_router, "IdentitySessionLocal", self.IdSession
+            ):
+                self.active_user = self.teacher
+                vault_up = self.client.post(
+                    f"/api/v1/courses/{self.py_course.id}/materials/upload",
+                    data={"title": "Vault Architecture PDF"},
+                    files={"file": ("arch.pdf", b"%PDF-1.4\nvault-pdf", "application/pdf")},
+                )
+                self.assertEqual(vault_up.status_code, 201, vault_up.text)
+                vault_mat_id = vault_up.json()["id"]
+
+                # Send once and re-send -> zero duplicates in Resource Vault OR deliveries!
+                for _ in range(2):
+                    send_res = self.client.post(
+                        f"/api/v1/courses/{self.py_course.id}/materials/{vault_mat_id}/send-to-batches",
+                        json={"cohort_ids": [self.py_cohort.id]},
+                    )
+                    self.assertEqual(send_res.status_code, 200, send_res.text)
+
+                with self.TrSession() as tdb:
+                    vault_count = len(
+                        tdb.scalars(
+                            select(LearningMaterial).where(LearningMaterial.course_id == self.py_course.id)
+                        ).all()
+                    )
+                    self.assertEqual(vault_count, 1)
+
+                teacher_ws_after_send = self.client.get(
+                    f"/api/v1/cohorts/workspace?cohort_id={self.py_cohort.id}"
+                ).json()
+                self.assertEqual(len(teacher_ws_after_send["deliveredMaterials"]), 1)
+                self.assertEqual(teacher_ws_after_send["deliveredMaterials"][0]["title"], "Vault Architecture PDF")
+                self.assertEqual(teacher_ws_after_send["deliveredMaterials"][0]["department_id"], self.py_dept.id)
+
+                self.active_user = self.learner
+                learner_ws_after_send = self.client.get(
+                    f"/api/v1/cohorts/workspace?cohort_id={self.py_cohort.id}"
+                ).json()
+                self.assertEqual(len(learner_ws_after_send["deliveredMaterials"]), 1)
+                self.assertEqual(learner_ws_after_send["deliveredMaterials"][0]["title"], "Vault Architecture PDF")
 
             # 3. Switch back to Teacher: sees Learner submission & grades it in SQL
             self.active_user = self.teacher

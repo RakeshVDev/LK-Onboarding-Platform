@@ -1,9 +1,11 @@
 
+from datetime import datetime, timezone
+import mimetypes
 import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Response, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status, UploadFile, File, Form
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -608,6 +610,7 @@ async def upload_material_file(
 def download_material_file(
     course_id: int,
     material_id: int,
+    inline: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -669,7 +672,16 @@ def download_material_file(
     filename = os.path.basename(abs_path)
     # Strip uuid prefix for user display
     display_name = filename.split("_", 1)[-1] if "_" in filename else filename
-    media_type = "application/pdf" if filename.lower().endswith(".pdf") else "application/octet-stream"
+    guessed_mime, _ = mimetypes.guess_type(display_name)
+    media_type = "application/pdf" if display_name.lower().endswith(".pdf") else (guessed_mime or "application/octet-stream")
+
+    if inline:
+        safe_disp_name = display_name.replace('"', "")
+        return FileResponse(
+            abs_path,
+            media_type=media_type,
+            headers={"Content-Disposition": f'inline; filename="{safe_disp_name}"'},
+        )
 
     return FileResponse(
         abs_path,
@@ -812,6 +824,8 @@ def send_material_to_batches(
                     detail=f"Batch '{cohort.name}' is assigned to different teacher(s).",
                 )
 
+        use_mssql_clock = db.bind is not None and db.bind.dialect.name.lower() == "mssql"
+        now_expr = func.now() if use_mssql_clock else datetime.now(timezone.utc)
         existing = db.scalar(
             select(CohortMaterialDelivery).where(
                 CohortMaterialDelivery.cohort_id == cid,
@@ -825,8 +839,12 @@ def send_material_to_batches(
                     course_id=course.id,
                     material_id=material.id,
                     sent_by_user_id=int(current_user.id),
+                    sent_at=now_expr,
                 )
             )
+        else:
+            existing.sent_at = now_expr
+            existing.sent_by_user_id = int(current_user.id)
         delivered_names.append(cohort.name)
 
     db.commit()
