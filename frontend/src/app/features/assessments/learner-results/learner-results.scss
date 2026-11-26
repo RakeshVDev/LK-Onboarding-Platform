@@ -962,10 +962,24 @@
   .categories-panel {
     background: #111827;
     border-color: #293548;
+
+    .cat-row {
+      .cat-name {
+        color: #cbd5e1 !important;
+      }
+
+      .cat-pct {
+        color: #f8fafc !important;
+      }
+
+      .mini-progress-track {
+        background: #1e293b !important;
+      }
+    }
   }
 
   .mini-progress-track {
-    background: #1e293b;
+    background: #1e293b !important;
   }
 
   .btn-card-secondary {

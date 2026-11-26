@@ -7697,22 +7697,36 @@
   .session-card,
   .empty-sessions-notice,
   .checkin-today-card,
+  .attendance-circle-card,
+  .attendance-history-card,
   .stat-box,
   .badges-card,
   .member-card,
   .progress-kpi-card,
   .not-started-card,
   .locked-card {
-    background: #182230;
-    border-color: #293548;
-    color: #f8fafc;
+    background: #182230 !important;
+    border-color: #293548 !important;
+    color: #f8fafc !important;
 
-    h2, h3, h4, strong, .session-title, .member-name, .kpi-value {
-      color: #f8fafc;
+    h2, h3, h4, strong, .session-title, .member-name, .kpi-value, .box-num {
+      color: #f8fafc !important;
     }
 
-    p, span.muted, .session-meta, .member-email, .kpi-label {
-      color: #94a3b8;
+    p, span.muted, .session-meta, .member-email, .kpi-label, .box-lbl {
+      color: #94a3b8 !important;
+    }
+  }
+
+  .attendance-circle-card .compliance-badge.status-strong {
+    background: rgba(16, 185, 129, 0.16) !important;
+    color: #6ee7b7 !important;
+  }
+
+  .attendance-history-card .attendance-table {
+    tbody td {
+      color: #cbd5e1 !important;
+      border-bottom-color: #263244 !important;
     }
   }
 

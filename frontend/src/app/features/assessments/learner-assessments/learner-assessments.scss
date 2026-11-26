@@ -1342,9 +1342,15 @@
     box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
 
     .modal-header {
-      border-bottom-color: #1f2937;
-      h2 { color: #f8fafc; }
-      .btn-close { color: #94a3b8; &:hover { color: #f8fafc; } }
+      background: #111827 !important;
+      border-bottom-color: #1f2937 !important;
+      h2 { color: #f8fafc !important; }
+      .btn-close {
+        background: #1e293b !important;
+        border-color: #334155 !important;
+        color: #94a3b8 !important;
+        &:hover { color: #f8fafc !important; background: #334155 !important; }
+      }
     }
 
     .meta-strip .meta-card {

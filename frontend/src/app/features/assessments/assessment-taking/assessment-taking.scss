@@ -1888,28 +1888,42 @@
     }
   }
 
+  .palette-legend {
+    color: #cbd5e1;
+
+    .legend-item,
+    span {
+      color: #cbd5e1;
+    }
+  }
+
   .legend-chip {
     color: #cbd5e1;
 
     &.state-answered {
-      background: rgba(16, 185, 129, 0.16);
-      border-color: #10b981;
-      color: #6ee7b7;
+      background: rgba(16, 185, 129, 0.16) !important;
+      border-color: #10b981 !important;
+      color: #6ee7b7 !important;
     }
     &.state-not-answered {
-      background: rgba(245, 158, 11, 0.16);
-      border-color: #f59e0b;
-      color: #fcd34d;
+      background: rgba(245, 158, 11, 0.16) !important;
+      border-color: #f59e0b !important;
+      color: #fcd34d !important;
+    }
+    &.state-review {
+      background: rgba(139, 92, 246, 0.2) !important;
+      border-color: #8b5cf6 !important;
+      color: #ddd6fe !important;
     }
     &.state-answered-review {
-      background: rgba(99, 102, 241, 0.2);
-      border-color: #818cf8;
-      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.2) !important;
+      border-color: #818cf8 !important;
+      color: #c7d2fe !important;
     }
     &.state-not-visited {
-      background: #1e293b;
-      border-color: #475569;
-      color: #94a3b8;
+      background: #1e293b !important;
+      border-color: #475569 !important;
+      color: #94a3b8 !important;
     }
   }
 
@@ -1970,6 +1984,30 @@
 
     &:hover:not(:disabled) {
       background: rgba(239, 68, 68, 0.24);
+    }
+  }
+
+  .proctor-modal {
+    .warning-callout {
+      &.callout-amber {
+        background: rgba(245, 158, 11, 0.14) !important;
+        border-color: rgba(245, 158, 11, 0.35) !important;
+        color: #fde68a !important;
+        strong { color: #fcd34d !important; }
+      }
+
+      &.callout-red {
+        background: rgba(239, 68, 68, 0.16) !important;
+        border-color: rgba(239, 68, 68, 0.38) !important;
+        color: #fecaca !important;
+        strong { color: #fca5a5 !important; }
+      }
+    }
+
+    .violation-stepper .step-item:not(.step-violated):not(.step-danger) .step-circle {
+      background: #1e293b !important;
+      border-color: #334155 !important;
+      color: #cbd5e1 !important;
     }
   }
 
